@@ -1,0 +1,199 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: 8c36de2c-29d4-4665-a878-c18639090e76
+    creation_time: 2024-10-18T11:24:58Z
+    producer:
+      name: Goblint
+      version: tags/svcomp24-0-gc2e9465a7
+      command_line: '''./tools/goblint/goblint'' ''--conf'' ''conf/svcomp24.json''
+        ''--set'' ''ana.specification'' ''tests/properties/no-data-race.prp'' ''tests/no-data-race/array-eq-symm.wvr.c'''
+    task:
+      input_files:
+      - tests/no-data-race/array-eq-symm.wvr.c
+      input_file_hashes:
+        tests/no-data-race/array-eq-symm.wvr.c: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+      data_model: LP64
+      language: C
+      specification: CHECK( init(main()), LTL(G ! data-race) )
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 58
+        column: 9
+        function: thread2
+      value: (unsigned long )_argptr == 0UL
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: (0LL - (long long )i_AB) + (long long )i_BA >= 0LL
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: (long long )i_AB + (long long )i_BA >= 0LL
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: (0LL - (long long )i_AB) - (long long )i_BA >= 0LL
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: (long long )i_AB - (long long )i_BA >= 0LL
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: B == 0
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: i_AB == 0
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: i_BA == 0
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 95
+        column: 6
+        function: create_fresh_int_array
+      value: (((0LL - (long long )i) + (long long )size >= 0LL && size != 0) && ((((((((((((((((((8
+        <= size && 8 <= i) && (-16LL + (long long )i) + (long long )size >= 0LL) &&
+        (-8LL + (long long )i_AB) + (long long )size >= 0LL) && (-8LL + (long long
+        )i_BA) + (long long )size >= 0LL) && (-8LL + (long long )i) + (long long )i_AB
+        >= 0LL) && (-8LL + (long long )i) + (long long )i_BA >= 0LL) && (-8LL - (long
+        long )i_AB) + (long long )size >= 0LL) && (-8LL - (long long )i_BA) + (long
+        long )size >= 0LL) && (-8LL + (long long )i) - (long long )i_AB >= 0LL) &&
+        (-8LL + (long long )i) - (long long )i_BA >= 0LL) && i != 1) || ((((((((((((((7
+        <= size && (-14LL + (long long )i) + (long long )size >= 0LL) && (-7LL + (long
+        long )i_AB) + (long long )size >= 0LL) && (-7LL + (long long )i_BA) + (long
+        long )size >= 0LL) && (-7LL + (long long )i) + (long long )i_AB >= 0LL) &&
+        (-7LL + (long long )i) + (long long )i_BA >= 0LL) && (-7LL - (long long )i_AB)
+        + (long long )size >= 0LL) && (-7LL - (long long )i_BA) + (long long )size
+        >= 0LL) && (7LL - (long long )i) + (long long )i_AB >= 0LL) && (7LL - (long
+        long )i) + (long long )i_BA >= 0LL) && (-7LL + (long long )i) - (long long
+        )i_AB >= 0LL) && (-7LL + (long long )i) - (long long )i_BA >= 0LL) && (7LL
+        - (long long )i) - (long long )i_AB >= 0LL) && (7LL - (long long )i) - (long
+        long )i_BA >= 0LL) && i == 7)) || ((((((((((((((6 <= size && (-12LL + (long
+        long )i) + (long long )size >= 0LL) && (-6LL + (long long )i_AB) + (long long
+        )size >= 0LL) && (-6LL + (long long )i_BA) + (long long )size >= 0LL) && (-6LL
+        + (long long )i) + (long long )i_AB >= 0LL) && (-6LL + (long long )i) + (long
+        long )i_BA >= 0LL) && (-6LL - (long long )i_AB) + (long long )size >= 0LL)
+        && (-6LL - (long long )i_BA) + (long long )size >= 0LL) && (6LL - (long long
+        )i) + (long long )i_AB >= 0LL) && (6LL - (long long )i) + (long long )i_BA
+        >= 0LL) && (-6LL + (long long )i) - (long long )i_AB >= 0LL) && (-6LL + (long
+        long )i) - (long long )i_BA >= 0LL) && (6LL - (long long )i) - (long long
+        )i_AB >= 0LL) && (6LL - (long long )i) - (long long )i_BA >= 0LL) && i ==
+        6)) || ((((((((((((((5 <= size && (-10LL + (long long )i) + (long long )size
+        >= 0LL) && (-5LL + (long long )i_AB) + (long long )size >= 0LL) && (-5LL +
+        (long long )i_BA) + (long long )size >= 0LL) && (-5LL + (long long )i) + (long
+        long )i_AB >= 0LL) && (-5LL + (long long )i) + (long long )i_BA >= 0LL) &&
+        (-5LL - (long long )i_AB) + (long long )size >= 0LL) && (-5LL - (long long
+        )i_BA) + (long long )size >= 0LL) && (5LL - (long long )i) + (long long )i_AB
+        >= 0LL) && (5LL - (long long )i) + (long long )i_BA >= 0LL) && (-5LL + (long
+        long )i) - (long long )i_AB >= 0LL) && (-5LL + (long long )i) - (long long
+        )i_BA >= 0LL) && (5LL - (long long )i) - (long long )i_AB >= 0LL) && (5LL
+        - (long long )i) - (long long )i_BA >= 0LL) && i == 5)) || ((((((((((((((4
+        <= size && (-8LL + (long long )i) + (long long )size >= 0LL) && (-4LL + (long
+        long )i_AB) + (long long )size >= 0LL) && (-4LL + (long long )i_BA) + (long
+        long )size >= 0LL) && (-4LL + (long long )i) + (long long )i_AB >= 0LL) &&
+        (-4LL + (long long )i) + (long long )i_BA >= 0LL) && (-4LL - (long long )i_AB)
+        + (long long )size >= 0LL) && (-4LL - (long long )i_BA) + (long long )size
+        >= 0LL) && (4LL - (long long )i) + (long long )i_AB >= 0LL) && (4LL - (long
+        long )i) + (long long )i_BA >= 0LL) && (-4LL + (long long )i) - (long long
+        )i_AB >= 0LL) && (-4LL + (long long )i) - (long long )i_BA >= 0LL) && (4LL
+        - (long long )i) - (long long )i_AB >= 0LL) && (4LL - (long long )i) - (long
+        long )i_BA >= 0LL) && i == 4)) || ((((((((((((((3 <= size && (-6LL + (long
+        long )i) + (long long )size >= 0LL) && (-3LL + (long long )i_AB) + (long long
+        )size >= 0LL) && (-3LL + (long long )i_BA) + (long long )size >= 0LL) && (-3LL
+        + (long long )i) + (long long )i_AB >= 0LL) && (-3LL + (long long )i) + (long
+        long )i_BA >= 0LL) && (-3LL - (long long )i_AB) + (long long )size >= 0LL)
+        && (-3LL - (long long )i_BA) + (long long )size >= 0LL) && (3LL - (long long
+        )i) + (long long )i_AB >= 0LL) && (3LL - (long long )i) + (long long )i_BA
+        >= 0LL) && (-3LL + (long long )i) - (long long )i_AB >= 0LL) && (-3LL + (long
+        long )i) - (long long )i_BA >= 0LL) && (3LL - (long long )i) - (long long
+        )i_AB >= 0LL) && (3LL - (long long )i) - (long long )i_BA >= 0LL) && i ==
+        3)) || ((((((((((((((2 <= size && (-4LL + (long long )i) + (long long )size
+        >= 0LL) && (-2LL + (long long )i_AB) + (long long )size >= 0LL) && (-2LL +
+        (long long )i_BA) + (long long )size >= 0LL) && (-2LL + (long long )i) + (long
+        long )i_AB >= 0LL) && (-2LL + (long long )i) + (long long )i_BA >= 0LL) &&
+        (-2LL - (long long )i_AB) + (long long )size >= 0LL) && (-2LL - (long long
+        )i_BA) + (long long )size >= 0LL) && (2LL - (long long )i) + (long long )i_AB
+        >= 0LL) && (2LL - (long long )i) + (long long )i_BA >= 0LL) && (-2LL + (long
+        long )i) - (long long )i_AB >= 0LL) && (-2LL + (long long )i) - (long long
+        )i_BA >= 0LL) && (2LL - (long long )i) - (long long )i_AB >= 0LL) && (2LL
+        - (long long )i) - (long long )i_BA >= 0LL) && i == 2)) || ((((((((((((((1
+        <= size && (-2LL + (long long )i) + (long long )size >= 0LL) && (-1LL + (long
+        long )i_AB) + (long long )size >= 0LL) && (-1LL + (long long )i_BA) + (long
+        long )size >= 0LL) && (-1LL + (long long )i) + (long long )i_AB >= 0LL) &&
+        (-1LL + (long long )i) + (long long )i_BA >= 0LL) && (-1LL - (long long )i_AB)
+        + (long long )size >= 0LL) && (-1LL - (long long )i_BA) + (long long )size
+        >= 0LL) && (1LL - (long long )i) + (long long )i_AB >= 0LL) && (1LL - (long
+        long )i) + (long long )i_BA >= 0LL) && (-1LL + (long long )i) - (long long
+        )i_AB >= 0LL) && (-1LL + (long long )i) - (long long )i_BA >= 0LL) && (1LL
+        - (long long )i) - (long long )i_AB >= 0LL) && (1LL - (long long )i) - (long
+        long )i_BA >= 0LL) && i == 1))) || ((((((((((0LL - (long long )i) + (long
+        long )i_AB >= 0LL && (0LL - (long long )i) + (long long )i_BA >= 0LL) && (long
+        long )i + (long long )i_AB >= 0LL) && (long long )i + (long long )i_BA >=
+        0LL) && (0LL - (long long )i) - (long long )i_AB >= 0LL) && (0LL - (long long
+        )i) - (long long )i_BA >= 0LL) && (long long )i - (long long )i_AB >= 0LL)
+        && (long long )i - (long long )i_BA >= 0LL) && 0 == i) && i == 0)
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: tests/no-data-race/array-eq-symm.wvr.c
+        file_hash: 6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d
+        line: 46
+        column: 9
+        function: thread1
+      value: (unsigned long )_argptr == 0UL
+      format: c_expression

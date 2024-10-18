@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <key id="witness-type" for="graph" attr.name="witness-type" attr.type="string"/>
+  <key id="sourcecodelang" for="graph" attr.name="sourcecodelang" attr.type="string"/>
+  <key id="producer" for="graph" attr.name="producer" attr.type="string"/>
+  <key id="specification" for="graph" attr.name="specification" attr.type="string"/>
+  <key id="programfile" for="graph" attr.name="programfile" attr.type="string"/>
+  <key id="programhash" for="graph" attr.name="programhash" attr.type="string"/>
+  <key id="architecture" for="graph" attr.name="architecture" attr.type="string"/>
+  <key id="creationtime" for="graph" attr.name="creationtime" attr.type="string"/>
+  <key id="entry" for="node" attr.name="entry" attr.type="boolean">
+    <default>false</default>
+  </key>
+  <key id="sink" for="node" attr.name="sink" attr.type="boolean">
+    <default>false</default>
+  </key>
+  <key id="violation" for="node" attr.name="violation" attr.type="boolean">
+    <default>false</default>
+  </key>
+  <key id="invariant" for="node" attr.name="invariant" attr.type="string"/>
+  <key id="invariant.scope" for="node" attr.name="invariant.scope" attr.type="string"/>
+  <key id="assumption" for="edge" attr.name="assumption" attr.type="string"/>
+  <key id="assumption.scope" for="edge" attr.name="assumption.scope" attr.type="string"/>
+  <key id="assumption.resultfunction" for="edge" attr.name="assumption.resultfunction" attr.type="string"/>
+  <key id="control" for="edge" attr.name="control" attr.type="string"/>
+  <key id="startline" for="edge" attr.name="startline" attr.type="int"/>
+  <key id="endline" for="edge" attr.name="endline" attr.type="int"/>
+  <key id="startoffset" for="edge" attr.name="startoffset" attr.type="int"/>
+  <key id="endoffset" for="edge" attr.name="endoffset" attr.type="int"/>
+  <key id="enterLoopHead" for="edge" attr.name="enterLoopHead" attr.type="boolean">
+    <default>false</default>
+  </key>
+  <key id="enterFunction" for="edge" attr.name="enterFunction" attr.type="string"/>
+  <key id="returnFromFunction" for="edge" attr.name="returnFromFunction" attr.type="string"/>
+  <key id="threadId" for="edge" attr.name="threadId" attr.type="string"/>
+  <key id="createThread" for="edge" attr.name="createThread" attr.type="string"/>
+  <key id="goblintEdge" for="edge" attr.name="goblintEdge" attr.type="string"/>
+  <key id="goblintLine" for="edge" attr.name="goblintLine" attr.type="string"/>
+  <graph edgedefault="directed">
+    <data key="witness-type">correctness_witness</data>
+    <data key="sourcecodelang">C</data>
+    <data key="producer">Goblint (tags/svcomp24-0-gc2e9465a7)</data>
+    <data key="specification">CHECK( init(main()), LTL(G ! data-race) )</data>
+    <data key="programfile">tests/no-data-race/array-eq-symm.wvr.c</data>
+    <data key="programhash">6897befed0dbbae24492a1e82d50fcd0be6b3857b241d882a904d02a513d7a6d</data>
+    <data key="architecture">64bit</data>
+    <data key="creationtime">2024-10-18T11:24:58Z</data>
+    <node id="N0">
+      <data key="entry">true</data>
+    </node>
+  </graph>
+</graphml>
