@@ -41,7 +41,7 @@ class Cooperace:
         result = subprocess.run(["bash", "Dartagnan-SVCOMP.sh",
                                 self.properties_file,
                                 self.file],
-                                cwd="tools/dartagnan",
+                                cwd=dartagnan_location,
                                 capture_output=True, text=True 
                                 )
         try:
