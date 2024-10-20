@@ -3,10 +3,11 @@
 import argparse
 from src.cooperace import Cooperace
 
-parser = argparse.ArgumentParser(description="Run Cooperace with specified parameters")
+parser = argparse.ArgumentParser()
 
 parser.add_argument('--arch', required=False)
 parser.add_argument('--prop', required=False)
+parser.add_argument('--version', action='version', version='CoOpeRace 0.1')
 parser.add_argument('filepath')
 
 args = parser.parse_args()

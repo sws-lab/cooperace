@@ -8,10 +8,6 @@
 import benchexec.tools.template
 import benchexec.result as result
 
-import re
-import logging
-
-
 class Tool(benchexec.tools.template.BaseTool2):
     """
     Tool info for CoOpeRace.
@@ -20,10 +16,11 @@ class Tool(benchexec.tools.template.BaseTool2):
     def executable(self, tool_locator):
         return tool_locator.find_executable("cooperace")
 
-
     def name(self):
         return "CoOpeRace"
-
+    
+    def version(self, executable):
+        return self._version_from_tool(executable, line_prefix="CoOpeRace")
 
     def cmdline(self, executable, options, task, rlimits):
         if task.property_file:
