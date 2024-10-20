@@ -24,20 +24,20 @@ mkdir $RESULTS_DIR || true
 
 echo "Running Dartagnan"
 cd $DARTAGNAN_DIR
-$BENCHEXEC $THIS_DIR/bench-defs/dartagnan.xml
+$BENCHEXEC $THIS_DIR/tests/bench-defs/dartagnan.xml
 
 echo "Running Goblint"
 cd $GOBLINT_DIR
-$BENCHEXEC $THIS_DIR/bench-defs/goblint.xml
+$BENCHEXEC $THIS_DIR/tests/bench-defs/goblint.xml
 
 echo "Running Cooperace (uses local tool-info module)"
 cd $THIS_DIR
-$BENCHEXEC $THIS_DIR/bench-defs/cooperace.xml
+$BENCHEXEC $THIS_DIR/tests/bench-defs/cooperace.xml
 
 
 # Generate table with merged results
 cd $RESULTS_DIR
-cp $THIS_DIR/src/table-generator.xml table-generator.xml
+cp $THIS_DIR/tests/table-generator.xml table-generator.xml
 table-generator -x table-generator.xml
 
 # Decompress all tool outputs for table HTML links
