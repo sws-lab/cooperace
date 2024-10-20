@@ -8,7 +8,7 @@ DIST="dist/cooperace"
 mkdir -p $DIST
 
 cp cooperace $DIST
-cp -r src $DIST/src
+git ls-files src | xargs -I {} cp --parents {} $DIST
 cp -r tools $DIST/tools
 cp LICENSE README.md $DIST
 
