@@ -19,6 +19,9 @@ class Tool(benchexec.tools.template.BaseTool2):
     def name(self):
         return "CoOpeRace"
     
+    def project_url(self):
+        return "https://github.com/sws-lab/cooperace"
+    
     def version(self, executable):
         return self._version_from_tool(executable, line_prefix="CoOpeRace")
 
