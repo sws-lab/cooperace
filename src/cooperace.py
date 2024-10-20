@@ -3,9 +3,10 @@ import re
 import os
 
 class Cooperace:
-    def __init__(self, file, properties_file):
+    def __init__(self, file, properties_file, data_model):
         self.file = file
         self.properties_file = properties_file
+        self.data_model = data_model
 
     def parse_svcomp_result_goblint(self, output):
         match = re.search(r"SV-COMP result:\s*(\w+)", output)
@@ -17,10 +18,14 @@ class Cooperace:
 
     def useGoblint(self):
         print("Starting Goblint...")
-        goblint_location=os.environ["COOPERACE_GOBLINT"]
-        result = subprocess.run([goblint_location + "/goblint",
-                        "--conf", "conf/svcomp24.json",
-                        "--set", "ana.specification", self.properties_file,
+        options = ["--conf", "conf/svcomp24.json",
+                   "--set", "ana.specification", self.properties_file]
+        data_model_option = {"ILP32": "32bit", "LP64": "64bit"}.get(self.data_model)
+        if data_model_option:
+            options += ["--set", "exp.architecture", data_model_option]
+        print("Options: ", options)
+        result = subprocess.run(["tools/goblint/goblint",
+                        *options,
                         self.file],
                         capture_output=True, text=True)
 
@@ -37,11 +42,10 @@ class Cooperace:
 
     def useDartagnan(self):
         print("Starting Dartagnan...")
-        dartagnan_location = os.environ["COOPERACE_DARTAGNAN"]
         result = subprocess.run(["bash", "Dartagnan-SVCOMP.sh",
                                 self.properties_file,
                                 self.file],
-                                cwd=dartagnan_location,
+                                cwd="tools/dartagnan",
                                 capture_output=True, text=True 
                                 )
         try:

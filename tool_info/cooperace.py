@@ -18,7 +18,7 @@ class Tool(benchexec.tools.template.BaseTool2):
     """
 
     def executable(self, tool_locator):
-        return tool_locator.find_executable("cooperace.sh")
+        return tool_locator.find_executable("cooperace")
 
 
     def name(self):
@@ -27,7 +27,9 @@ class Tool(benchexec.tools.template.BaseTool2):
 
     def cmdline(self, executable, options, task, rlimits):
         if task.property_file:
-            options += [task.property_file]
+            options += ["--prop", task.property_file]
+        if task.options is not None and "data_model" in task.options:
+            options += ["--arch", task.options.get("data_model")]
         return [executable, *options, *task.input_files]
 
     def determine_result(self, run):

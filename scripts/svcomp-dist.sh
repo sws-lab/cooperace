@@ -7,7 +7,7 @@ ROOT=`pwd`
 DIST="dist/cooperace"
 mkdir -p $DIST
 
-cp cooperace.sh $DIST
+cp cooperace $DIST
 cp -r src $DIST/src
 cp -r tools $DIST/tools
 
