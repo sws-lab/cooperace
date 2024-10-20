@@ -13,5 +13,6 @@ parser.add_argument('filepath')
 args = parser.parse_args()
 
 cooperace = Cooperace(args.filepath, args.prop, args.arch)
-    
-print(cooperace.start())
+
+verdict = cooperace.start()
+print("CoOpeRace verdict: " + verdict)

@@ -50,6 +50,7 @@ class Cooperace:
                                 )
         try:
             svcomp_result = result.stdout.strip().splitlines()[-1]
+            print("Dartagnan result: ", svcomp_result)
             return svcomp_result
         except:
             print("STDOUT:\n")
@@ -65,7 +66,7 @@ class Cooperace:
         if goblint_result == "unknown" or goblint_result == "error":
             print("Goblint result inconclusive")
             dartagnan_result = self.useDartagnan().lower()
-            verdict = dartagnan_result
+            verdict = {"fail": "false"}.get(dartagnan_result, dartagnan_result)
         else:
             verdict = goblint_result
 
