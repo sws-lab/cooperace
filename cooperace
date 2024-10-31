@@ -18,5 +18,5 @@ args = parser.parse_args()
 abs_path = os.path.abspath(args.filepath) # to run outside benchexec
 cooperace = Cooperace(abs_path, args.prop, args.arch)
 
-verdict = cooperace.runSequential([Goblint, Dartagnan])
+verdict = cooperace.runSequential([Goblint(), Dartagnan()])
 print("CoOpeRace verdict: " + verdict)
