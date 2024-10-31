@@ -61,15 +61,15 @@ class Cooperace:
 
             tool_result = self.runActor(actor, command, cwd)
             
-            run = Run(tool_result.stdout.split("\n"))
+            run = Run(tool_result.stdout.strip().split("\n"))
             verdict = actor.determine_result(run).lower()
-
+            print(verdict)
             if verdict == "unknown" or verdict == "error":
                 print(actor.name(), "result inconclusive")
                 print("STDOUT:\n")
-                print(tool_result.stdout)
+                #print(tool_result.stdout)
                 print("\nSTDERR:\n")
-                print(tool_result.stderr)
+                #print(tool_result.stderr)
             else:
                 return verdict
 
