@@ -2,72 +2,75 @@ import subprocess
 import re
 import os
 
+from .util.run import Run
+
+from .actors.task import Task
+
+from .util.tool_finder import tool_finder
+from .actors.goblint import Goblint
+
 class Cooperace:
     def __init__(self, file, properties_file, data_model):
         self.file = file
         self.properties_file = properties_file
         self.data_model = data_model
-
-    def parse_svcomp_result_goblint(self, output):
-        match = re.search(r"SV-COMP result:\s*(\w+)", output)
-
-        if match:
-            return match.group(1)
+        
+    def runActor(self, actor, command, cwd):
+        if actor.name() == "Dartagnan":
+            return subprocess.run(command,
+                            cwd=cwd,
+                            capture_output=True,
+                            text=True  
+                            )
         else:
-            return "error"
+            return subprocess.run(command,
+                            capture_output=True,
+                            text=True  
+                            )
+            
+        
 
-    def useGoblint(self):
-        print("Starting Goblint...")
-        options = ["--conf", "conf/svcomp24.json",
-                   "--set", "ana.specification", self.properties_file]
-        data_model_option = {"ILP32": "32bit", "LP64": "64bit"}.get(self.data_model)
-        if data_model_option:
-            options += ["--set", "exp.architecture", data_model_option]
-        print("Options: ", options)
-        result = subprocess.run(["tools/goblint/goblint",
-                        *options,
-                        self.file],
-                        capture_output=True, text=True)
-
-        svcomp_result = self.parse_svcomp_result_goblint(result.stdout)
-        print("Goblint result: ", svcomp_result)
-        if (svcomp_result != "true" and svcomp_result != "false"):
-            print("STDOUT:\n")
-            print(result.stdout)
-            print("\nSTDERR:\n")
-            print(result.stderr)
-            return "error"
-        else:
-            return svcomp_result
-
-    def useDartagnan(self):
-        print("Starting Dartagnan...")
-        result = subprocess.run(["bash", "Dartagnan-SVCOMP.sh",
-                                self.properties_file,
-                                self.file],
-                                cwd="tools/dartagnan",
-                                capture_output=True, text=True 
-                                )
-        try:
-            svcomp_result = result.stdout.strip().splitlines()[-1]
-            print("Dartagnan result: ", svcomp_result)
-            return svcomp_result
-        except:
-            print("STDOUT:\n")
-            print(result.stdout)
-            print("\nSTDERR:\n")
-            print(result.stderr)
-            return "error"
-
-    def start(self):
-        goblint_result = self.useGoblint().lower()
+    def runSequential(self, actors=None):
         verdict = "unknown"
 
-        if goblint_result == "unknown" or goblint_result == "error":
-            print("Goblint result inconclusive")
-            dartagnan_result = self.useDartagnan().lower()
-            verdict = {"fail": "false"}.get(dartagnan_result, dartagnan_result)
-        else:
-            verdict = goblint_result
+        for actor in actors: 
+            tool_locator = tool_finder()
+            path = actor.executable(tool_locator)
+
+            cwd, executable = os.path.split(path)
+
+            task_options = {"data_model": self.data_model}
+
+            task = Task(
+                input_files=[self.file],
+                property_file=self.properties_file,
+                options=task_options
+            )
+
+            if actor.name() == "Goblint":
+                options = ["--conf", os.path.join(cwd, "conf", "svcomp24.json")]
+            else:
+                options = []
+
+            command = actor.cmdline(
+                executable=path,
+                options=options,
+                task=task,
+                rlimits=None
+            )
+
+            tool_result = self.runActor(actor, command, cwd)
+            
+            run = Run(tool_result.stdout.split("\n"))
+            verdict = actor.determine_result(run).lower()
+
+            if verdict == "unknown" or verdict == "error":
+                print(actor.name(), "result inconclusive")
+                print("STDOUT:\n")
+                print(tool_result.stdout)
+                print("\nSTDERR:\n")
+                print(tool_result.stderr)
+            else:
+                return verdict
 
         return verdict
