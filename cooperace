@@ -4,6 +4,7 @@ import argparse
 import os
 from src.actors.goblint import Goblint
 from src.actors.dartagnan import Dartagnan
+from src.actors.deagle import Deagle
 from src.cooperace import Cooperace
 
 parser = argparse.ArgumentParser()
@@ -18,5 +19,5 @@ args = parser.parse_args()
 abs_path = os.path.abspath(args.filepath) # to run outside benchexec
 cooperace = Cooperace(abs_path, args.prop, args.arch)
 
-verdict = cooperace.runSequential([Goblint(), Dartagnan()])
+verdict = cooperace.runSequential([Deagle()])
 print("CoOpeRace verdict: " + verdict)

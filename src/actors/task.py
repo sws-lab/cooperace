@@ -4,3 +4,4 @@ class Task:
         self.property_file = property_file
         self.options = options
         self.input_files_or_identifier = input_files
+        self.single_input_file = input_files[0]

@@ -16,7 +16,7 @@ class Cooperace:
         self.data_model = data_model
         
     def runActor(self, actor, command, cwd):
-        if actor.name() == "Dartagnan":
+        if actor.name() != "Goblint":
             return subprocess.run(command,
                             cwd=cwd,
                             capture_output=True,
@@ -39,7 +39,7 @@ class Cooperace:
 
             cwd, executable = os.path.split(path)
 
-            task_options = {"data_model": self.data_model}
+            task_options = {"data_model": self.data_model, "language": "C"} #Language is hardcoded, maybe should get from user input?
 
             task = Task(
                 input_files=[self.file],
@@ -59,6 +59,8 @@ class Cooperace:
                 rlimits=None
             )
 
+            print(command)
+
             tool_result = self.runActor(actor, command, cwd)
             
             run = Run(tool_result.stdout.strip().split("\n"))
@@ -67,9 +69,9 @@ class Cooperace:
             if verdict == "unknown" or verdict == "error":
                 print(actor.name(), "result inconclusive")
                 print("STDOUT:\n")
-                #print(tool_result.stdout)
+                print(tool_result.stdout)
                 print("\nSTDERR:\n")
-                #print(tool_result.stderr)
+                print(tool_result.stderr)
             else:
                 return verdict
 
