@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import subprocess
 import re
 import os
@@ -15,7 +16,7 @@ class Cooperace:
         self.properties_file = properties_file
         self.data_model = data_model
         
-    def runActor(self, actor, command, cwd):
+    def actorResult(self, actor, command, cwd):
         if actor.name() != "Goblint":
             return subprocess.run(command,
                             cwd=cwd,
@@ -32,8 +33,38 @@ class Cooperace:
 
     def runSequential(self, actors=None):
         verdict = "unknown"
+        
+        for actor in actors:
+            actor_result = self.runActor(actor)
+            if actor_result == "true" or actor_result == "false":
+                return actor_result
+            else:
+                verdict = actor_result
 
-        for actor in actors: 
+        return verdict
+    
+    def runParallel(self, actors=None):
+        verdict = "unknown"
+
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self.runActor, actors[i]) for i in range(len(actors))]
+
+            for future in as_completed(futures):
+                result = future.result()
+
+                if result == "true" or result == "false":
+                    for f in futures:
+                        f.cancel()
+
+                    return result
+                
+        return verdict
+
+
+    def runActor(self, actor):
+        verdict = "unknown"
+
+        try:
             tool_locator = tool_finder()
             path = actor.executable(tool_locator)
 
@@ -61,11 +92,11 @@ class Cooperace:
 
             print(command)
 
-            tool_result = self.runActor(actor, command, cwd)
+            tool_result = self.actorResult(actor, command, cwd)
             
             run = Run(tool_result.stdout.strip().split("\n"))
             verdict = actor.determine_result(run).lower()
-            print(verdict)
+            print(actor.name(), "verdict:",verdict)
             if verdict == "unknown" or verdict == "error":
                 print(actor.name(), "result inconclusive")
                 print("STDOUT:\n")
@@ -74,5 +105,12 @@ class Cooperace:
                 print(tool_result.stderr)
             else:
                 return verdict
-
+        except:
+            print(actor.name(), "result inconclusive")
+            print("STDOUT:\n")
+            print(tool_result.stdout)
+            print("\nSTDERR:\n")
+            print(tool_result.stderr)
+            pass
+        
         return verdict
