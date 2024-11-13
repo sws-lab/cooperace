@@ -1,7 +1,13 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from multiprocessing.pool import ThreadPool
 import subprocess
 import re
 import os
+import multiprocessing
+
+
 
 from .util.run import Run
 
@@ -11,9 +17,9 @@ from .util.tool_finder import tool_finder
 from .actors.goblint import Goblint
 
 class Cooperace:
-    def __init__(self, file, properties_file, data_model):
+    def __init__(self, file, property_file, data_model):
         self.file = file
-        self.properties_file = properties_file
+        self.property_file = property_file
         self.data_model = data_model
         
     def actorResult(self, actor, command, cwd):
@@ -46,18 +52,14 @@ class Cooperace:
     def runParallel(self, actors=None):
         verdict = "unknown"
 
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.runActor, actors[i]) for i in range(len(actors))]
+        with ThreadPool() as pool:
+            it = pool.imap_unordered(partial(self.runActor), actors)
 
-            for future in as_completed(futures):
-                result = future.result()
+            value = next(it)
+            while value == "unknown":
+                value = next(it)
+            verdict = value
 
-                if result == "true" or result == "false":
-                    for f in futures:
-                        f.cancel()
-
-                    return result
-                
         return verdict
 
 
@@ -75,7 +77,7 @@ class Cooperace:
             task = Task.with_files(
                 input_files=[self.file],
                 options=task_options,
-                property_file=self.properties_file
+                property_file=self.property_file
             )
 
             if actor.name() == "Goblint":
@@ -114,3 +116,4 @@ class Cooperace:
             pass
         
         return verdict
+    
