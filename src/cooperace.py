@@ -72,10 +72,10 @@ class Cooperace:
 
             task_options = {"data_model": self.data_model, "language": "C"} #Language is hardcoded, maybe should get from user input?
 
-            task = Task(
+            task = Task.with_files(
                 input_files=[self.file],
-                property_file=self.properties_file,
-                options=task_options
+                options=task_options,
+                property_file=self.properties_file
             )
 
             if actor.name() == "Goblint":
