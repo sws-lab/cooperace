@@ -22,7 +22,11 @@ mkdir tmp
 
 #Get Dartagnan
 
-curl "https://zenodo.org/records/10161362/files/dartagnan.zip?download=1" -o tmp/dartagnan.zip
+#Used Dartagnan that was made for SVCOMP 2025
+curl "https://zenodo.org/records/14079770/files/dartagnan.zip?download=1" -o tmp/dartagnan.zip
+
+#Dartagnan version used for SVCOMP 2024
+#curl "https://zenodo.org/records/10161362/files/dartagnan.zip?download=1" -o tmp/dartagnan.zip
 
 unzip -o tmp/dartagnan.zip -d tools/
 
