@@ -34,6 +34,18 @@ echo "Running Cooperace (uses local tool-info module)"
 cd $THIS_DIR
 $BENCHEXEC $THIS_DIR/tests/bench-defs/cooperace.xml
 
+cd $RESULTS_DIR
+COOPERACE_WITNESS_DIR=`echo cooperace.*.files`
+echo "Cooperace witness directory:" $COOPERACE_WITNESS_DIR
+
+cd $RESULTS_DIR
+sed -e "s|WITNESS_DIR|$RESULTS_DIR/$COOPERACE_WITNESS_DIR|" $THIS_DIR/tests/bench-defs/dartagnan-validate-cooperace.xml > dartagnan-validate-cooperace.xml
+
+echo "Running Dartagnan Validator"
+cd $DARTAGNAN_DIR
+$BENCHEXEC $RESULTS_DIR/dartagnan-validate-cooperace.xml
+
+# TODO: adjust_results_verifiers
 
 # Generate table with merged results
 cd $RESULTS_DIR
