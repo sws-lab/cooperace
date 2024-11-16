@@ -1,7 +1,7 @@
 import os
 
 
-class tool_finder:
+class ToolFinder:
     def find_executable(self, name):
         tools = os.path.join(os.getcwd(), "tools")
         for directory in os.listdir(tools):

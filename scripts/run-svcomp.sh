@@ -22,9 +22,9 @@ export PYTHONPATH=$PYTHONPATH:$THIS_DIR/tool_info
 rm -rf $RESULTS_DIR  #for now, we want to start fresh
 mkdir $RESULTS_DIR || true
 
-echo "Running Dartagnan"
-cd $DARTAGNAN_DIR
-$BENCHEXEC $THIS_DIR/tests/bench-defs/dartagnan.xml
+# echo "Running Dartagnan"
+# cd $DARTAGNAN_DIR
+# $BENCHEXEC $THIS_DIR/tests/bench-defs/dartagnan.xml
 
 echo "Running Goblint"
 cd $GOBLINT_DIR

@@ -1,20 +1,14 @@
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from multiprocessing.pool import ThreadPool
-import subprocess
-import re
 import os
-import multiprocessing
+import subprocess
 
 
+from benchexec.tools.template import BaseTool2
 
 from .util.run import Run
 
-from .actors.task import Task
-
-from .util.tool_finder import tool_finder
-from .actors.goblint import Goblint
+from .util.tool_finder import ToolFinder
 
 class Cooperace:
     def __init__(self, file, property_file, data_model):
@@ -56,64 +50,62 @@ class Cooperace:
             it = pool.imap_unordered(partial(self.runActor), actors)
 
             value = next(it)
-            while value == "unknown":
-                value = next(it)
-            verdict = value
+            print(value)
+            try:
+                while value != "true" and value != "false":
+                    value = next(it)
+                verdict = value
+            except StopIteration:
+                return "unknown"
 
         return verdict
 
 
-    def runActor(self, actor):
-        verdict = "unknown"
+    def runActor(self, actor: BaseTool2):
+        tool_locator = ToolFinder()
+        executable = actor.executable(tool_locator)
 
-        try:
-            tool_locator = tool_finder()
-            path = actor.executable(tool_locator)
+        cwd = str.rsplit(executable, "/", 1)[0]
+        
+        task = BaseTool2.Task.with_files(
+            input_files=[self.file],
+            property_file=self.property_file,
+            options={"data_model":"ILP32"},
+        )
 
-            cwd, executable = os.path.split(path)
+        if (actor.name() == "Goblint"):
+            options = ["--conf", os.path.join(cwd, "conf", "svcomp24.json")]
+        else:
+            options = []
 
-            task_options = {"data_model": self.data_model, "language": "C"} #Language is hardcoded, maybe should get from user input?
+        cmdline = actor.cmdline(
+            executable=executable,
+            options=options,
+            task=task,
+            rlimits=None
+        )
 
-            task = Task.with_files(
-                input_files=[self.file],
-                options=task_options,
-                property_file=self.property_file
+        tool_result = self.actorResult(
+            actor=actor,
+            command=cmdline,
+            cwd=cwd
             )
-
-            if actor.name() == "Goblint":
-                options = ["--conf", os.path.join(cwd, "conf", "svcomp24.json")]
-            else:
-                options = []
-
-            command = actor.cmdline(
-                executable=path,
-                options=options,
-                task=task,
-                rlimits=None
+        
+        run = Run(
+            output=tool_result.stdout
             )
+        
+        verdict = actor.determine_result(run).lower()
 
-            print(command)
-
-            tool_result = self.actorResult(actor, command, cwd)
-            
-            run = Run(tool_result.stdout.strip().split("\n"))
-            verdict = actor.determine_result(run).lower()
-            print(actor.name(), "verdict:",verdict)
-            if verdict == "unknown" or verdict == "error":
-                print(actor.name(), "result inconclusive")
-                print("STDOUT:\n")
-                print(tool_result.stdout)
-                print("\nSTDERR:\n")
-                print(tool_result.stderr)
-            else:
-                return verdict
-        except:
-            print(actor.name(), "result inconclusive")
-            print("STDOUT:\n")
+        if verdict.__contains__("true"):
+            return "true"
+        elif verdict.__contains__("false"):
+            return "false"
+        else:
+            print("---STDOUT---\n")
             print(tool_result.stdout)
-            print("\nSTDERR:\n")
+            print("---STDERR---\n")
             print(tool_result.stderr)
-            pass
         
         return verdict
     
