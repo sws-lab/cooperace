@@ -20,7 +20,9 @@ abs_path = os.path.abspath(args.filepath) # to run outside benchexec
 cooperace = Cooperace(abs_path, args.prop, args.arch)
 
 def main():
-    verdict = cooperace.runParallel([Goblint(), Deagle(), Dartagnan()])
+    actor1 = [Goblint()]
+    actor2 = [Deagle(), Dartagnan()]
+    verdict = cooperace.runSequential([actor1, actor2])
     print("CoOpeRace verdict: " + verdict)
 
 main()

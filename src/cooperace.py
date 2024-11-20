@@ -35,7 +35,11 @@ class Cooperace:
         verdict = "unknown"
         
         for actor in actors:
-            actor_result = self.runActor(actor)
+            #If actor is a list, then we want the list of tools to be run in parallel
+            if isinstance(actor, list):
+                actor_result = self.runParallel(actor)
+            else:
+                actor_result = self.runActor(actor)
             if actor_result == "true" or actor_result == "false":
                 return actor_result
             else:
@@ -43,12 +47,18 @@ class Cooperace:
 
         return verdict
     
+    def runActorThread(self, actor):
+        #If actor in parallel running is a list, then that list should be run sequentially
+        if isinstance(actor, list):
+            return self.runSequential(actor)
+        else:
+            return self.runActor(actor)
+    
     def runParallel(self, actors=None):
         verdict = "unknown"
 
-        with ThreadPool() as pool:
-            it = pool.imap_unordered(partial(self.runActor), actors)
-
+        with ThreadPool() as pool:    
+            it = pool.imap_unordered(partial(self.runActorThread), actors)
             value = next(it)
             print(value)
             try:
