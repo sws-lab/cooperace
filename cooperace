@@ -3,6 +3,9 @@
 import argparse
 import os
 from src.cooperace import Cooperace
+from benchexec.tools.dartagnan import Tool as Dartagnan
+from benchexec.tools.goblint import Tool as Goblint
+from benchexec.tools.deagle import Tool as Deagle
 
 parser = argparse.ArgumentParser()
 
@@ -16,5 +19,8 @@ args = parser.parse_args()
 abs_path = os.path.abspath(args.filepath) # to run outside benchexec
 cooperace = Cooperace(abs_path, args.prop, args.arch)
 
-verdict = cooperace.start()
-print("CoOpeRace verdict: " + verdict)
+def main():
+    verdict = cooperace.runParallel([Goblint(), Deagle(), Dartagnan()])
+    print("CoOpeRace verdict: " + verdict)
+
+main()

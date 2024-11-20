@@ -3,6 +3,10 @@ dist
 tools
 results
 
+#Made witness files
+witness.*
+error-witness.*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
