@@ -4,9 +4,6 @@ import argparse
 import json
 import os
 from src.cooperace import Cooperace
-from benchexec.tools.dartagnan import Tool as Dartagnan
-from benchexec.tools.goblint import Tool as Goblint
-from benchexec.tools.deagle import Tool as Deagle
 
 parser = argparse.ArgumentParser()
 

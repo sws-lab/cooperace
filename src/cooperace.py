@@ -8,6 +8,8 @@ from benchexec.tools.template import BaseTool2
 from benchexec.tools.goblint import Tool as Goblint
 from benchexec.tools.dartagnan import Tool as Dartagnan
 from benchexec.tools.deagle import Tool as Deagle
+from benchexec.tools.ultimateautomizer import Tool as UltimateAutomizer
+from benchexec.tools.ultimategemcutter import Tool as UltimateGemCutter
 
 from .util.run import Run
 
@@ -16,7 +18,7 @@ from .util.tool_finder import ToolFinder
 class Cooperace:
     def __init__(self, file, property_file, data_model, conf):
         self.file = file
-        self.property_file = property_file
+        self.property_file = os.path.abspath(property_file)
         self.data_model = data_model
         self.conf = conf
 
@@ -24,7 +26,9 @@ class Cooperace:
         self.tools = {
             "goblint": Goblint(),
             "deagle": Deagle(),
-            "dartagnan": Dartagnan()
+            "dartagnan": Dartagnan(),
+            "uAutomizer": UltimateAutomizer(),
+            "uGemCutter": UltimateGemCutter()
         }
         
     def actorResult(self, actor, command, cwd):
@@ -54,16 +58,18 @@ class Cooperace:
     def parseConf(self):
         execution_type = self.conf["runType"]
         execution_tools = self.parseTools(self.conf["tools"])
-
-        print(execution_tools)
         
         return execution_type, execution_tools
         
     def execute(self):
         executon_type, execution_tools = self.parseConf()
 
-        if (executon_type == "sequential"):
+        if executon_type == "sequential":
             return self.runSequential(execution_tools)
+        elif executon_type == "parallel":
+            return self.runParallel(execution_tools)
+        else:
+            raise Exception("execution type in conf file is incorrect. Has to be 'parallel' or 'sequential'")
             
         
 
@@ -118,19 +124,23 @@ class Cooperace:
         task = BaseTool2.Task.with_files(
             input_files=[self.file],
             property_file=self.property_file,
-            options={"data_model":"ILP32"},
+            options={"data_model":"ILP32",
+                     "language": "C"},
         )
 
         if (actor.name() == "Goblint"):
             options = ["--conf", os.path.join(cwd, "conf", "svcomp24.json")]
+        elif (actor.name().__contains__("ULTIMATE")):
+            options = ["--full-output"]
         else:
             options = []
 
+
         cmdline = actor.cmdline(
-            executable=executable,
-            options=options,
-            task=task,
-            rlimits=None
+            executable,
+            options,
+            task,
+            None
         )
 
         tool_result = self.actorResult(
@@ -140,7 +150,8 @@ class Cooperace:
             )
         
         run = Run(
-            output=tool_result.stdout
+            output=tool_result.stdout,
+            cmdline=cmdline
             )
         
         verdict = actor.determine_result(run).lower()

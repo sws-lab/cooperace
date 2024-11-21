@@ -1,7 +1,8 @@
 class Run:
-    def __init__(self, output):
+    def __init__(self, output, cmdline):
         self.output = Output(output.strip().split("\n"))
         self.exit_code = ExitCode(0)
+        self.cmdline = cmdline
 
 class Output:
     def __init__(self, output):

@@ -2,6 +2,6 @@
     "runType": "sequential",
     "tools": [
         "goblint",
-        ["deagle", "dartagnan"]
+        ["deagle", "dartagnan", "uGemCutter", "uAutomizer"]
     ]
 }
