@@ -1,0 +1,7 @@
+{
+    "runType": "sequential",
+    "tools": [
+        "goblint",
+        ["deagle", "dartagnan"]
+    ]
+}

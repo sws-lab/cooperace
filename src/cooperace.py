@@ -5,16 +5,27 @@ import subprocess
 
 
 from benchexec.tools.template import BaseTool2
+from benchexec.tools.goblint import Tool as Goblint
+from benchexec.tools.dartagnan import Tool as Dartagnan
+from benchexec.tools.deagle import Tool as Deagle
 
 from .util.run import Run
 
 from .util.tool_finder import ToolFinder
 
 class Cooperace:
-    def __init__(self, file, property_file, data_model):
+    def __init__(self, file, property_file, data_model, conf):
         self.file = file
         self.property_file = property_file
         self.data_model = data_model
+        self.conf = conf
+
+        #Any new tools need to be added here
+        self.tools = {
+            "goblint": Goblint(),
+            "deagle": Deagle(),
+            "dartagnan": Dartagnan()
+        }
         
     def actorResult(self, actor, command, cwd):
         if actor.name() != "Goblint":
@@ -28,6 +39,31 @@ class Cooperace:
                             capture_output=True,
                             text=True  
                             )
+        
+    def parseTools(self, tools):
+        executable_tools = []
+        for tool in tools:
+            if isinstance(tool, list):
+                executable_tools.append(self.parseTools(tool))
+            else:
+                executable_tools.append(self.tools[tool])
+
+        return executable_tools
+            
+        
+    def parseConf(self):
+        execution_type = self.conf["runType"]
+        execution_tools = self.parseTools(self.conf["tools"])
+
+        print(execution_tools)
+        
+        return execution_type, execution_tools
+        
+    def execute(self):
+        executon_type, execution_tools = self.parseConf()
+
+        if (executon_type == "sequential"):
+            return self.runSequential(execution_tools)
             
         
 
@@ -40,6 +76,8 @@ class Cooperace:
                 actor_result = self.runParallel(actor)
             else:
                 actor_result = self.runActor(actor)
+
+
             if actor_result == "true" or actor_result == "false":
                 return actor_result
             else:
