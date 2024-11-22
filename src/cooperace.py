@@ -2,6 +2,7 @@ from functools import partial
 from multiprocessing.pool import ThreadPool
 import os
 import subprocess
+import shutil
 
 
 from benchexec.tools.template import BaseTool2
@@ -31,18 +32,13 @@ class Cooperace:
             "uGemCutter": UltimateGemCutter()
         }
         
-    def actorResult(self, actor, command, cwd):
-        if actor.name() != "Goblint":
-            return subprocess.run(command,
-                            cwd=cwd,
-                            capture_output=True,
-                            text=True  
-                            )
-        else:
-            return subprocess.run(command,
-                            capture_output=True,
-                            text=True  
-                            )
+    def actorResult(self, command, cwd):
+        return subprocess.run(command,
+                        cwd=cwd,
+                        capture_output=True,
+                        text=True  
+                        )
+
         
     def parseTools(self, tools):
         executable_tools = []
@@ -69,7 +65,7 @@ class Cooperace:
         elif executon_type == "parallel":
             return self.runParallel(execution_tools)
         else:
-            raise Exception("execution type in conf file is incorrect. Has to be 'parallel' or 'sequential'")
+            raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
             
         
 
@@ -114,6 +110,28 @@ class Cooperace:
 
         return verdict
 
+    def witnessFiles(self, tool_dir):
+        witness_files = []
+        
+        for root, dirs, files in os.walk(tool_dir):
+            for file in files:
+                if 'witness' in file.lower():
+                    witness_files.append(os.path.join(root, file))
+
+        return witness_files
+        
+
+    def witnessFilesToFileRoot(self, witness_files):
+        for file in witness_files:
+            if file.endswith("graphml"):
+                destination = os.path.join(os.getcwd(), "witness.graphml")
+            else:
+                destination = os.path.join(os.getcwd(), os.path.basename(file))
+            shutil.copy2(file, destination)
+
+    def deleteWitnessFiles(self, witness_files):
+        for file in witness_files:
+            os.remove(file)
 
     def runActor(self, actor: BaseTool2):
         tool_locator = ToolFinder()
@@ -144,7 +162,6 @@ class Cooperace:
         )
 
         tool_result = self.actorResult(
-            actor=actor,
             command=cmdline,
             cwd=cwd
             )
@@ -157,14 +174,21 @@ class Cooperace:
         verdict = actor.determine_result(run).lower()
 
         if verdict.__contains__("true"):
-            return "true"
+            self.witnessFilesToFileRoot(self.witnessFiles(cwd))
+            verdict = "true"
         elif verdict.__contains__("false"):
-            return "false"
+            self.witnessFilesToFileRoot(self.witnessFiles(cwd))
+            verdict = "false"
         else:
             print("---STDOUT---\n")
             print(tool_result.stdout)
             print("---STDERR---\n")
             print(tool_result.stderr)
+
+        self.deleteWitnessFiles(self.witnessFiles(cwd))
         
         return verdict
+    
+
+
     
