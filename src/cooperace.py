@@ -60,13 +60,16 @@ class Cooperace:
     def execute(self):
         executon_type, execution_tools = self.parseConf()
 
+        verdict = "unknown"
+
         if executon_type == "sequential":
-            return self.runSequential(execution_tools)
+            verdict = self.runSequential(execution_tools)
         elif executon_type == "parallel":
-            return self.runParallel(execution_tools)
+            verdict = self.runParallel(execution_tools)
         else:
             raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
-            
+        self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
+        return verdict
         
 
     def runSequential(self, actors=None):
@@ -129,7 +132,7 @@ class Cooperace:
                 destination = os.path.join(os.getcwd(), os.path.basename(file))
             shutil.copy2(file, destination)
 
-    def deleteWitnessFiles(self, witness_files):
+    def deleteAllWitnessFiles(self, witness_files):
         for file in witness_files:
             os.remove(file)
 
@@ -184,8 +187,6 @@ class Cooperace:
             print(tool_result.stdout)
             print("---STDERR---\n")
             print(tool_result.stderr)
-
-        self.deleteWitnessFiles(self.witnessFiles(cwd))
         
         return verdict
     
