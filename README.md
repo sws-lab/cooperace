@@ -11,3 +11,5 @@ It is a metaverfier that currently includes the following tools:
 The goal of the CoOpeRace project is to identify the ultimate state-of-the-art in race freedom verification,
 attempt better ways of communicating intermediate results between tools, and 
 provide a user interface for comparing output of different tools.
+
+To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp tests/test.i`.
