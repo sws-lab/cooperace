@@ -1,0 +1,5 @@
+goblint: 10.5281/zenodo.14054652
+dartagnan: 10.5281/zenodo.14079770
+deagle: 10.5281/zenodo.14189745
+uautomizer: 10.5281/zenodo.14199049
+ugemcutter: 10.5281/zenodo.14199060

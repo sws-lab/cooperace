@@ -22,11 +22,8 @@ mkdir tmp
 
 #Get Dartagnan
 
-#Used Dartagnan that was made for SVCOMP 2025
+#Used Dartagnan
 curl "https://zenodo.org/records/14079770/files/dartagnan.zip?download=1" -o tmp/dartagnan.zip
-
-#Dartagnan version used for SVCOMP 2024
-#curl "https://zenodo.org/records/10161362/files/dartagnan.zip?download=1" -o tmp/dartagnan.zip
 
 unzip -o tmp/dartagnan.zip -d tools/
 
@@ -34,7 +31,7 @@ rm -rf tmp/dartagnan.zip
 
 #Get Goblint
 
-curl "https://zenodo.org/records/10202867/files/goblint.zip?download=1" -o tmp/goblint.zip
+curl "https://zenodo.org/records/14054652/files/goblint.zip?download=1" -o tmp/goblint.zip
 
 unzip -o tmp/goblint.zip -d tools/
 
@@ -42,7 +39,7 @@ rm -rf tmp/goblint.zip
 
 #Get Deagle
 
-curl "https://zenodo.org/records/10207348/files/deagle.zip?download=1" -o tmp/deagle.zip
+curl "https://zenodo.org/records/14189745/files/deagle.zip?download=1" -o tmp/deagle.zip
 
 unzip -o tmp/deagle.zip -d tools/
 
@@ -50,7 +47,7 @@ rm -rf tmp/deagle.zip
 
 #Get Ultimate Automizer
 
-curl "https://zenodo.org/records/10203545/files/uautomizer.zip?download=1" -o tmp/uAutomizer.zip
+curl "https://zenodo.org/records/14199049/files/uautomizer.zip?download=1" -o tmp/uAutomizer.zip
 
 unzip -o tmp/uAutomizer.zip -d tools/
 
@@ -58,7 +55,7 @@ rm -rf tmp/uAutomizer.zip
 
 #Get Ultimate GemCutter
 
-curl "https://zenodo.org/records/10203548/files/ugemcutter.zip?download=1" -o tmp/uGemCutter.zip
+curl "https://zenodo.org/records/14199060/files/ugemcutter.zip?download=1" -o tmp/uGemCutter.zip
 
 unzip -o tmp/uGemCutter.zip -d tools/
 
