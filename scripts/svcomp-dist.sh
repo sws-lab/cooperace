@@ -10,7 +10,7 @@ mkdir -p $DIST/tests
 cp cooperace $DIST
 git ls-files src | xargs -I {} cp --parents {} $DIST
 cp -r tools $DIST/tools
-cp -r conf $DIST
+cp -r conf lib $DIST
 cp LICENSE README.md $DIST
 
 cp tests/properties/no-data-race.prp $DIST/tests

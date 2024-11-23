@@ -3,7 +3,11 @@ from multiprocessing.pool import ThreadPool
 import os
 import subprocess
 import shutil
+import glob
+import sys
 
+for whl_file in glob.glob("lib/*.whl"):
+    sys.path.insert(0, whl_file)
 
 from benchexec.tools.template import BaseTool2
 from benchexec.tools.goblint import Tool as Goblint
