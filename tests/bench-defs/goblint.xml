@@ -4,7 +4,7 @@
 
   <resultfiles></resultfiles>
 
-  <option name="--conf">conf/svcomp24.json</option>
+  <option name="--conf">conf/svcomp25.json</option>
 
   <rundefinition name="testing">
   </rundefinition>

@@ -150,7 +150,7 @@ class Cooperace:
         )
 
         if (actor.name() == "Goblint"):
-            options = ["--conf", os.path.join(cwd, "conf", "svcomp24.json")]
+            options = ["--conf", os.path.join(cwd, "conf", "svcomp25.json")]
         elif (actor.name().__contains__("ULTIMATE")):
             options = ["--full-output"]
         else:
