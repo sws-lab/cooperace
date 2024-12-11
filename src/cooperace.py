@@ -26,14 +26,15 @@ class Cooperace:
         self.property_file = os.path.abspath(property_file)
         self.data_model = data_model
         self.conf = conf
+        self.acceptable_results = {}
 
-        #Any new tools need to be added here
+        #Any new tools need to be added here. Key values taken from corresponding tool name() value
         self.tools = {
-            "goblint": Goblint(),
-            "deagle": Deagle(),
-            "dartagnan": Dartagnan(),
-            "uAutomizer": UltimateAutomizer(),
-            "uGemCutter": UltimateGemCutter()
+            "Goblint": Goblint(),
+            "Deagle": Deagle(),
+            "Dartagnan": Dartagnan(),
+            "ULTIMATE Automizer": UltimateAutomizer(),
+            "ULTIMATE GemCutter": UltimateGemCutter()
         }
         
     def actorResult(self, command, cwd):
@@ -50,7 +51,9 @@ class Cooperace:
             if isinstance(tool, list):
                 executable_tools.append(self.parseTools(tool))
             else:
-                executable_tools.append(self.tools[tool])
+                for tool_name, tool_value in tool.items():
+                    self.acceptable_results[tool_name] = tool_value
+                    executable_tools.append(self.tools[tool_name])
 
         return executable_tools
             
@@ -140,6 +143,16 @@ class Cooperace:
         for file in witness_files:
             os.remove(file)
 
+    def confirmVerdict(self, tool_name, verdict: str, expected_verdict: str):
+        tool_acceptance_criteria = self.acceptable_results.get(tool_name, None)
+
+        if verdict.__contains__(expected_verdict):
+            if tool_acceptance_criteria is None or tool_acceptance_criteria == "all" or tool_acceptance_criteria == expected_verdict:
+                return True
+            else:
+                return False
+            
+
     def runActor(self, actor: BaseTool2):
         tool_locator = ToolFinder()
         executable = actor.executable(tool_locator)
@@ -180,17 +193,19 @@ class Cooperace:
         
         verdict = actor.determine_result(run).lower()
 
-        if verdict.__contains__("true"):
+        if self.confirmVerdict(actor.name(), verdict, "true"):
             self.witnessFilesToFileRoot(self.witnessFiles(cwd))
             verdict = "true"
-        elif verdict.__contains__("false"):
+        elif self.confirmVerdict(actor.name(), verdict, "false"):
             self.witnessFilesToFileRoot(self.witnessFiles(cwd))
             verdict = "false"
         else:
-            print("---STDOUT---\n")
+            verdict = "unknown"
+            print(f"---{actor.name()} logs---\n")
             print(tool_result.stdout)
-            print("---STDERR---\n")
             print(tool_result.stderr)
+
+        print("Tool name:", actor.name(), "Result:", verdict)
         
         return verdict
     

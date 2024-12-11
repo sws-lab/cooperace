@@ -1,7 +1,12 @@
 {
     "runType": "sequential",
     "tools": [
-        "goblint",
-        ["dartagnan", "uGemCutter", "uAutomizer", "deagle"]
+        {"Goblint": "true"},
+        [
+            {"Dartagnan": "all"},
+            {"ULTIMATE GemCutter": "all"}, 
+            {"ULTIMATE Automizer": "all"},
+            {"Deagle": "true"}
+        ]
     ]
 }
