@@ -125,7 +125,7 @@ class Cooperace:
         
         for root, dirs, files in os.walk(tool_dir):
             for file in files:
-                if 'witness' in file.lower():
+                if 'witness' in file.lower() and (file.endswith("graphml") or file.endswith("yml")):
                     witness_files.append(os.path.join(root, file))
 
         return witness_files
