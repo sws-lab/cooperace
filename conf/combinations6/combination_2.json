@@ -1,0 +1,11 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"nacpa": "all"},
+        {"uautomizer": "all"},
+        {"sv-sanitizers": "all"},
+        {"deagle": "all"},
+        {"dartagnan": "all"},
+        {"goblint": "all"}
+    ]
+}

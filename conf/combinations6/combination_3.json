@@ -1,0 +1,11 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"nacpa": "all"},
+        {"ugemcutter": "all"},
+        {"sv-sanitizers": "all"},
+        {"deagle": "all"},
+        {"dartagnan": "all"},
+        {"goblint": "all"}
+    ]
+}
