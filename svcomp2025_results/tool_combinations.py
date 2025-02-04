@@ -137,29 +137,37 @@ def n_combinations(tools: dict, n=5):
 
     for name in tools.keys():
         tool_names.append(name)
-    
+
     sublists_dict = {}
 
     for r in range(1, min(n, len(tool_names))):
         sublists = [list(combination) for combination in combinations(tool_names, r)]
         sublists_dict[r] = sublists
     
+    if n == len(tool_names):
+        sublists_dict[n] = [tool_names]
+
     return sublists_dict
 
 #Takes a list of tool names and gets the result and score of that combination
-def tools_list_score_result(tool_names: list, tools_dict: dict, base: ToolData):
-    final_data = ToolData(
-        name=base.name,
-        score=base.score,
-        results=base.results
-    )
+def tools_list_score_result(tool_names: list, tools_dict: dict, base: ToolData = None):
+    if base is None:
+        base_tool_name = tool_names[0]
+        tool_names.remove(base_tool_name)
+        base_tool = tools_dict[base_tool_name]
+    else:  
+        base_tool = ToolData(
+            name=base.name,
+            score=base.score,
+            results=base.results
+        )
 
     for name in tool_names:
-        final_data = ToolData.from_combination(final_data.name + "_" + name, final_data.results, tools_dict[name].results)
+        base_tool = ToolData.from_combination(base_tool.name + "_" + name, base_tool.results, tools_dict[name].results)
 
-    return final_data
+    return base_tool
 
-def write_result_csv(location: str, data: list, score_limit = 1600):
+def write_result_csv(location: str, data: list, score_limit = 1600, individual_tasks=False):
     rows = []
 
     new_data = list(filter(lambda x: x[1] > score_limit, data))
@@ -170,13 +178,14 @@ def write_result_csv(location: str, data: list, score_limit = 1600):
     score_row = ["Score"] + [score for _, score, _ in new_data]
     rows.append(score_row)
 
-    tasks_list = new_data[0][2].keys()
+    if individual_tasks:
+        tasks_list = new_data[0][2].keys()
 
-    for task_name in tasks_list:
-        row = [task_name]
-        for tool in new_data:
-            row.append(tool[2][task_name][0])
-        rows.append(row)
+        for task_name in tasks_list:
+            row = [task_name]
+            for tool in new_data:
+                row.append(tool[2][task_name][0])
+            rows.append(row)
 
     #Some gigahack line of code from Chat-GPT to make the data table transposed
     transposed_rows = list(map(list, zip(*rows)))
@@ -188,19 +197,19 @@ def write_result_csv(location: str, data: list, score_limit = 1600):
 if __name__ == "__main__":
     tools_dict = parse_xml_data()
 
-    goblint = tools_dict.pop("goblint")
-    dartagnan = tools_dict.pop("dartagnan")
+    #goblint = tools_dict.pop("goblint")
+    #dartagnan = tools_dict.pop("dartagnan")
+    #default_combination = ToolData.from_combination("goblint_dartagnan", goblint.results, dartagnan.results)
+    #print(default_combination.score)
 
-    default_combination = ToolData.from_combination("goblint_dartagnan", goblint.results, dartagnan.results)
-    all_combinations = n_combinations(tools_dict, 4)
+    all_combinations = n_combinations(tools_dict, len(tools_dict))
 
-    combination_list = []
     for i in range(len(all_combinations)):
+        combination_list = []
         for tool_combination in all_combinations[i+1]:
-            data = tools_list_score_result(tool_combination, tools_dict, default_combination)
+            data = tools_list_score_result(tool_combination, tools_dict)
             combination_list.append((data.name, data.score, data.results))
-
-    write_result_csv("results.csv", combination_list, 1680)
+        write_result_csv(f"results-{i+1}-combinations.csv", combination_list, 0)
 
 
 
