@@ -2,10 +2,10 @@
     "runType": "parallel",
     "tools": [
         {"nacpa": "all"},
-        {"uautomizer": "all"},
+        {"ULTIMATE Automizer": "all"},
         {"sv-sanitizers": "all"},
-        {"deagle": "all"},
-        {"dartagnan": "all"},
-        {"goblint": "all"}
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
     ]
 }

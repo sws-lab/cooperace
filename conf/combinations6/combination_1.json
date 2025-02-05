@@ -2,10 +2,10 @@
     "runType": "parallel",
     "tools": [
         {"nacpa": "all"},
-        {"utaipan": "all"},
+        {"ULTIMATE Taipan": "all"},
         {"sv-sanitizers": "all"},
-        {"deagle": "all"},
-        {"dartagnan": "all"},
-        {"goblint": "all"}
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
     ]
 }

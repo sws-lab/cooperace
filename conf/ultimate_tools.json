@@ -1,7 +1,0 @@
-{
-    "runType": "parallel",
-    "tools": [
-        "uAutomizer",
-        "uGemCutter"
-    ]
-}

@@ -2,10 +2,10 @@
     "runType": "parallel",
     "tools": [
         {"nacpa": "all"},
-        {"utaipan": "all"},
-        {"uautomizer": "all"},
-        {"deagle": "all"},
-        {"dartagnan": "all"},
-        {"goblint": "all"}
+        {"ULTIMATE Taipan": "all"},
+        {"ULTIMATE Automizer": "all"},
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
     ]
 }

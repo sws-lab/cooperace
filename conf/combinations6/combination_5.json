@@ -1,11 +1,11 @@
 {
     "runType": "parallel",
     "tools": [
-        {"cpachecker": "all"},
-        {"ugemcutter": "all"},
+        {"CPAchecker": "all"},
+        {"ULTIMATE GemCutter": "all"},
         {"sv-sanitizers": "all"},
-        {"deagle": "all"},
-        {"dartagnan": "all"},
-        {"goblint": "all"}
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
     ]
 }
