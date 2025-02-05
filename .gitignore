@@ -9,7 +9,7 @@ tools.txt
 #Made witness files
 witness.*
 error-witness.*
-CounterExample.*
+*CounterExample*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
