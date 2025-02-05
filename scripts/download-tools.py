@@ -13,7 +13,7 @@ os.makedirs('tools', exist_ok=True)
 
 # Base URL for the fm-tools repository
 fm_tools_repo = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/main/data/"
-tools = ["goblint", "dartagnan", "deagle", "uautomizer", "ugemcutter"]
+tools = ["goblint", "dartagnan", "deagle", "uautomizer", "ugemcutter", "utaipan", "nacpa", "sv-sanitizers", "cpachecker"]
 doi_file = "tools.txt"
 
 
@@ -23,7 +23,7 @@ def get_doi(tool_name):
     response.raise_for_status()   
     for line in response.text.splitlines():
         if "doi: " in line:
-            return line.split("doi: ")[1].strip()
+            return line.split("doi: ")[1].replace('"', "").strip()
     raise ValueError(f"DOI not found in {tool_name}.yml")
 
 def get_download_url(doi):
