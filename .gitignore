@@ -3,6 +3,9 @@ dist
 tools
 results
 
+#Made .txt files
+tools.txt
+
 #Made witness files
 witness.*
 error-witness.*
