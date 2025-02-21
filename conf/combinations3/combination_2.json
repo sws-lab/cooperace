@@ -1,0 +1,8 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"ULTIMATE GemCutter": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}

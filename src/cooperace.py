@@ -19,6 +19,7 @@ from benchexec.tools.ultimategemcutter import Tool as UltimateGemCutter
 from benchexec.tools.ultimatetaipan import Tool as UltimateTaipan
 from benchexec.tools.nacpa import Tool as nacpa
 from benchexec.tools.cpachecker import Tool as CPAchecker
+from benchexec.tools.racerf import Tool as RacerF
 sv_sanitizers = importlib.import_module("benchexec.tools.sv-sanitizers")
 
 
@@ -37,6 +38,7 @@ def tool_locations():
             "nacpa": os.path.join(default_path, "nacpa"),
             "CPAchecker": os.path.join(default_path, "CPAchecker-4.0-unix"),
             "sv-sanitizers": os.path.join(default_path, "sv-sanitizers"),
+            "RacerF": os.path.join(default_path, "racerf")
     }
 
 class Cooperace:
@@ -58,6 +60,7 @@ class Cooperace:
             "nacpa": nacpa(),
             "CPAchecker": CPAchecker(),
             "sv-sanitizers": sv_sanitizers.Tool(),
+            "RacerF": RacerF()
         }
 
         #Tool name and tool directory dictionary
@@ -240,6 +243,4 @@ class Cooperace:
         
         return verdict
     
-
-
     

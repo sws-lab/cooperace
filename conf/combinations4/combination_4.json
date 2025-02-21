@@ -1,0 +1,9 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"sv-sanitizers": "all"},
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}

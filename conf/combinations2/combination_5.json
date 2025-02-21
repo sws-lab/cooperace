@@ -1,0 +1,7 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}

@@ -21,21 +21,9 @@ mkdir $RESULTS_DIR || true
 
 cd $THIS_DIR
 
-echo "Running Cooperace combination 6-1"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations6/combination_1.xml
-
-echo "Running Cooperace combination 6-2"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations6/combination_2.xml
-
-echo "Running Cooperace combination 6-3"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations6/combination_3.xml
-
-echo "Running Cooperace combination 6-4"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations6/combination_4.xml
-
-echo "Running Cooperace combination 6-5"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations6/combination_5.xml
-
+for i in {2..6}; do
+    ./scripts/combination_n.sh "$i" "$BENCHEXEC"
+done
 
 cd $RESULTS_DIR
 COOPERACE_WITNESS_DIR=$(echo cooperace.*.files)

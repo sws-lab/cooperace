@@ -13,7 +13,7 @@ os.makedirs('tools', exist_ok=True)
 
 # Base URL for the fm-tools repository
 fm_tools_repo = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/main/data/"
-tools = ["goblint", "dartagnan", "deagle", "uautomizer", "ugemcutter", "utaipan", "nacpa", "sv-sanitizers", "cpachecker"]
+tools = ["goblint", "dartagnan", "deagle", "uautomizer", "ugemcutter", "utaipan", "nacpa", "sv-sanitizers", "cpachecker", "racerf"]
 doi_file = "tools.txt"
 
 

@@ -1,0 +1,8 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"Ultimate Automizer": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}
