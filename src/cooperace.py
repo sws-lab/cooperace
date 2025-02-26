@@ -10,6 +10,7 @@ import importlib
 for whl_file in glob.glob("lib/*.whl"):
     sys.path.insert(0, whl_file)
 
+from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 from benchexec.tools.goblint import Tool as Goblint
 from benchexec.tools.dartagnan import Tool as Dartagnan
@@ -97,14 +98,16 @@ class Cooperace:
         executon_type, execution_tools = self.parseConf()
 
         verdict = "unknown"
-
-        if executon_type == "sequential":
-            verdict = self.runSequential(execution_tools)
-        elif executon_type == "parallel":
-            verdict = self.runParallel(execution_tools)
-        else:
-            raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
-        self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
+        try:
+            if executon_type == "sequential":
+                verdict = self.runSequential(execution_tools)
+            elif executon_type == "parallel":
+                verdict = self.runParallel(execution_tools)
+            else:
+                raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
+            self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
+        except:
+            print("Error, something went wrong")
         return verdict
         
 
@@ -220,7 +223,7 @@ class Cooperace:
         
         run = BaseTool2.Run(
             cmdline=cmdline,
-            exit_code=0,
+            exit_code=butil.ProcessExitCode.create(value=0),
             output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
             termination_reason=""
         )
