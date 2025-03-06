@@ -41,7 +41,7 @@ THIS_DIR=$(pwd)
 # unzip -o '*.logfiles.zip'
 
 
-for i in {2..6}; do
+for i in 2; do
     RESULTS_DIR=$THIS_DIR/results/results_$i
 
     PARALLEL=4  # The limiting factor is RAM (32 on the server); 6 * 4Gb is okay for experiments
@@ -60,11 +60,13 @@ for i in {2..6}; do
     COOPERACE_WITNESS_DIR=$(echo cooperace.*.files)
     echo "Cooperace witness directory:" $COOPERACE_WITNESS_DIR
 
-    # Generate table with merged results
-    cd "$RESULTS_DIR/results_$i"
-    cp "$THIS_DIR/tests/table-generator_combinations$i.xml" table-generator.xml
+    echo "Generate table with merged results"
+    cd "$RESULTS_DIR"
+    cp "$THIS_DIR/tests/table-generator_combinations.xml" table-generator.xml
     table-generator -x table-generator.xml
 
     # Decompress all tool outputs for table HTML links
     unzip -o '*.logfiles.zip' -d "results_$i/"
+
+    cd $THIS_DIR
 done

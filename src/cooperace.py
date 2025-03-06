@@ -85,6 +85,8 @@ class Cooperace:
                     self.acceptable_results[tool_name] = tool_value
                     executable_tools.append(self.tools[tool_name])
 
+        print(executable_tools)
+
         return executable_tools
             
         
