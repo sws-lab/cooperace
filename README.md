@@ -14,7 +14,7 @@ provide a user interface for comparing output of different tools.
 
 To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp tests/no-data-race/00-sanity_09-include.i`.
 
-[How to download SV-COMP results logs](/src/tool_combinations)
-[How to get tool combinations and their theoretical scores](/src/tool_combinations)
-[How to create a tool configuration for CoOpeRace CLI](/conf)
+[How to download SV-COMP results logs](/src/tool_combinations)  
+[How to get tool combinations and their theoretical scores](/src/tool_combinations)  
+[How to create a tool configuration for CoOpeRace CLI](/conf)  
 
