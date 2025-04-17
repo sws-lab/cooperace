@@ -5,20 +5,42 @@ import subprocess
 import shutil
 import glob
 import sys
+import importlib
 
 for whl_file in glob.glob("lib/*.whl"):
     sys.path.insert(0, whl_file)
 
+from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 from benchexec.tools.goblint import Tool as Goblint
 from benchexec.tools.dartagnan import Tool as Dartagnan
 from benchexec.tools.deagle import Tool as Deagle
 from benchexec.tools.ultimateautomizer import Tool as UltimateAutomizer
 from benchexec.tools.ultimategemcutter import Tool as UltimateGemCutter
+from benchexec.tools.ultimatetaipan import Tool as UltimateTaipan
+from benchexec.tools.nacpa import Tool as nacpa
+from benchexec.tools.cpachecker import Tool as CPAchecker
+from benchexec.tools.racerf import Tool as RacerF
+sv_sanitizers = importlib.import_module("benchexec.tools.sv-sanitizers")
 
-from .util.run import Run
 
-from .util.tool_finder import ToolFinder
+
+# This could be done in the download_tools.py part, where it creates a .json for this dictionary 
+def tool_locations():
+    default_path = os.path.join(os.getcwd(), "tools")
+    
+    return {
+            "Goblint": os.path.join(default_path, "goblint"),
+            "Deagle": os.path.join(default_path, "deagle"),
+            "Dartagnan": os.path.join(default_path, "dartagnan"),
+            "ULTIMATE Automizer": os.path.join(default_path, "UAutomizer-linux"),
+            "ULTIMATE GemCutter": os.path.join(default_path, "UGemCutter-linux"),
+            "ULTIMATE Taipan": os.path.join(default_path, "UTaipan-linux"),
+            "nacpa": os.path.join(default_path, "nacpa"),
+            "CPAchecker": os.path.join(default_path, "CPAchecker-4.0-unix"),
+            "sv-sanitizers": os.path.join(default_path, "sv-sanitizers"),
+            "RacerF": os.path.join(default_path, "racerf")
+    }
 
 class Cooperace:
     def __init__(self, file, property_file, data_model, conf):
@@ -34,8 +56,16 @@ class Cooperace:
             "Deagle": Deagle(),
             "Dartagnan": Dartagnan(),
             "ULTIMATE Automizer": UltimateAutomizer(),
-            "ULTIMATE GemCutter": UltimateGemCutter()
+            "ULTIMATE GemCutter": UltimateGemCutter(),
+            "ULTIMATE Taipan": UltimateTaipan(),
+            "nacpa": nacpa(),
+            "CPAchecker": CPAchecker(),
+            "sv-sanitizers": sv_sanitizers.Tool(),
+            "RacerF": RacerF()
         }
+
+        #Tool name and tool directory dictionary
+        self.tool_locations = tool_locations()
         
     def actorResult(self, command, cwd):
         return subprocess.run(command,
@@ -55,6 +85,8 @@ class Cooperace:
                     self.acceptable_results[tool_name] = tool_value
                     executable_tools.append(self.tools[tool_name])
 
+        print(executable_tools)
+
         return executable_tools
             
         
@@ -68,14 +100,16 @@ class Cooperace:
         executon_type, execution_tools = self.parseConf()
 
         verdict = "unknown"
-
-        if executon_type == "sequential":
-            verdict = self.runSequential(execution_tools)
-        elif executon_type == "parallel":
-            verdict = self.runParallel(execution_tools)
-        else:
-            raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
-        self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
+        try:
+            if executon_type == "sequential":
+                verdict = self.runSequential(execution_tools)
+            elif executon_type == "parallel":
+                verdict = self.runParallel(execution_tools)
+            else:
+                raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
+            self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
+        except:
+            print("Error, something went wrong")
         return verdict
         
 
@@ -151,10 +185,13 @@ class Cooperace:
                 return True
             else:
                 return False
-            
+    
 
     def runActor(self, actor: BaseTool2):
-        tool_locator = ToolFinder()
+        tool_location = os.path.join(os.getcwd(), "tools")
+        tool_location = os.path.join(tool_location, self.tool_locations[actor.name()])
+
+        tool_locator = BaseTool2.ToolLocator(tool_directory=tool_location)
         executable = actor.executable(tool_locator)
 
         cwd = str.rsplit(executable, "/", 1)[0]
@@ -178,7 +215,7 @@ class Cooperace:
             executable,
             options,
             task,
-            None
+            BaseTool2.ResourceLimits()
         )
 
         tool_result = self.actorResult(
@@ -186,10 +223,12 @@ class Cooperace:
             cwd=cwd
             )
         
-        run = Run(
-            output=tool_result.stdout,
-            cmdline=cmdline
-            )
+        run = BaseTool2.Run(
+            cmdline=cmdline,
+            exit_code=butil.ProcessExitCode.create(value=0),
+            output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
+            termination_reason=""
+        )
         
         verdict = actor.determine_result(run).lower()
 
@@ -209,6 +248,4 @@ class Cooperace:
         
         return verdict
     
-
-
     

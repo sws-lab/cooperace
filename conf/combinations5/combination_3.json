@@ -1,0 +1,10 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"ULTIMATE Automizer": "all"},
+        {"sv-sanitizers": "all"},
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}

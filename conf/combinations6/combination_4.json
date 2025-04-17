@@ -1,0 +1,11 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"nacpa": "all"},
+        {"ULTIMATE Taipan": "all"},
+        {"ULTIMATE Automizer": "all"},
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}

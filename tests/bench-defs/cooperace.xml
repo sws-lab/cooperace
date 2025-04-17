@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 1.9//EN" "https://www.sosy-lab.org/benchexec/benchmark-1.9.dtd">
-<benchmark tool="tool_info.cooperace" timelimit="7200 s" hardtimelimit="7300 s" memlimit="4 GB" cpuCores="1">
+<benchmark tool="cooperace" timelimit="7200 s" hardtimelimit="7300 s" memlimit="4 GB" cpuCores="4">
 
   <resultfiles>**/witness.*</resultfiles>
 

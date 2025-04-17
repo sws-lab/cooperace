@@ -2,10 +2,15 @@
 dist
 tools
 results
+/src/tool_combinations/results*
+
+#Made .txt files
+tools.txt
 
 #Made witness files
 witness.*
 error-witness.*
+*CounterExample*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

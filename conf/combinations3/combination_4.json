@@ -1,0 +1,8 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"ULTIMATE Taipan": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}

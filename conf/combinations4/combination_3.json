@@ -1,0 +1,9 @@
+{
+    "runType": "parallel",
+    "tools": [
+        {"nacpa": "all"},
+        {"Deagle": "all"},
+        {"Dartagnan": "all"},
+        {"Goblint": "all"}
+    ]
+}
