@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 import os
+import argparse
 
 def download_results(year: int, category: str):
     url = f"https://sv-comp.sosy-lab.org/{year}/results/results-verified/"
@@ -50,12 +51,15 @@ def download_results(year: int, category: str):
     
 # Example usage
 if __name__ == "__main__":
-    year = input("Enter SV-COMP year (e.g., 2025): ")
-    category = input("Enter category for which results you want (example: no-data-race.NoDataRace-Main): ")
+    parser = argparse.ArgumentParser(description="Download SV-COMP results.")
+    parser.add_argument(
+        "--year", type=int, default=2025, help="SV-COMP year (e.g., 2025)"
+    )
+    parser.add_argument(
+        "--category", type=str,
+        default="no-data-race.NoDataRace-Main",
+        help="Category for which results are needed (e.g., no-data-race.NoDataRace-Main)"
+    )
+    args = parser.parse_args()
 
-    if year == "":
-        year = 2025
-
-    if category == "":
-        category = "no-data-race.NoDataRace-Main"
-    download_results(int(year), category)
+    download_results(args.year, args.category)
