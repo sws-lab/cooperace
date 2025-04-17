@@ -1,6 +1,7 @@
 import os
 import csv
 import xml.etree.ElementTree as ET
+import argparse
 
 from itertools import combinations
 
@@ -42,12 +43,12 @@ class ToolData:
         return cls(name=name, score=score, results=results)
 
     @classmethod
-    def from_xml_file(cls, name, path):
-        results, score = cls.tool_results_per_task(path)
+    def from_xml_file(cls, name, path, result_type):
+        results, score = cls.tool_results_per_task(path, result_type)
         return cls(name, score, results)
 
     @staticmethod
-    def tool_results_per_task(path):
+    def tool_results_per_task(path, result_type="validated"):
         with open(path, 'rb') as file:
             data = file.read().decode('utf-8-sig')
 
@@ -70,6 +71,16 @@ class ToolData:
                             elif column.attrib["value"] == "correct":
                                 tasks[name] = ("correct", 1)
                                 score += 1
+                            elif column.attrib["value"] == "error" and result_type == "verified":
+                                for column2 in run:
+                                    if column2.attrib["title"] == "status" and column2.attrib["value"] == "witness missing (false(no-data-race))":
+                                        tasks[name] = ("correct", 1)
+                                        score += 1
+                                    else:
+                                        tasks[name] = ("unknown", 0)
+                            elif column.attrib["value"] == "correct-unconfirmed" and result_type == "verified":
+                                tasks[name] = ("correct", 1)
+                                score += 1
                             elif column.attrib["value"] == "error" or column.attrib["value"] == "unknown" or column.attrib["value"] == "correct-unconfirmed":
                                 tasks[name] = ("unknown", 0)
                         elif run.attrib["expectedVerdict"] == "true":
@@ -86,7 +97,7 @@ class ToolData:
         return tasks, score
 
 
-    def tool_score(self, path):
+    def tool_score(self, path, result_type="validated"):
         with open(path, 'rb') as file:
             data = file.read().decode('utf-8-sig')
 
@@ -105,6 +116,8 @@ class ToolData:
                                 score -= 32
                             elif column.attrib["value"] == "correct":
                                 score += 1
+                            elif column.attrib["value"] == "error" and column.attrib["status"] == "witness missing (false(no-data-race))" and result_type == "verified":
+                                score += 1
                         elif run.attrib["expectedVerdict"] == "true":
                             #Tool gives false when expected true
                             if column.attrib["value"] == "wrong":
@@ -114,7 +127,7 @@ class ToolData:
         return score
 
 
-def parse_xml_data(results_folder=None):
+def parse_xml_data(result_type, results_folder):
     if results_folder is None:
         dir = os.getcwd()
     else:
@@ -126,7 +139,7 @@ def parse_xml_data(results_folder=None):
         if os.path.isfile(os.path.join(dir, file_name)) and file_name.endswith(".xml"):
             path = os.path.join(dir, file_name)
             tool_name = file_name.split(".")[0]
-            tools[tool_name] = ToolData.from_xml_file(tool_name, path)
+            tools[tool_name] = ToolData.from_xml_file(tool_name, path, result_type)
 
     return tools
 
@@ -140,7 +153,7 @@ def n_combinations(tools: dict, n=5):
 
     sublists_dict = {}
 
-    for r in range(1, min(n, len(tool_names))):
+    for r in range(1, min(n + 1, len(tool_names))):
         sublists = [list(combination) for combination in combinations(tool_names, r)]
         sublists_dict[r] = sublists
     
@@ -167,7 +180,9 @@ def tools_list_score_result(tool_names: list, tools_dict: dict, base: ToolData =
 
     return base_tool
 
-def write_result_csv(location: str, data: list, score_limit = 1600, individual_tasks=False):
+#Writes results into a csv file, if individual_tasks is set to false, then csv will have combinations and their theoretical scores,
+#otherwise it will also show results for each task for each combination
+def write_result_csv(location: str, data: list, score_limit, individual_tasks):
     rows = []
 
     new_data = list(filter(lambda x: x[1] > score_limit, data))
@@ -178,7 +193,7 @@ def write_result_csv(location: str, data: list, score_limit = 1600, individual_t
     score_row = ["Score"] + [score for _, score, _ in new_data]
     rows.append(score_row)
 
-    if individual_tasks:
+    if individual_tasks and len(new_data) > 0:
         tasks_list = new_data[0][2].keys()
 
         for task_name in tasks_list:
@@ -190,26 +205,52 @@ def write_result_csv(location: str, data: list, score_limit = 1600, individual_t
     #Some gigahack line of code from Chat-GPT to make the data table transposed
     transposed_rows = list(map(list, zip(*rows)))
 
-    with open(location, "w", newline="") as outputfile:
-        writer = csv.writer(outputfile)
-        writer.writerows(transposed_rows)
+    try:    
+        with open(location, "w", newline="") as outputfile:
+            writer = csv.writer(outputfile)
+            writer.writerows(transposed_rows)
+    except:
+        raise Exception("Given output directory does not exist")
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Process tool results and generate combination scores.")
+    
+    parser.add_argument('-r', '--result_type', type=str, required=True,
+                        help='Type of result to parse (verified, validated)')
+    
+    parser.add_argument('-o', '--output_path', type=str, required=True,
+                        help='Directory path where result CSVs will be saved')
+
+    parser.add_argument('-i', '--input_path', type=str, required=True,
+                        help='Directory path to the input XML data')
+    
+    parser.add_argument('-v', '--verbose', action='store_true',
+                    help='CSV files will also incluse data about individual task results')
+    
+    parser.add_argument('-m', '--min_score', type=int, default=1400,
+                    help='Minimum score (integer) required for a combination to be included in the CSV (default: 0)')
+    
+    parser.add_argument('-c', '--max_combination', type=int, default=6,
+                    help='Maximum combination size (default 6)')
+
+    
+    args = parser.parse_args()
+    
+    return args
 
 if __name__ == "__main__":
-    tools_dict = parse_xml_data()
+    args = parse_arguments()
 
-    #goblint = tools_dict.pop("goblint")
-    #dartagnan = tools_dict.pop("dartagnan")
-    #default_combination = ToolData.from_combination("goblint_dartagnan", goblint.results, dartagnan.results)
-    #print(default_combination.score)
+    tools_dict = parse_xml_data(result_type=args.result_type, results_folder=args.input_path)
 
-    all_combinations = n_combinations(tools_dict, len(tools_dict))
+    all_combinations = n_combinations(tools_dict, args.max_combination)
 
     for i in range(len(all_combinations)):
         combination_list = []
         for tool_combination in all_combinations[i+1]:
             data = tools_list_score_result(tool_combination, tools_dict)
             combination_list.append((data.name, data.score, data.results))
-        write_result_csv(f"results-{i+1}-combinations.csv", combination_list, 0)
+        write_result_csv(os.path.join(args.output_path + f"results-{i+1}-combinations-{args.result_type}.csv"), combination_list, args.min_score, args.verbose)
 
 
 

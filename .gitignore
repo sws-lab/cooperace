@@ -2,6 +2,7 @@
 dist
 tools
 results
+/src/tool_combinations/results*
 
 #Made .txt files
 tools.txt
