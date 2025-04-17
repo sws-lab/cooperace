@@ -14,6 +14,10 @@ python download_results --year 2024 --category no-data-race.NoDataRace-Main
 
 will download all tool results that had a score of > 0 and took part in the NoDataRace-Main category of SV-COMP 2024.
 
+#### Output
+
+Output will be all the logs of the tools that meet the conditions mentioned above. The logs will be generated into a folder inside the directory the script was run in.
+
 ## tool_combinations.py
 
 ### This script is used for analysing tool results for SV-COMP and giving theoretical scores for different combinations of verification tools
