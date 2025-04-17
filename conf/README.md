@@ -1,6 +1,6 @@
 # How to add new config files
 
-Lets use svcomp25.json file as an example:
+##### Lets use svcomp25.json file as an example:
 `
 {
     "runType": "sequential",
