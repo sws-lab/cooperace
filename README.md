@@ -12,4 +12,4 @@ The goal of the CoOpeRace project is to identify the ultimate state-of-the-art i
 attempt better ways of communicating intermediate results between tools, and 
 provide a user interface for comparing output of different tools.
 
-To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp tests/test.i`.
+To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp tests/no-data-race/00-sanity_09-include.i`.
