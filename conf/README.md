@@ -15,7 +15,7 @@
     ]
 }
 `
-The tool combinations configs are set up as .json files and required two elements:
+##### The tool combinations configs are set up as .json files and required two elements:
 - runType --- Either sequential or parallel
 - tools --- List of tools used, takes as value a list, which composes of specific tools and/or list of specific tools.
 
