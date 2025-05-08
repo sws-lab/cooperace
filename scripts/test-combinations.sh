@@ -7,10 +7,10 @@ set -e
 THIS_DIR=$(pwd)
 
 
-for i in {2..6}; do
-    RESULTS_DIR=$THIS_DIR/results/results_$i
+for i in 3; do #number represents the size of combinations to test, can also be a list of values.
+    RESULTS_DIR=$THIS_DIR/results/results16GB_$i
 
-    PARALLEL=4  # The limiting factor is RAM (32 on the server);
+    PARALLEL=2  # The limiting factor is RAM (32 on the server);
 
     # read-only and overlay dirs for Value too large for defined data type workaround
     BENCHEXEC="benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath $RESULTS_DIR --numOfThreads $PARALLEL"

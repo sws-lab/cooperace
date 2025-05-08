@@ -239,6 +239,7 @@ def parse_arguments():
     return args
 
 if __name__ == "__main__":
+    # TODO Integrate tool input path into the code
     args = parse_arguments()
 
     tools_dict = parse_xml_data(result_type=args.result_type, results_folder=args.input_path)
