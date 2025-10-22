@@ -34,3 +34,26 @@ To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp test
 
 If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
 `docker builder prune --all --force`.
+
+## Uploading the SV-COMP archive to Zenodo
+
+Use the helper script in `scripts/sv-comp/upload-zenodo.py` to attach the freshly
+packaged archive to a private Zenodo record. It requires the Python `requests`
+package (`pip install requests`).
+
+1. Ensure the archive exists (`make svcomp` produces `dist/cooperace.zip`).
+2. Export your Zenodo API token:
+   ```bash
+   export ZENODO_TOKEN="<your-token>"
+   ```
+   The token needs the `deposit:write` scope. The record should either be a
+   draft or have a "latest draft" available (Zenodo's "New version" action).
+3. Upload the archive (replace `<draft-or-record-id>` with your Zenodo record
+   identifier):
+   ```bash
+   python scripts/sv-comp/upload-zenodo.py --record-id <draft-or-record-id>
+   ```
+   Pass `--sandbox` if you want to test against `https://sandbox.zenodo.org` or
+   override the archive path with `--file`. The helper streams the 200 MB
+   archive in chunks and prints upload progress so you can keep an eye on
+   Zenodo's slow ingestion.
