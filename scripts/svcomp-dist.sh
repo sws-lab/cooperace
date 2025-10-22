@@ -19,6 +19,7 @@ chmod +x "${DIST}/smoketest.sh"
 
 cp tests/properties/no-data-race.prp "${DIST}/tests"
 cp tests/no-data-race/00-sanity_09-include.i "${DIST}/tests/test.i"
+find "${DIST}" -name '.DS_Store' -delete
 
 (
   cd "${DIST}/.."
