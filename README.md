@@ -18,3 +18,19 @@ To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp test
 [How to get tool combinations and their theoretical scores](/src/tool_combinations)  
 [How to create a tool configuration for CoOpeRace CLI](/conf)  
 
+## SV-COMP Smoketests in Docker
+
+1. Run the automated smoketest inside the SV-COMP competition image:
+   ```bash
+   make svcomp
+   ```
+   The smoketest output is streamed to your terminal, and the build returns non-zero if the check fails.
+
+2. After `make svcomp`, the Docker image `cooperace-smoketest` is available. Launch an interactive shell with:
+   ```bash
+   docker run --rm -it cooperace-smoketest /bin/bash
+   ```
+   The unpacked archive lives in `/opt/cooperace`; from there you can re-run `./smoketest.sh` or execute `./cooperace` manually. The container uses the SV-COMP competition base image, so you interact with the same environment as the automated smoketest.
+
+If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
+`docker builder prune --all --force`.

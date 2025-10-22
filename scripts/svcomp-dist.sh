@@ -1,20 +1,27 @@
-#!/bin/sh
-#run from root directory
+#!/usr/bin/env bash
+# run from repository root
 
-#WORK IN PROGRESS
+set -euo pipefail
 
-ROOT=`pwd`
-DIST="dist/cooperace"
-mkdir -p $DIST/tests
+ROOT="$(pwd)"
+DIST="${ROOT}/dist/cooperace"
 
-cp cooperace $DIST
-git ls-files src | xargs -I {} cp --parents {} $DIST
-cp -r tools $DIST/tools
-cp -r conf lib $DIST
-cp LICENSE README.md $DIST
+rm -rf "${DIST}"
+mkdir -p "${DIST}/tests"
 
-cp tests/properties/no-data-race.prp $DIST/tests
-cp tests/no-data-race/00-sanity_09-include.i $DIST/tests/test.i
+cp "${ROOT}/cooperace" "${DIST}"
+rsync -a --files-from=<(git ls-files src) "${ROOT}/" "${DIST}"
+cp -r tools "${DIST}/tools"
+cp -r conf lib "${DIST}"
+cp LICENSE README.md tools.txt "${DIST}"
+cp scripts/sv-comp/smoketest.sh "${DIST}"
+chmod +x "${DIST}/smoketest.sh"
 
-cd $DIST/..
-zip -r cooperace.zip cooperace
+cp tests/properties/no-data-race.prp "${DIST}/tests"
+cp tests/no-data-race/00-sanity_09-include.i "${DIST}/tests/test.i"
+
+(
+  cd "${DIST}/.."
+  rm -f cooperace.zip
+  zip -r cooperace.zip cooperace
+)

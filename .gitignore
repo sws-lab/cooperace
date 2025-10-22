@@ -1,8 +1,10 @@
 #Directories made while using the scripts
 dist
 tools
+unused
 results
 /src/tool_combinations/results*
+.DS_Store
 
 #Made .txt files
 tools.txt
