@@ -28,7 +28,7 @@ To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp test
 
 2. After `make svcomp`, the Docker image `cooperace-smoketest` is available. Launch an interactive shell with:
    ```bash
-   docker run --rm -it cooperace-smoketest /bin/bash
+   docker run --rm -it --platform linux/amd64 cooperace-smoketest /bin/bash
    ```
    The unpacked archive lives in `/opt/cooperace`; from there you can re-run `./smoketest.sh` or execute `./cooperace` manually. The container uses the SV-COMP competition base image, so you interact with the same environment as the automated smoketest.
 
