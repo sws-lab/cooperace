@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--arch', required=False)
 parser.add_argument('--prop', required=False)
 parser.add_argument('--conf', required=False)
-parser.add_argument('--version', action='version', version='CoOpeRace 0.1')
+parser.add_argument('--version', action='version', version='CoOpeRace 0.2')
 parser.add_argument('filepath')
 
 args = parser.parse_args()
@@ -22,7 +22,7 @@ if args.conf:
     with open(args.conf) as file:
         conf = json.load(file)
 else:
-    with open("conf/svcomp25.json") as file:
+    with open("conf/svcomp26.json") as file:
         conf = json.load(file)
 
 cooperace = Cooperace(abs_path, args.prop, args.arch, conf)
@@ -30,4 +30,3 @@ cooperace = Cooperace(abs_path, args.prop, args.arch, conf)
 
 verdict = cooperace.execute()
 print("CoOpeRace verdict: " + verdict)
-

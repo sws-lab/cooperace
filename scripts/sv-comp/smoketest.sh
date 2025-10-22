@@ -7,7 +7,7 @@ echo "== CoOpeRace version =="
 
 echo
 echo "== Running smoke test scenario =="
-OUTPUT="$(./cooperace --conf conf/svcomp26.json --prop tests/no-data-race.prp tests/test.i)"
+OUTPUT="$(./cooperace --prop tests/no-data-race.prp tests/test.i)"
 echo "${OUTPUT}"
 
 if ! grep -q "CoOpeRace verdict:" <<< "${OUTPUT}"; then
