@@ -1,8 +1,10 @@
 {
-    "runType": "parallel",
+    "runType": "sequential",
     "tools": [
-        {"ULTIMATE Automizer": "all"},
-        {"Dartagnan": "all"},
-        {"Goblint": "all"}
+        {"Goblint": "true"},
+        [
+            {"Dartagnan": "all"},
+            {"ULTIMATE Automizer": "all"}
+        ]
     ]
 }
