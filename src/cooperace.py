@@ -6,6 +6,7 @@ import shutil
 import glob
 import sys
 import importlib
+import traceback
 
 for whl_file in glob.glob("lib/*.whl"):
     sys.path.insert(0, whl_file)
@@ -33,9 +34,9 @@ def tool_locations():
             "Goblint": os.path.join(default_path, "goblint"),
             "Deagle": os.path.join(default_path, "deagle"),
             "Dartagnan": os.path.join(default_path, "dartagnan"),
-            "ULTIMATE Automizer": os.path.join(default_path, "UAutomizer-linux"),
-            "ULTIMATE GemCutter": os.path.join(default_path, "UGemCutter-linux"),
-            "ULTIMATE Taipan": os.path.join(default_path, "UTaipan-linux"),
+            "ULTIMATE Automizer": os.path.join(default_path, "uautomizer"),
+            "ULTIMATE GemCutter": os.path.join(default_path, "ugemcutter"),
+            "ULTIMATE Taipan": os.path.join(default_path, "utaipan"),
             "nacpa": os.path.join(default_path, "nacpa"),
             "CPAchecker": os.path.join(default_path, "CPAchecker-4.0-unix"),
             "sv-sanitizers": os.path.join(default_path, "sv-sanitizers"),
@@ -108,8 +109,9 @@ class Cooperace:
             else:
                 raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
             self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
-        except:
-            print("Error, something went wrong")
+        except Exception as error:
+            print("Error, something went wrong:", error)
+            traceback.print_exc()
         return verdict
         
 
@@ -204,7 +206,7 @@ class Cooperace:
         )
 
         if (actor.name() == "Goblint"):
-            options = ["--conf", os.path.join(cwd, "conf", "svcomp25.json")]
+            options = ["--conf", os.path.join(cwd, "conf", "svcomp26", "verify.json")]
         elif (actor.name().__contains__("ULTIMATE")):
             options = ["--full-output"]
         else:

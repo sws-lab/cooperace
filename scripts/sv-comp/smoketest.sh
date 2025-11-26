@@ -19,3 +19,5 @@ if grep -q "Error, something went wrong" <<< "${OUTPUT}"; then
   echo "Smoke test failed: tool execution reported an error." >&2
   exit 1
 fi
+
+echo "== SMOKETEST SUCCESSFUL! =="
