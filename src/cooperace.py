@@ -147,6 +147,36 @@ class ComponentGroup:
         stopProcessGroups(self.markStopped())
 
 
+# Which files of a component run are its witness, per component name.
+# "directory" is "run" if "options" tell the component to write them into the
+# directory runActor makes for the run ({dir} in an option stands for it), and
+# "component" if the component writes them under its own directory, the
+# working directory of its run. "files" are their paths relative to that
+# directory, or None for every file there whose name contains "witness" and
+# ends in graphml or yml (Cooperace.witnessFiles). collectWitnessFiles takes
+# only those modified during the run, and witnessFilesToFileRoot delivers a
+# graphml file as witness.graphml and a YAML file as witness.yml. A component
+# that writes a new witness file, or a new format, needs only its entry here.
+_ULTIMATE_WITNESS_FILES = {
+    #Ultimate.py --witness-dir; witness.yml is written beside the graphml for "true"
+    "directory": "run", "options": ["--witness-dir", "{dir}"],
+    "files": ["witness.graphml", "witness.yml"],
+}
+WITNESS_FILES = {
+    #witness.yaml.path; the svcomp26 configuration writes no graphml witness
+    "Goblint": {"directory": "run", "options": ["--set", "witness.yaml.path", "{dir}/witness.yml"],
+                "files": ["witness.yml"]},
+    #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
+    #which must be Dartagnan's directory, and has no option for another one
+    "Dartagnan": {"directory": "component", "options": [], "files": ["output/witness.graphml"]},
+    "ULTIMATE Automizer": _ULTIMATE_WITNESS_FILES,
+    "ULTIMATE GemCutter": _ULTIMATE_WITNESS_FILES,
+    "ULTIMATE Taipan": _ULTIMATE_WITNESS_FILES,
+}
+#For a component without an entry: the name pattern, under its own directory
+DEFAULT_WITNESS_FILES = {"directory": "component", "options": [], "files": None}
+
+
 class StopSignal(BaseException):
     """Raised in the main thread by the handler that execute installs for
     SIGTERM, SIGINT and SIGHUP. A BaseException, so that the handlers for
@@ -389,36 +419,36 @@ class Cooperace:
         
 
     def witnessFilesToFileRoot(self, witness_files):
+        """Copies the witness files of one component run, from
+        collectWitnessFiles, to the working directory under the name of their
+        format: a graphml file as witness.graphml, a YAML file as witness.yml."""
         for file in witness_files:
-            if file.endswith("graphml"):
-                destination = os.path.join(os.getcwd(), "witness.graphml")
+            if file.endswith(".graphml"):
+                name = "witness.graphml"
+            elif file.endswith(".yml") or file.endswith(".yaml"):
+                name = "witness.yml"
             else:
-                destination = os.path.join(os.getcwd(), os.path.basename(file))
-            shutil.copy2(file, destination)
+                continue
+            shutil.copy2(file, os.path.join(os.getcwd(), name))
 
     def removeOldWitnessFiles(self):
         """Removes witness.graphml and witness.yml, the names
-        witnessFilesToFileRoot gives the witnesses of the components in this
-        configuration, from the working directory, so that one left there by
-        an earlier run is not delivered with this run's verdict."""
+        witnessFilesToFileRoot delivers witnesses under, from the working
+        directory, so that one left there by an earlier run is not delivered
+        with this run's verdict."""
         for name in ("witness.graphml", "witness.yml"):
             try:
                 os.remove(os.path.join(os.getcwd(), name))
             except FileNotFoundError:
                 pass
 
+    def witnessSpec(self, actor):
+        return WITNESS_FILES.get(actor.name(), DEFAULT_WITNESS_FILES)
+
     def witnessOptions(self, actor, witness_dir):
-        """Options that make `actor` write its witness files into
-        `witness_dir`, for the components that have such an option: Goblint,
-        whose only witness here is the YAML file at witness.yaml.path, and the
-        ULTIMATE tools (Ultimate.py --witness-dir). Any other component
-        gets [], and collectWitnessFiles looks for its witnesses in the
-        component's own directory instead."""
-        if actor.name() == "Goblint":
-            return ["--set", "witness.yaml.path", os.path.join(witness_dir, "witness.yml")]
-        if actor.name().startswith("ULTIMATE"):
-            return ["--witness-dir", witness_dir]
-        return []
+        """The "options" of `actor`'s entry in WITNESS_FILES, with {dir}
+        replaced by `witness_dir`."""
+        return [option.replace("{dir}", witness_dir) for option in self.witnessSpec(actor)["options"]]
 
     def startTime(self, witness_dir):
         """A time stamp of now, taken from the file system as the modification
@@ -429,26 +459,35 @@ class Cooperace:
         return os.stat(marker).st_mtime_ns
 
     def collectWitnessFiles(self, actor, cwd, witness_dir, started):
-        """Returns the witness files (witnessFiles) of the run of `actor` that
-        began at `started`, all in `witness_dir`. A component without an option
-        of witnessOptions writes its witnesses under its own directory `cwd`
-        (Dartagnan: output/witness.graphml, since Dartagnan-SVCOMP.sh sets
-        DAT3M_OUTPUT to it): of the witness files there, those modified at or
-        after `started` are moved to the same relative path in `witness_dir`,
-        and every other one, left by an earlier run or shipped with the
-        component (Goblint's smoketests/*witness*.yml), is neither returned
-        nor touched."""
-        if not self.witnessOptions(actor, witness_dir):
-            for file in self.witnessFiles(cwd):
-                try:
-                    written_now = os.stat(file).st_mtime_ns >= started
-                except OSError:
+        """Returns the witness files of the run of `actor` that began at
+        `started`, all in `witness_dir`: the files that `actor`'s entry in
+        WITNESS_FILES names, in `witness_dir` or under the component's own
+        directory `cwd`, that were modified at or after `started`. Those under
+        `cwd` are moved to the same relative path in `witness_dir`. Any other
+        file, one left by an earlier run or shipped with the component
+        (Goblint's smoketests/*witness*.yml), is neither returned nor
+        touched."""
+        spec = self.witnessSpec(actor)
+        source = witness_dir if spec["directory"] == "run" else cwd
+        if spec["files"] is None:
+            candidates = self.witnessFiles(source)
+        else:
+            candidates = [os.path.join(source, file) for file in spec["files"]]
+
+        collected = []
+        for file in candidates:
+            try:
+                if os.stat(file).st_mtime_ns < started:
                     continue
-                if written_now:
-                    destination = os.path.join(witness_dir, os.path.relpath(file, cwd))
-                    os.makedirs(os.path.dirname(destination), exist_ok=True)
-                    shutil.move(file, destination)
-        return self.witnessFiles(witness_dir)
+            except OSError:
+                continue
+            if source != witness_dir:
+                destination = os.path.join(witness_dir, os.path.relpath(file, source))
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                shutil.move(file, destination)
+                file = destination
+            collected.append(file)
+        return collected
 
     def confirmVerdict(self, tool_name, verdict: str, expected_verdict: str):
         tool_acceptance_criteria = self.acceptable_results.get(tool_name, None)
