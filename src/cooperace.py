@@ -517,7 +517,12 @@ class Cooperace:
         )
 
         if (actor.name() == "Goblint"):
-            options = ["--conf", os.path.join(cwd, "conf", "svcomp26", "verify.json")]
+            # The options of Goblint's own SV-COMP entry (benchexec_toolinfo_options
+            # of version svcomp26 in its fm-tools file goblint.yml). The portfolio
+            # path is relative to cwd, Goblint's directory. Goblint prints
+            # "SV-COMP result: ..." only when run through this portfolio.
+            # Keep in step with the Goblint version in tools.txt.
+            options = ["--portfolio-conf", "conf/svcomp26/seq.txt"]
         elif (actor.name().__contains__("ULTIMATE")):
             options = ["--full-output"]
         else:
