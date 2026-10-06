@@ -286,30 +286,59 @@ class Cooperace:
             return int(run_limit * float(value[:-1]) / 100)
         return None if value is None else int(value)
 
-    def withMemoryLimit(self, tool_name, command):
-        """`command`, started with RLIMIT_DATA set to the component's memory limit.
+    def componentCpuTimeLimit(self, tool_name):
+        """CPU-time limit in seconds for one component, from the conf's `cpuTimeLimits`, or None."""
+        value = self.conf.get("cpuTimeLimits", {}).get(tool_name)
+        return None if value is None else int(value)
 
-        RLIMIT_DATA bounds the private writable memory (heap, anonymous mmap)
-        of each process of the component; the component's processes inherit
-        it. A JVM that reaches it fails to commit memory and exits, so the
-        component ends without a verdict and its memory is free for the
-        components still running. RLIMIT_AS is not used: a JVM reserves its
-        whole `-Xmx` as address space at start and fails to start under it.
-        The limit is set by a small Python process that then execs the
+    def withResourceLimits(self, tool_name, command):
+        """`command`, started with the component's limits from the conf.
+
+        RLIMIT_DATA is set to the memory limit (componentMemoryLimit). It
+        bounds the private writable memory (heap, anonymous mmap) of each
+        process of the component; the component's processes inherit it. A JVM
+        that reaches it fails to commit memory and exits, so the component
+        ends without a verdict and its memory is free for the components still
+        running. RLIMIT_AS is not used: a JVM reserves its whole `-Xmx` as
+        address space at start and fails to start under it.
+
+        RLIMIT_CPU is set to the CPU-time limit (componentCpuTimeLimit), with
+        the hard limit one second higher: the kernel sends SIGXCPU to a process
+        that has used the limit and SIGKILL one second later. It counts the
+        CPU time of each process on its own, not of the component's processes
+        together. Goblint's portfolio runner (goblint_runner.py) runs one
+        goblint process per level; when the limit ends one, the runner gives
+        up the remaining levels and exits without a verdict. Goblint's stage
+        so uses the CPU time of the levels that end by themselves plus at most
+        the limit.
+
+        The limits are set by a small Python process that then execs the
         component, because `preexec_fn` is unsafe with the threads of
         `runParallel`. The exec keeps the process, so the component is still
         the leader of the session actorResult starts, and stopProcessGroups
         still ends it with every process it starts.
         """
-        limit = self.componentMemoryLimit(tool_name)
-        if limit is None:
+        limits = []
+        memory = self.componentMemoryLimit(tool_name)
+        if memory is not None:
+            limits.append(f"RLIMIT_DATA={memory}:{memory}")
+            message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
+            with self.print_lock:
+                print(message, flush=True)
+        cpu = self.componentCpuTimeLimit(tool_name)
+        if cpu is not None:
+            limits.append(f"RLIMIT_CPU={cpu}:{cpu + 1}")
+            with self.print_lock:
+                print(f"CPU-time limit of {tool_name}: {cpu} s (RLIMIT_CPU)", flush=True)
+        if not limits:
             return command
-        with self.print_lock:
-            print(f"Memory limit of {tool_name}: {limit} bytes (RLIMIT_DATA)", flush=True)
-        setter = ("import os, resource, sys; "
-                  "resource.setrlimit(resource.RLIMIT_DATA, (int(sys.argv[1]),) * 2); "
+        setter = ("import os, resource, sys\n"
+                  "for limit in sys.argv[1].split(','):\n"
+                  "    name, value = limit.split('=')\n"
+                  "    soft, hard = value.split(':')\n"
+                  "    resource.setrlimit(getattr(resource, name), (int(soft), int(hard)))\n"
                   "os.execvp(sys.argv[2], sys.argv[2:])")
-        return [sys.executable, "-c", setter, str(limit)] + command
+        return [sys.executable, "-c", setter, ",".join(limits)] + command
 
     def actorResult(self, command, cwd):
         """Runs `command` in `cwd` as the leader of a new session, so that the
@@ -632,7 +661,7 @@ class Cooperace:
 
         started = self.startTime(witness_dir)
         tool_result = self.actorResult(
-            command=self.withMemoryLimit(actor.name(), cmdline),
+            command=self.withResourceLimits(actor.name(), cmdline),
             cwd=cwd
             )
         #Also for a stopped component, so that no file it wrote stays in its directory
