@@ -169,6 +169,41 @@ class StopSignal(BaseException):
         self.signum = signum
 
 
+def run_memory_limit():
+    """Memory limit in bytes of the cgroup this process runs in, or None.
+
+    BenchExec puts each run into a cgroup with the run's memory limit. Under
+    cgroups v2 this is `memory.max` (inside BenchExec's container, the run's
+    cgroup is the root of the cgroup namespace); under cgroups v1 it is
+    `memory.limit_in_bytes` of the memory cgroup named in /proc/self/cgroup.
+    The smallest limit of that cgroup and its ancestors is returned.
+    """
+    limits = []
+    try:
+        with open("/proc/self/cgroup") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        _, controllers, path = line.split(":", 2)
+        if controllers == "":
+            base, name = "/sys/fs/cgroup", "memory.max"
+        elif "memory" in controllers.split(","):
+            base, name = "/sys/fs/cgroup/memory", "memory.limit_in_bytes"
+        else:
+            continue
+        parts = [p for p in path.split("/") if p]
+        for i in range(len(parts), -1, -1):
+            try:
+                with open(os.path.join(base, *parts[:i], name)) as f:
+                    value = f.read().strip()
+            except OSError:
+                continue
+            if value.isdigit() and int(value) < 2**60:  # "max" and v1's 2**63-4096 mean no limit
+                limits.append(int(value))
+    return min(limits) if limits else None
+
+
 # This could be done in the download_tools.py part, where it creates a .json for this dictionary 
 def tool_locations():
     default_path = os.path.join(os.getcwd(), "tools")
@@ -235,6 +270,46 @@ class Cooperace:
 
     def currentGroup(self):
         return getattr(self.local, "group", self.root_group)
+
+    def componentMemoryLimit(self, tool_name):
+        """Memory limit in bytes for one component, from the conf's `memoryLimits`, or None.
+
+        `memoryLimits` maps a component name to a number of bytes or to a
+        percentage of the run's memory limit (`"70%"`, see run_memory_limit).
+        A percentage gives None when the run has no memory limit.
+        """
+        value = self.conf.get("memoryLimits", {}).get(tool_name)
+        if isinstance(value, str) and value.endswith("%"):
+            run_limit = run_memory_limit()
+            if run_limit is None:
+                return None
+            return int(run_limit * float(value[:-1]) / 100)
+        return None if value is None else int(value)
+
+    def withMemoryLimit(self, tool_name, command):
+        """`command`, started with RLIMIT_DATA set to the component's memory limit.
+
+        RLIMIT_DATA bounds the private writable memory (heap, anonymous mmap)
+        of each process of the component; the component's processes inherit
+        it. A JVM that reaches it fails to commit memory and exits, so the
+        component ends without a verdict and its memory is free for the
+        components still running. RLIMIT_AS is not used: a JVM reserves its
+        whole `-Xmx` as address space at start and fails to start under it.
+        The limit is set by a small Python process that then execs the
+        component, because `preexec_fn` is unsafe with the threads of
+        `runParallel`. The exec keeps the process, so the component is still
+        the leader of the session actorResult starts, and stopProcessGroups
+        still ends it with every process it starts.
+        """
+        limit = self.componentMemoryLimit(tool_name)
+        if limit is None:
+            return command
+        with self.print_lock:
+            print(f"Memory limit of {tool_name}: {limit} bytes (RLIMIT_DATA)", flush=True)
+        setter = ("import os, resource, sys; "
+                  "resource.setrlimit(resource.RLIMIT_DATA, (int(sys.argv[1]),) * 2); "
+                  "os.execvp(sys.argv[2], sys.argv[2:])")
+        return [sys.executable, "-c", setter, str(limit)] + command
 
     def actorResult(self, command, cwd):
         """Runs `command` in `cwd` as the leader of a new session, so that the
@@ -557,7 +632,7 @@ class Cooperace:
 
         started = self.startTime(witness_dir)
         tool_result = self.actorResult(
-            command=cmdline,
+            command=self.withMemoryLimit(actor.name(), cmdline),
             cwd=cwd
             )
         #Also for a stopped component, so that no file it wrote stays in its directory
