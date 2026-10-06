@@ -186,8 +186,24 @@ def tool_locations():
             "RacerF": os.path.join(default_path, "racerf")
     }
 
+# The values of a task's `data_model` option (and of `--arch`) that the
+# components' BenchExec tool-info modules understand. SV-COMP task definitions
+# without a `data_model` are ILP32 programs, so that is what `--arch` defaults to.
+DATA_MODELS = ("ILP32", "LP64")
+DEFAULT_DATA_MODEL = "ILP32"
+
 class Cooperace:
+    # `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
+    # the option was not given, which means DEFAULT_DATA_MODEL (reported on
+    # stderr). Any other value raises ValueError: given to the components as it
+    # is, the Goblint and ULTIMATE tool-info modules raise
+    # UnsupportedFeatureException inside runActor and Dartagnan's ignores it.
     def __init__(self, file, property_file, data_model, conf):
+        if data_model is None:
+            print(f"CoOpeRace: no --arch given, assuming {DEFAULT_DATA_MODEL}", file=sys.stderr)
+            data_model = DEFAULT_DATA_MODEL
+        elif data_model not in DATA_MODELS:
+            raise ValueError(f"unsupported data model {data_model!r}, expected one of {', '.join(DATA_MODELS)}")
         self.file = file
         self.property_file = os.path.abspath(property_file)
         self.data_model = data_model
@@ -512,7 +528,7 @@ class Cooperace:
         task = BaseTool2.Task.with_files(
             input_files=[self.file],
             property_file=self.property_file,
-            options={"data_model":"ILP32",
+            options={"data_model": self.data_model,
                      "language": "C"},
         )
 

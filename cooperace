@@ -4,11 +4,12 @@ import argparse
 import sys
 import json
 import os
-from src.cooperace import Cooperace
+from src.cooperace import Cooperace, DATA_MODELS
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--arch', required=False)
+parser.add_argument('--arch', required=False, choices=DATA_MODELS,
+                    help='data model of the task (default: ILP32, as for SV-COMP tasks without a data_model)')
 parser.add_argument('--prop', required=False)
 parser.add_argument('--conf', required=False)
 parser.add_argument('--version', action='version', version='CoOpeRace 0.2')
