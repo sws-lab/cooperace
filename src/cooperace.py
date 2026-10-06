@@ -402,8 +402,10 @@ class Cooperace:
                     break
         finally:
             group.stop()
-        for thread in threads:
-            thread.join()
+            #Also when a StopSignal ends the wait, so that the stopped
+            #components have printed their lines before CoOpeRace ends
+            for thread in threads:
+                thread.join()
 
         return outcome
 
