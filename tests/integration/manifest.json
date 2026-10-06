@@ -1,0 +1,299 @@
+{
+ "sv_benchmarks": {
+  "repository": "https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks",
+  "tag": "svcomp26",
+  "commit": "7efe28dd29576b46927b7a34e8f742bd90966a75",
+  "note": "Tasks are copied with their .yml trimmed to the no-data-race property; the .yml of an original task is c/<origin>. Licences are those of the task's directory (SPDX header or LICENSE file), texts in c/LICENSES/."
+ },
+ "sv_comp_2026_source": "verified and validated result XMLs of Goblint, Dartagnan, ULTIMATE Automizer in C.no-data-race.Concurrency, 2026-01; cpu_s is CPU time of the component's own run",
+ "tasks": [
+  {
+   "name": "goblint-regression/28-race_reach_41-trylock_racefree",
+   "owners": [
+    "goblint"
+   ],
+   "validator": null,
+   "origin": "c/goblint-regression/28-race_reach_41-trylock_racefree.yml",
+   "license": "MIT",
+   "purpose": "Goblint answers true in 0.1 s; neither Dartagnan nor ULTIMATE Automizer answers, so only a working Goblint can give the verdict.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "true",
+     "cpu_s": 0.1
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "OUT OF MEMORY"
+    }
+   }
+  },
+  {
+   "name": "pthread-theta/unwind3-100",
+   "owners": [
+    "goblint"
+   ],
+   "validator": null,
+   "origin": "c/pthread-theta/unwind3-100.yml",
+   "license": "Apache-2.0",
+   "purpose": "Goblint answers true; the others do not.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "true",
+     "cpu_s": 0.1
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "OUT OF MEMORY"
+    }
+   }
+  },
+  {
+   "name": "goblint-regression/28-race_reach_01-simple_racing",
+   "owners": [
+    "goblint"
+   ],
+   "validator": null,
+   "origin": "c/goblint-regression/28-race_reach_01-simple_racing.yml",
+   "license": "MIT",
+   "purpose": "Goblint answers true; the others do not.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "true",
+     "cpu_s": 0.2
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "OUT OF MEMORY"
+    }
+   }
+  },
+  {
+   "name": "pthread-divine/tls_basic",
+   "owners": [
+    "dartagnan"
+   ],
+   "validator": null,
+   "origin": "c/pthread-divine/tls_basic.yml",
+   "license": "ISC",
+   "purpose": "Dartagnan answers true; Goblint gives unknown and ULTIMATE Automizer no answer.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "true",
+     "cpu_s": 7.1
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "unknown"
+    }
+   }
+  },
+  {
+   "name": "pthread-divine/tls_destructor_worker",
+   "owners": [
+    "dartagnan"
+   ],
+   "validator": null,
+   "origin": "c/pthread-divine/tls_destructor_worker.yml",
+   "license": "ISC",
+   "purpose": "Dartagnan answers true; the others do not.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "true",
+     "cpu_s": 7.6
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "unknown"
+    }
+   }
+  },
+  {
+   "name": "pthread-divine/ring_1w1r-1",
+   "owners": [
+    "dartagnan"
+   ],
+   "validator": "dartagnan",
+   "origin": "c/pthread-divine/ring_1w1r-1.yml",
+   "license": "ISC",
+   "purpose": "Dartagnan answers false and the Dartagnan validator confirms its witness; ULTIMATE Automizer's validator rejects it, the others give no answer. Goblint ends in unknown after 2.2 s CPU time.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "false",
+     "cpu_s": 9.4
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    }
+   }
+  },
+  {
+   "name": "goblint-regression/09-regions_01-list_rc",
+   "owners": [
+    "dartagnan"
+   ],
+   "validator": "dartagnan",
+   "origin": "c/goblint-regression/09-regions_01-list_rc.yml",
+   "license": "MIT",
+   "purpose": "Dartagnan answers false on a .c task (preprocessed by the component) and the Dartagnan validator confirms its witness; Goblint ends in unknown after 0.8 s and ULTIMATE Automizer times out. Replaces pthread-divine/ring_1w1r-2, where Goblint's own run needs 169 s CPU time to end in unknown, which with a working Goblint in front of Dartagnan exceeds the suite's 100 s limit.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "false",
+     "cpu_s": 6.9
+    },
+    "uautomizer": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    }
+   }
+  },
+  {
+   "name": "ldv-races/race-4_1-thread_local_vars",
+   "owners": [
+    "uautomizer"
+   ],
+   "validator": null,
+   "origin": "c/ldv-races/race-4_1-thread_local_vars.yml",
+   "license": "GPL-2.0",
+   "purpose": "The only task of the category on which ULTIMATE Automizer alone answers true; the heaviest task of the suite (42 s CPU in SV-COMP 2026).",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "uautomizer": {
+     "answer": "true",
+     "cpu_s": 42.0
+    }
+   }
+  },
+  {
+   "name": "pthread-theta/unwind2-nondet",
+   "owners": [
+    "uautomizer"
+   ],
+   "validator": null,
+   "origin": "c/pthread-theta/unwind2-nondet.yml",
+   "license": "Apache-2.0",
+   "purpose": "ULTIMATE Automizer answers true, Dartagnan does not; Goblint answers it in its own entry, so a Goblint that works hides ULTIMATE Automizer in a configuration that starts with Goblint.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "true",
+     "cpu_s": 0.1
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "uautomizer": {
+     "answer": "true",
+     "cpu_s": 19.6
+    }
+   }
+  },
+  {
+   "name": "goblint-regression/04-mutex_50-funptr_rc",
+   "owners": [
+    "uautomizer"
+   ],
+   "validator": "dartagnan",
+   "origin": "c/goblint-regression/04-mutex_50-funptr_rc.yml",
+   "license": "MIT",
+   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component) that calls a function through a pointer; its witness is confirmed by the Dartagnan and the ULTIMATE Automizer validators.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "ERROR"
+    },
+    "uautomizer": {
+     "answer": "false",
+     "cpu_s": 18.6
+    }
+   }
+  },
+  {
+   "name": "goblint-regression/04-mutex_21-sound_base",
+   "owners": [
+    "uautomizer"
+   ],
+   "validator": "dartagnan",
+   "origin": "c/goblint-regression/04-mutex_21-sound_base.yml",
+   "license": "MIT",
+   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component); its witness is confirmed by the Dartagnan and the ULTIMATE Automizer validators.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "ERROR"
+    },
+    "uautomizer": {
+     "answer": "false",
+     "cpu_s": 18.1
+    }
+   }
+  },
+  {
+   "name": "lp64/race-only-on-lp64",
+   "owners": [
+    "uautomizer",
+    "dartagnan"
+   ],
+   "validator": "dartagnan",
+   "origin": null,
+   "license": "MIT (this repository)",
+   "purpose": "A data race only when sizeof(long) == 8: expected false under LP64.  ULTIMATE Automizer answers true if given ILP32, so CoOpeRace must pass the task's data model.",
+   "sv_comp_2026": null
+  },
+  {
+   "name": "lp64/race-only-on-ilp32",
+   "owners": [
+    "uautomizer",
+    "dartagnan"
+   ],
+   "validator": null,
+   "origin": null,
+   "license": "MIT (this repository)",
+   "purpose": "The same program with the indices swapped: no race under LP64, expected true; ULTIMATE Automizer given ILP32 reports a race.",
+   "sv_comp_2026": null
+  }
+ ]
+}

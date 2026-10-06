@@ -1,0 +1,8 @@
+format_version: '2.0'
+input_files: 'race-only-on-ilp32.i'
+properties:
+  - property_file: ../properties/no-data-race.prp
+    expected_verdict: true
+options:
+  language: C
+  data_model: LP64

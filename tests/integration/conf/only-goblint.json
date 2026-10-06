@@ -1,0 +1,6 @@
+{
+    "runType": "sequential",
+    "tools": [
+        {"Goblint": "all"}
+    ]
+}

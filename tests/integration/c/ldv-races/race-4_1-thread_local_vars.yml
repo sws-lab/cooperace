@@ -1,0 +1,11 @@
+format_version: '2.0'
+
+input_files: 'race-4_1-thread_local_vars.i'
+
+properties:
+  - property_file: ../properties/no-data-race.prp
+    expected_verdict: true
+
+options:
+  language: C
+  data_model: ILP32
