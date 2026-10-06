@@ -31,24 +31,6 @@ sv_sanitizers = importlib.import_module("benchexec.tools.sv-sanitizers")
 
 
 
-# This could be done in the download_tools.py part, where it creates a .json for this dictionary 
-def tool_locations():
-    default_path = os.path.join(os.getcwd(), "tools")
-    
-    return {
-            "Goblint": os.path.join(default_path, "goblint"),
-            "Deagle": os.path.join(default_path, "deagle"),
-            "Dartagnan": os.path.join(default_path, "dartagnan"),
-            "ULTIMATE Automizer": os.path.join(default_path, "uautomizer"),
-            "ULTIMATE GemCutter": os.path.join(default_path, "ugemcutter"),
-            "ULTIMATE Taipan": os.path.join(default_path, "utaipan"),
-            "nacpa": os.path.join(default_path, "nacpa"),
-            "CPAchecker": os.path.join(default_path, "CPAchecker-4.0-unix"),
-            "sv-sanitizers": os.path.join(default_path, "sv-sanitizers"),
-            "RacerF": os.path.join(default_path, "racerf")
-    }
-
-
 # What runSequential, runParallel and runActorThread return: the verdict
 # ("true", "false" or "unknown"), the name of the component that gave it (None
 # for "unknown") and that component's witness files from this run.
@@ -186,6 +168,23 @@ class StopSignal(BaseException):
         super().__init__(f"signal {signum}")
         self.signum = signum
 
+
+# This could be done in the download_tools.py part, where it creates a .json for this dictionary 
+def tool_locations():
+    default_path = os.path.join(os.getcwd(), "tools")
+    
+    return {
+            "Goblint": os.path.join(default_path, "goblint"),
+            "Deagle": os.path.join(default_path, "deagle"),
+            "Dartagnan": os.path.join(default_path, "dartagnan"),
+            "ULTIMATE Automizer": os.path.join(default_path, "uautomizer"),
+            "ULTIMATE GemCutter": os.path.join(default_path, "ugemcutter"),
+            "ULTIMATE Taipan": os.path.join(default_path, "utaipan"),
+            "nacpa": os.path.join(default_path, "nacpa"),
+            "CPAchecker": os.path.join(default_path, "CPAchecker-4.0-unix"),
+            "sv-sanitizers": os.path.join(default_path, "sv-sanitizers"),
+            "RacerF": os.path.join(default_path, "racerf")
+    }
 
 class Cooperace:
     def __init__(self, file, property_file, data_model, conf):
