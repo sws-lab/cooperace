@@ -7,6 +7,7 @@ import shutil
 import glob
 import sys
 import importlib
+import tempfile
 import threading
 import time
 import traceback
@@ -267,14 +268,19 @@ class Cooperace:
 
         verdict = "unknown"
         stopped_by = None
+        self.removeOldWitnessFiles()
+        #Holds one directory per component run, made in runActor
+        self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
         try:
             if executon_type == "sequential":
-                verdict = self.runSequential(execution_tools).verdict
+                outcome = self.runSequential(execution_tools)
             elif executon_type == "parallel":
-                verdict = self.runParallel(execution_tools).verdict
+                outcome = self.runParallel(execution_tools)
             else:
                 raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
-            self.deleteAllWitnessFiles(self.witnessFiles(os.path.join(os.getcwd(), "tools")))
+            #Only the witness of the component whose verdict is returned
+            self.witnessFilesToFileRoot(outcome.witness_files)
+            verdict = outcome.verdict
         except StopSignal as stop:
             stopped_by = stop.signum
         except Exception as error:
@@ -283,6 +289,7 @@ class Cooperace:
         finally:
             ignoreStopSignals()
             self.root_group.stop()
+            shutil.rmtree(self.work_dir, ignore_errors=True)
             for signum, handler in handlers.items():
                 signal.signal(signum, handler)
         if stopped_by is not None:
@@ -312,9 +319,12 @@ class Cooperace:
         return NO_OUTCOME
 
     def runOne(self, actor):
+        """Runs `actor` with runActor and returns its Outcome. runActor sets
+        `witness_files` of the current thread for an accepted verdict."""
+        self.local.witness_files = []
         verdict = self.runActor(actor)
         if verdict == "true" or verdict == "false":
-            return Outcome(verdict, actor.name(), [])
+            return Outcome(verdict, actor.name(), self.local.witness_files)
         return NO_OUTCOME
 
     def runActorThread(self, actor):
@@ -382,9 +392,59 @@ class Cooperace:
                 destination = os.path.join(os.getcwd(), os.path.basename(file))
             shutil.copy2(file, destination)
 
-    def deleteAllWitnessFiles(self, witness_files):
-        for file in witness_files:
-            os.remove(file)
+    def removeOldWitnessFiles(self):
+        """Removes witness.graphml and witness.yml, the names
+        witnessFilesToFileRoot gives the witnesses of the components in this
+        configuration, from the working directory, so that one left there by
+        an earlier run is not delivered with this run's verdict."""
+        for name in ("witness.graphml", "witness.yml"):
+            try:
+                os.remove(os.path.join(os.getcwd(), name))
+            except FileNotFoundError:
+                pass
+
+    def witnessOptions(self, actor, witness_dir):
+        """Options that make `actor` write its witness files into
+        `witness_dir`, for the components that have such an option: Goblint,
+        whose only witness here is the YAML file at witness.yaml.path, and the
+        ULTIMATE tools (Ultimate.py --witness-dir). Any other component
+        gets [], and collectWitnessFiles looks for its witnesses in the
+        component's own directory instead."""
+        if actor.name() == "Goblint":
+            return ["--set", "witness.yaml.path", os.path.join(witness_dir, "witness.yml")]
+        if actor.name().startswith("ULTIMATE"):
+            return ["--witness-dir", witness_dir]
+        return []
+
+    def startTime(self, witness_dir):
+        """A time stamp of now, taken from the file system as the modification
+        time of a new file in `witness_dir`, so that it compares exactly with
+        the modification times of the files a component writes afterwards."""
+        marker = os.path.join(witness_dir, ".started")
+        open(marker, "w").close()
+        return os.stat(marker).st_mtime_ns
+
+    def collectWitnessFiles(self, actor, cwd, witness_dir, started):
+        """Returns the witness files (witnessFiles) of the run of `actor` that
+        began at `started`, all in `witness_dir`. A component without an option
+        of witnessOptions writes its witnesses under its own directory `cwd`
+        (Dartagnan: output/witness.graphml, since Dartagnan-SVCOMP.sh sets
+        DAT3M_OUTPUT to it): of the witness files there, those modified at or
+        after `started` are moved to the same relative path in `witness_dir`,
+        and every other one, left by an earlier run or shipped with the
+        component (Goblint's smoketests/*witness*.yml), is neither returned
+        nor touched."""
+        if not self.witnessOptions(actor, witness_dir):
+            for file in self.witnessFiles(cwd):
+                try:
+                    written_now = os.stat(file).st_mtime_ns >= started
+                except OSError:
+                    continue
+                if written_now:
+                    destination = os.path.join(witness_dir, os.path.relpath(file, cwd))
+                    os.makedirs(os.path.dirname(destination), exist_ok=True)
+                    shutil.move(file, destination)
+        return self.witnessFiles(witness_dir)
 
     def confirmVerdict(self, tool_name, verdict: str, expected_verdict: str):
         tool_acceptance_criteria = self.acceptable_results.get(tool_name, None)
@@ -419,6 +479,9 @@ class Cooperace:
         else:
             options = []
 
+        #A directory of this run, in which the component's witnesses end up
+        witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
+        options = options + self.witnessOptions(actor, witness_dir)
 
         cmdline = actor.cmdline(
             executable,
@@ -427,10 +490,13 @@ class Cooperace:
             BaseTool2.ResourceLimits()
         )
 
+        started = self.startTime(witness_dir)
         tool_result = self.actorResult(
             command=cmdline,
             cwd=cwd
             )
+        #Also for a stopped component, so that no file it wrote stays in its directory
+        witness_files = self.collectWitnessFiles(actor, cwd, witness_dir, started)
 
         if self.currentGroup().stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
@@ -448,10 +514,10 @@ class Cooperace:
         verdict = actor.determine_result(run).lower()
 
         if self.confirmVerdict(actor.name(), verdict, "true"):
-            self.witnessFilesToFileRoot(self.witnessFiles(cwd))
+            self.local.witness_files = witness_files
             verdict = "true"
         elif self.confirmVerdict(actor.name(), verdict, "false"):
-            self.witnessFilesToFileRoot(self.witnessFiles(cwd))
+            self.local.witness_files = witness_files
             verdict = "false"
         else:
             verdict = "unknown"
