@@ -3,6 +3,8 @@ dist
 tools
 unused
 results
+/validators/
+/tests/integration/out/
 /src/tool_combinations/results*
 .DS_Store
 
