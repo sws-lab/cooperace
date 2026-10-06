@@ -6,5 +6,6 @@
             {"Dartagnan": "all"},
             {"ULTIMATE Automizer": "all"}
         ]
-    ]
+    ],
+    "cpuTimeLimits": {"Goblint": 30}
 }
