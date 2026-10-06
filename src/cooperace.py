@@ -15,6 +15,7 @@ import traceback
 for whl_file in glob.glob("lib/*.whl"):
     sys.path.insert(0, whl_file)
 
+from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 from benchexec.tools.goblint import Tool as Goblint
@@ -185,6 +186,7 @@ class Cooperace:
         self.root_group = ComponentGroup()
         #Per thread: `group`, the ComponentGroup the thread starts components in
         self.local = threading.local()
+        self.print_lock = threading.Lock()
 
     def currentGroup(self):
         return getattr(self.local, "group", self.root_group)
@@ -193,9 +195,11 @@ class Cooperace:
         """Runs `command` in `cwd` as the leader of a new session, so that the
         component and every process it starts form one process group, which
         ComponentGroup.stop can end, and records it in the current thread's
-        group while it runs. Returns a subprocess.CompletedProcess with the
-        captured output; `returncode` is negative if the component was ended by
-        a signal, and None if the group was stopped before it could start."""
+        group while it runs. Returns a subprocess.CompletedProcess whose
+        `stdout` is the component's standard output and standard error in one,
+        as BenchExec captures them, and whose `stderr` is empty; `returncode`
+        is negative if the component was ended by a signal, and None if the
+        group was stopped before it could start."""
         group = self.currentGroup()
         if group.stopped:
             return subprocess.CompletedProcess(command, None, "", "")
@@ -203,7 +207,7 @@ class Cooperace:
                         cwd=cwd,
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
                         text=True,
                         errors="replace",
                         start_new_session=True
@@ -211,7 +215,7 @@ class Cooperace:
         try:
             if not group.add(process):
                 stopProcessGroups([process])
-            stdout, stderr = process.communicate()
+            output, _ = process.communicate()
         except BaseException:
             #StopSignal while this thread (the main thread) waits
             stopProcessGroups([process])
@@ -219,7 +223,7 @@ class Cooperace:
             raise
         finally:
             group.remove(process)
-        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        return subprocess.CompletedProcess(command, process.returncode, output, "")
 
         
     def parseTools(self, tools):
@@ -501,17 +505,11 @@ class Cooperace:
         if self.currentGroup().stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
             #the component was ended or never started, and its result is not used
-            print("Tool name:", actor.name(), "Status: stopped by CoOpeRace")
+            self.printComponentRun(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return "unknown"
 
-        run = BaseTool2.Run(
-            cmdline=cmdline,
-            exit_code=butil.ProcessExitCode.create(value=0),
-            output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
-            termination_reason=""
-        )
-        
-        verdict = actor.determine_result(run).lower()
+        status = self.componentStatus(actor, cmdline, tool_result)
+        verdict = status.lower()
 
         if self.confirmVerdict(actor.name(), verdict, "true"):
             self.local.witness_files = witness_files
@@ -521,12 +519,64 @@ class Cooperace:
             verdict = "false"
         else:
             verdict = "unknown"
-            print(f"---{actor.name()} logs---\n")
-            print(tool_result.stdout)
-            print(tool_result.stderr)
 
-        print("Tool name:", actor.name(), "Result:", verdict)
-        
+        self.printComponentRun(actor.name(), tool_result, status, verdict)
+
         return verdict
+
+    def componentStatus(self, actor, cmdline, tool_result):
+        """The status BenchExec would give this run of `actor` (a
+        subprocess.CompletedProcess from actorResult): `actor.determine_result`
+        on the output and the real exit code, and for an unspecific result
+        (unknown, error or done) the refinement of benchexec.model, which
+        names the signal that ended the component or, for an error, the exit
+        code. A component that crashes is so reported as, for example,
+        "EXCEPTION (SetDomain.Unsupported)" or "ERROR (1)", which
+        confirmVerdict does not accept."""
+        returncode = tool_result.returncode
+        if returncode < 0:
+            exit_code = butil.ProcessExitCode.create(signal=-returncode)
+        else:
+            exit_code = butil.ProcessExitCode.create(value=returncode)
+        run = BaseTool2.Run(
+            cmdline=cmdline,
+            exit_code=exit_code,
+            output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
+            termination_reason=""
+        )
+        status = actor.determine_result(run)
+
+        if status in bresult.RESULT_LIST_OTHER:
+            if exit_code.signal == signal.SIGABRT:
+                status = "ABORTED"
+            elif exit_code.signal == signal.SIGSEGV:
+                status = "SEGMENTATION FAULT"
+            elif exit_code.signal == signal.SIGTERM:
+                status = "KILLED"
+            elif exit_code.signal:
+                status = f"KILLED BY SIGNAL {exit_code.signal}"
+            elif exit_code.value and status != bresult.RESULT_UNKNOWN:
+                status = f"{bresult.RESULT_ERROR} ({exit_code.value})"
+        return status
+
+    def printComponentRun(self, name, tool_result, status, verdict):
+        """Prints the output of a component run between "---<name> logs---"
+        and "---end of <name> logs---", then the line "Tool name: <name>
+        Status: <status> Exit code: <exit code>" and, unless `verdict` is None,
+        "Tool name: <name> Result: <verdict>", all at once, so that the
+        output of components running in parallel is not interleaved."""
+        returncode = tool_result.returncode
+        if returncode is None:
+            exit_code = "none, not started"
+        elif returncode < 0:
+            exit_code = f"signal {-returncode}"
+        else:
+            exit_code = str(returncode)
+        lines = [f"---{name} logs---", tool_result.stdout.rstrip("\n"), f"---end of {name} logs---",
+                 f"Tool name: {name} Status: {status} Exit code: {exit_code}"]
+        if verdict is not None:
+            lines.append(f"Tool name: {name} Result: {verdict}")
+        with self.print_lock:
+            print("\n".join(lines), flush=True)
     
     
