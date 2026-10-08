@@ -7,5 +7,6 @@
             {"ULTIMATE Automizer": "all"}
         ]
     ],
-    "cpuTimeLimits": {"Goblint": 30}
+    "cpuTimeLimits": {"Goblint": 30},
+    "memoryLimits": {"ULTIMATE Automizer": "70%"}
 }
