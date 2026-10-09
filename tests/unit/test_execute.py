@@ -73,6 +73,7 @@ def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
     assert lines[start + 10:] == [
         "Tool name: Stub B Status: true Exit code: 0",
         "Tool name: Stub B Result: true",
+        "CoOpeRace result from: Stub B",
     ]
     assert not any("Stub C" in line for line in lines)
 

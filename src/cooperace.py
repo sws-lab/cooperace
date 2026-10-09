@@ -444,7 +444,10 @@ class Cooperace:
         
     def execute(self):
         """Runs the configuration and returns its verdict. No component is
-        running when it returns. If SIGTERM, SIGINT or SIGHUP arrives while it
+        running when it returns. For a verdict of "true" or "false" it prints
+        "CoOpeRace result from: <name>" last, naming the component whose
+        verdict it returns, so that the launcher's verdict line follows it
+        directly. If SIGTERM, SIGINT or SIGHUP arrives while it
         runs (in the main thread), it stops every component, prints that it was
         stopped, and ends CoOpeRace with that signal, without a verdict."""
         executon_type, execution_tools = self.parseConf()
@@ -466,6 +469,7 @@ class Cooperace:
                     handlers[signum] = signal.signal(signum, raiseStopSignal)
 
         verdict = "unknown"
+        component = None
         stopped_by = None
         self.removeOldWitnessFiles()
         #Holds one directory per component run, made in runActor
@@ -480,6 +484,7 @@ class Cooperace:
             #Only the witness of the component whose verdict is returned
             self.witnessFilesToFileRoot(outcome.witness_files)
             verdict = outcome.verdict
+            component = outcome.component
         except StopSignal as stop:
             stopped_by = stop.signum
         except Exception as error:
@@ -495,6 +500,8 @@ class Cooperace:
             print(f"CoOpeRace stopped by signal {stopped_by}", flush=True)
             signal.signal(stopped_by, signal.SIG_DFL)
             os.kill(os.getpid(), stopped_by)
+        if verdict == "true" or verdict == "false":
+            print(f"CoOpeRace result from: {component}", flush=True)
         return verdict
 
 

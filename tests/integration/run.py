@@ -421,13 +421,16 @@ def component_of_producer(producer):
 
 
 def answered_by(r):
-    """The component whose verdict CoOpeRace returned: the first
-    `Tool name: X Result: true|false` line of CoOpeRace's output."""
+    """The component whose verdict CoOpeRace returned, as a key of COMPONENTS
+    (or the name CoOpeRace printed, for a component not in COMPONENTS): the
+    `CoOpeRace result from: X` line of CoOpeRace's output, or, in a log
+    without it, the first `Tool name: X Result: true|false` line."""
     try:
         text = Path(r["log"]).read_text(errors="replace")
     except OSError:
         return None
-    m = re.search(r"^Tool name: (.+?) Result: (true|false)$", text, re.M)
+    m = (re.search(r"^CoOpeRace result from: (.+)$", text, re.M)
+         or re.search(r"^Tool name: (.+?) Result: (?:true|false)$", text, re.M))
     if not m:
         return None
     for c, comp in COMPONENTS.items():

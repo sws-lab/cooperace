@@ -35,7 +35,7 @@ The witness format is data in `run.py` (`WITNESS_FORMATS`: the file a verifier w
 | 1 | No run, in any configuration, gives a verdict different from the task's expected one. | A wrong verdict, in CoOpeRace or in a component alone. |
 | 2 | Each component alone gives the expected verdict on its own tasks, and where that is `false`, the named validator confirms its witness. | The task is a bad pick (a component or validator behaves differently here than in SV-COMP 2026): replace the task. Not a defect of CoOpeRace. |
 | 3 | CoOpeRace with `only-<component>` gives the verdict the component gives alone, wherever the component alone answered. | The integration changes what the component computes: options, data model, preprocessing, parsing of its output. |
-| 4 | Every `false` of CoOpeRace on a task expected `false` delivers a `witness.graphml` that the named validator confirms, and whose `producer`, where it names one, is the component that answered (the `Tool name: X Result: false` line of CoOpeRace's output). | The witness is missing, belongs to another component or run, or the validator rejects it. |
+| 4 | Every `false` of CoOpeRace on a task expected `false` delivers a `witness.graphml` that the named validator confirms, and whose `producer`, where it names one, is the component that answered (the `CoOpeRace result from: X` line of CoOpeRace's output). | The witness is missing, belongs to another component or run, or the validator rejects it. |
 | 5 | Each production configuration gives the expected verdict on every task. | The configuration gives no verdict (`unknown`, timeout, out of memory) or a wrong one on a task that some component answers within the limits. |
 
 Check 1 also covers what 5 says about wrong verdicts, so a wrong verdict of a production configuration fails both. A task that only one component answers makes a production configuration depend on that component's integration: that is the point of choosing such tasks, since another component's answer cannot hide a broken integration.
@@ -81,7 +81,6 @@ A production configuration that starts with Goblint spends Goblint's time on eve
 
 ## Known limits of the suite
 
-- Only the first `Tool name: X Result: true|false` line identifies the answering component; when two components finish within milliseconds of each other and the witness of the other is delivered, the producer check fails, which is the case it is meant to catch.
 - ULTIMATE Automizer's and Dartagnan's witnesses differ from run to run. A task whose validator confirms one run's witness and times out on another's is a bad pick; the tasks were chosen so that the validators confirm the witnesses of the runs made when the suite was written.
 - The suite checks no `true` witness, and no format other than graphml 1.0.
 - The data model is tested by two LP64 programs; no task of the SV-COMP no-data-race category is LP64. Dartagnan's tool-info module passes no data model, so the LP64 tasks check that its verdicts are the LP64 ones, not that it follows the data model.
