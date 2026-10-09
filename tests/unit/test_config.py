@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.cooperace import config
+from src.cooperace.components import REGISTRY
 from src.cooperace.config import Parallel, Sequence, Step
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -298,3 +299,15 @@ def test_a_limit_applies_only_inside_the_strategy_that_names_it(known, limits):
 
     with pytest.raises(config.ConfError, match=f"in the strategy for no-overflow: {limits} has a limit for 'Goblint'"):
         config.load_strategies(conf, known)
+
+
+@pytest.mark.parametrize("name", sorted(REGISTRY), ids=lambda name: name.replace(" ", "_"))
+def test_every_component_can_have_both_limits_inside_a_strategy_for_a_property(known, name):
+    conf = {"properties": {"no-overflow": {"runType": "sequential", "tools": [{"Goblint": "true"}, [{name: "all"}]]
+                                           if name != "Goblint" else [{name: "all"}],
+                                           "cpuTimeLimits": {name: 60}, "memoryLimits": {name: "70%"}}}}
+
+    steps = steps_of(config.load_strategies(conf, known)["no-overflow"])
+
+    assert Step(name, "all", "70%", 60) in steps
+    assert all(step.memory_limit is None and step.cpu_time_limit is None for step in steps if step.component != name)

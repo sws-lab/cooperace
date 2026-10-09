@@ -2,6 +2,7 @@
 run through the real run_component, run_in_session and component_status, and the
 stop on a signal in a separate process."""
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import pytest
 from support import make_script, register_stub, wait_until
 
 from src.cooperace import cli
+from src.cooperace.components import ComponentRunner
 from src.cooperace.processes import ComponentGroup, processExited
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -245,6 +247,62 @@ def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
     run.execute()
 
     assert {s: signal.getsignal(s) for s in before} == before
+
+
+# --- per-component limits ----------------------------------------------------
+
+# A stub that runs until a signal ends it. It first makes itself non-dumpable
+# (PR_SET_DUMPABLE is 4), because SIGXCPU's default action dumps core.
+BUSY_STUB = (f"exec {shlex.quote(sys.executable)} -c "
+             + shlex.quote("import ctypes; ctypes.CDLL(None).prctl(4, 0)\nwhile True: pass") + "\n")
+# A stub that allocates 1 GiB, which fails with MemoryError under a smaller RLIMIT_DATA.
+ALLOCATING_STUB = f"exec {shlex.quote(sys.executable)} -c 'bytearray(2**30)'\n"
+
+
+def limited_run(make_runner, tmp_path, property_name, per_property, limits):
+    """A Run of the stubs "Stub A" (BUSY_STUB or ALLOCATING_STUB, by the key of
+    `limits`) and "Stub B" (answers true) in sequence, with the limits
+    `limits` (a conf's "cpuTimeLimits" or "memoryLimits" for Stub A), for a
+    runner of the property `property_name`. The conf is one strategy, or, if
+    `per_property`, the strategy for `property_name` in a conf of properties."""
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=property_name)
+    body = BUSY_STUB if "cpuTimeLimits" in limits else ALLOCATING_STUB
+    register_stub(runner, "Stub A", make_script(tmp_path / "stubs" / "A", body))
+    register_stub(runner, "Stub B", make_script(tmp_path / "stubs" / "B", 'echo "STUB-STATUS: true"\n'))
+    strategy = {"runType": "sequential", "tools": [{"Stub A": "all"}, {"Stub B": "all"}], **limits}
+    return Run(runner, {"properties": {property_name: strategy}} if per_property else strategy)
+
+
+@pytest.mark.parametrize("property_name, per_property", [
+    ("no-data-race", False), ("no-data-race", True), ("valid-memsafety", True)],
+    ids=["one-strategy", "per-property-no-data-race", "per-property-valid-memsafety"])
+def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_next(
+        make_runner, tmp_path, run_dir, capsys, property_name, per_property):
+    run = limited_run(make_runner, tmp_path, property_name, per_property, {"cpuTimeLimits": {"Stub A": 1}})
+
+    verdict = run.execute()
+    lines = lines_of(capsys.readouterr())
+
+    assert verdict == "true"
+    assert "CPU-time limit of Stub A: 1 s (RLIMIT_CPU)" in lines
+    assert "Tool name: Stub A Status: TIMEOUT Exit code: signal 24" in lines
+    assert "Tool name: Stub A Result: unknown" in lines
+    assert not any(line.startswith("CPU-time limit of Stub B") for line in lines)
+    assert lines[-1] == "CoOpeRace result from: Stub B"
+
+
+def test_a_component_stopped_at_its_memory_limit_leaves_cooperace_to_run_the_next(
+        make_runner, tmp_path, run_dir, capsys):
+    limit = 256 * 2**20
+    run = limited_run(make_runner, tmp_path, "unreach-call", True, {"memoryLimits": {"Stub A": limit}})
+
+    verdict = run.execute()
+    lines = lines_of(capsys.readouterr())
+
+    assert verdict == "true"
+    assert f"Memory limit of Stub A: {limit} bytes (RLIMIT_DATA)" in lines
+    assert "Tool name: Stub A Status: unknown Exit code: 1" in lines
+    assert lines[-1] == "CoOpeRace result from: Stub B"
 
 
 # --- a signal while components run ------------------------------------------
