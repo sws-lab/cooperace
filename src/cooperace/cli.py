@@ -1,3 +1,10 @@
+"""The command line of CoOpeRace (the launcher `cooperace` calls main): reads
+the arguments and the conf, runs it on the task, and prints "CoOpeRace
+verdict: <verdict>" as the last line of standard output, which BenchExec's
+tool-info module for CoOpeRace reads. The exit status is 0 when a verdict
+is printed, 2 for a command line argparse refuses, and 1 for an error that
+ends CoOpeRace, such as a conf that config.load refuses; after SIGTERM,
+SIGINT or SIGHUP, CoOpeRace ends by that signal (strategy.execute)."""
 from __future__ import annotations
 
 import argparse

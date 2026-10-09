@@ -86,7 +86,7 @@ COMPONENTS = {
 }
 
 # Tool directories under tools/ of the names that conf/*.json may use
-# (the table of `tool_locations` in src/cooperace.py).
+# (the `directory` of each entry of REGISTRY in src/cooperace/components.py).
 TOOL_DIRS = {
     "Goblint": "goblint", "Deagle": "deagle", "Dartagnan": "dartagnan",
     "ULTIMATE Automizer": "uautomizer", "ULTIMATE GemCutter": "ugemcutter",
@@ -544,8 +544,8 @@ def cooperace_output(r):
 
 
 def component_blocks(lines):
-    """The component runs in CoOpeRace's output `lines`, as printComponentRun
-    of src/cooperace.py prints them: `---X logs---`, the component's output,
+    """The component runs in CoOpeRace's output `lines`, as print_component_run
+    of src/cooperace/components.py prints them: `---X logs---`, the component's output,
     `---end of X logs---`, `Tool name: X Status: S Exit code: E` and, unless
     CoOpeRace stopped the component, `Tool name: X Result: V`.  Returns the
     list of blocks in order, each a dict of name, output (list of lines),
@@ -627,8 +627,8 @@ def is_yaml_witness(path):
         return False
 
 
-# The names CoOpeRace delivers a witness under (witnessFilesToFileRoot of
-# src/cooperace.py), with a test that the file has that name's format.
+# The names CoOpeRace delivers a witness under (witness_files_to_file_root of
+# src/cooperace/components.py), with a test that the file has that name's format.
 DELIVERED_WITNESSES = {"witness.graphml": is_graphml, "witness.yml": is_yaml_witness}
 
 
@@ -644,7 +644,7 @@ def limit_problems(run, r, lines):
     blocks, _ = component_blocks(lines)
     started = {b["name"] for b in blocks if b["exit_code"] != "none, not started"}
     problems = []
-    # The lines withResourceLimits of src/cooperace.py prints.
+    # The lines with_resource_limits of src/cooperace/components.py prints.
     for key, label, unit in (("memoryLimits", "Memory limit", "bytes"),
                              ("cpuTimeLimits", "CPU-time limit", "s")):
         for name, value in config.get(key, {}).items():
@@ -694,8 +694,8 @@ def goblint_cpu_limit_problems(r, t, lines):
 
 def parallel_siblings(config, name):
     """The other components of the parallel stage of the configuration
-    `config` that holds the component `name` directly, as Cooperace.parseConf
-    reads it: the list `tools` runs as `runType` says, and each list nested
+    `config` that holds the component `name` directly, as config.load of
+    src/cooperace/config.py reads it: the list `tools` runs as `runType` says, and each list nested
     in it the other way.  Empty if `name` is in a sequential list."""
     def walk(node, parallel):
         for element in node:

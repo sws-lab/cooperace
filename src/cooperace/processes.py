@@ -1,3 +1,8 @@
+"""Starting and stopping the processes of components: each runs as the
+leader of a session of its own (run_in_session), under its rlimits
+(with_rlimits), recorded in a ComponentGroup that stops the whole process
+group of every component in it; and the memory limit of the run's cgroup
+(run_memory_limit). Uses only the standard library."""
 from __future__ import annotations
 
 import os

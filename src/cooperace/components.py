@@ -1,3 +1,17 @@
+"""The components CoOpeRace runs (REGISTRY) and how one is run: its command
+line from its BenchExec tool-info module, its limits, its status and
+verdict, its witness files, and the block of protocol lines it prints
+(print_component_run). ComponentRunner is the strategy.StepRunner the
+strategy runs steps with. The only module of the package that imports
+BenchExec.
+
+The standard output is read by programs, so its lines are a protocol: for
+each component run, "---<name> logs---", its output, "---end of <name>
+logs---", "Tool name: <name> Status: <status> Exit code: <code>" and, unless
+CoOpeRace stopped it, "Tool name: <name> Result: <verdict>"; "Memory limit
+of <name>: ..." and "CPU-time limit of <name>: ..." before a component with
+a limit starts. strategy.execute adds "CoOpeRace result from: <name>" and
+"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <verdict>"."""
 from __future__ import annotations
 
 import os
