@@ -7,13 +7,15 @@ components.ComponentRunner is and the unit tests fake. The ComponentGroup the
 components of a step are started in is passed down the tree as a parameter;
 run_parallel nests a new one for each Parallel.
 """
+from __future__ import annotations
+
 import os
 import queue
 import signal
 import threading
 import traceback
 from collections import namedtuple
-from typing import Callable, Optional, Protocol
+from typing import Callable, Protocol
 
 from .config import Node, Parallel, Sequence, Step
 from .processes import ComponentGroup
@@ -33,7 +35,7 @@ class StopSignal(BaseException):
     SIGTERM, SIGINT and SIGHUP. A BaseException, so that the handlers for
     Exception on the way do not take it for a component's failure."""
 
-    def __init__(self, signum):
+    def __init__(self, signum: int):
         super().__init__(f"signal {signum}")
         self.signum = signum
 
@@ -52,7 +54,7 @@ class StepRunner(Protocol):
         stopped group, and returns NO_OUTCOME for a component whose group was
         stopped while it ran."""
 
-    def deliver(self, witness_files: list) -> None:
+    def deliver(self, witness_files: list[str]) -> None:
         """Delivers the witness files of the Outcome execute returns."""
 
     def cleanup(self) -> None:
@@ -131,7 +133,7 @@ def run_parallel(parallel: Parallel, parent: ComponentGroup, run_step: RunStep) 
     return outcome
 
 
-def execute(root: Node, runner: StepRunner, group: Optional[ComponentGroup] = None) -> str:
+def execute(root: Node, runner: StepRunner, group: ComponentGroup | None = None) -> str:
     """Runs the tree `root` with `runner`, in the ComponentGroup `group` (a
     new one if None), and returns its verdict. No component is running when it
     returns. Only the witness files of the Outcome it returns are delivered.

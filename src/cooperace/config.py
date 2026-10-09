@@ -18,7 +18,7 @@ the conf gives them; components.py resolves a percentage when the step starts.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Union
+from typing import Container, Union
 
 # The values a conf may give for the verdicts accepted from a component.
 ACCEPTANCES = ("true", "false", "all")
@@ -61,7 +61,7 @@ class RunTypeError(ValueError):
     with verdict unknown, and not as an error that ends CoOpeRace."""
 
 
-def load(conf, known):
+def load(conf: dict, known: Container[str]) -> Sequence | Parallel:
     """The tree of `conf`, a Sequence for runType "sequential" and a Parallel
     for "parallel", with every component's acceptance and limits in its Step.
 

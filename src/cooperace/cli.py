@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -5,9 +7,10 @@ import traceback
 
 from . import config, strategy
 from .components import DATA_MODELS, ComponentRunner, remove_old_witness_files
+from .processes import ComponentGroup
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--arch', required=False, choices=DATA_MODELS,
@@ -35,7 +38,7 @@ def main():
     print("CoOpeRace verdict: " + verdict)
 
 
-def run(conf, runner, group=None):
+def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None) -> str:
     """Loads the conf `conf` (a dict) with config.load against the components
     of `runner` (a components.ComponentRunner) and runs it with strategy.execute in
     the ComponentGroup `group` (a new one if None). Returns the verdict.

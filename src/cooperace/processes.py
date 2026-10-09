@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import os
 import signal
 import subprocess
 import sys
 import threading
 import time
+from typing import Iterable
 
 
 # Seconds a component's process group has to exit after SIGTERM before
@@ -11,7 +14,7 @@ import time
 STOP_GRACE_SECONDS = 1.0
 
 
-def processExited(pid):
+def processExited(pid: int) -> bool:
     """Whether process `pid` has exited, that is, is gone or a zombie, read
     from /proc. A zombie counts as exited because the thread waiting for it in
     run_in_session may not have reaped it yet."""
@@ -23,7 +26,7 @@ def processExited(pid):
     return stat[stat.rindex(")") + 2] == "Z"
 
 
-def stopProcessGroups(processes):
+def stopProcessGroups(processes: Iterable[subprocess.Popen]) -> None:
     """Ends each of `processes`, which run_in_session started as leaders of new
     sessions, together with every other process of its process group: SIGTERM
     to each group, up to STOP_GRACE_SECONDS for the leaders to exit, then
@@ -54,7 +57,7 @@ class ComponentGroup:
     outside any run_parallel. Once stop() is called,
     run_in_session starts no further component in the group or its subgroups."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: ComponentGroup | None = None):
         self.lock = threading.Lock()
         self.stopped = False
         self.processes = set()
@@ -62,14 +65,14 @@ class ComponentGroup:
         if parent is not None:
             parent.addSubgroup(self)
 
-    def addSubgroup(self, group):
+    def addSubgroup(self, group: ComponentGroup) -> None:
         with self.lock:
             self.subgroups.append(group)
             stopped = self.stopped
         if stopped:
             group.stop()
 
-    def add(self, process):
+    def add(self, process: subprocess.Popen) -> bool:
         """Records a running component process. Returns False, and records
         nothing, if the group is already stopped."""
         with self.lock:
@@ -78,11 +81,11 @@ class ComponentGroup:
             self.processes.add(process)
             return True
 
-    def remove(self, process):
+    def remove(self, process: subprocess.Popen) -> None:
         with self.lock:
             self.processes.discard(process)
 
-    def markStopped(self):
+    def markStopped(self) -> list[subprocess.Popen]:
         """Marks this group and its subgroups stopped and returns the processes
         running in them."""
         with self.lock:
@@ -93,13 +96,14 @@ class ComponentGroup:
             processes += group.markStopped()
         return processes
 
-    def stop(self):
+    def stop(self) -> None:
         """Stops every component running in this group or its subgroups with
         stopProcessGroups and keeps further ones from starting."""
         stopProcessGroups(self.markStopped())
 
 
-def run_memory_limit(cgroup_file="/proc/self/cgroup", cgroup_root="/sys/fs/cgroup"):
+def run_memory_limit(cgroup_file: str = "/proc/self/cgroup",
+                     cgroup_root: str = "/sys/fs/cgroup") -> int | None:
     """Memory limit in bytes of the cgroup this process runs in, or None.
 
     BenchExec puts each run into a cgroup with the run's memory limit. Under
@@ -139,7 +143,7 @@ def run_memory_limit(cgroup_file="/proc/self/cgroup", cgroup_root="/sys/fs/cgrou
     return min(limits) if limits else None
 
 
-def run_in_session(command, cwd, group):
+def run_in_session(command: list[str], cwd: str, group: ComponentGroup) -> subprocess.CompletedProcess:
     """Runs `command` in `cwd` as the leader of a new session, so that the
     component and every process it starts form one process group, which
     ComponentGroup.stop can end, and records it in the ComponentGroup
@@ -184,7 +188,7 @@ def run_in_session(command, cwd, group):
 
 
 
-def with_rlimits(command, memory=None, cpu=None):
+def with_rlimits(command: list[str], memory: int | None = None, cpu: int | None = None) -> list[str]:
     """`command`, started with RLIMIT_DATA set to `memory` bytes and
     RLIMIT_CPU to `cpu` seconds, where a limit that is None is not set;
     `command` itself if both are None.

@@ -10,12 +10,14 @@ import tempfile
 import threading
 import traceback
 from dataclasses import dataclass
+from typing import Mapping
 
 from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 
-from .processes import run_in_session, run_memory_limit, with_rlimits
+from .config import Step
+from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
 from .strategy import NO_OUTCOME, Outcome
 
 
@@ -60,7 +62,7 @@ class ComponentSpec:
     options: tuple[str, ...] = ()
     witness: WitnessSpec = DEFAULT_WITNESS
 
-    def tool(self):
+    def tool(self) -> BaseTool2:
         """A new object of the tool-info module's class Tool. The module is
         imported here, from the BenchExec wheel that src/cooperace/__init__.py
         puts on sys.path relative to the working directory, so the working
@@ -131,7 +133,8 @@ class ComponentRunner:
     it. `registry` is copied, so that the unit tests can add stub components
     to the copy."""
 
-    def __init__(self, file, property_file, data_model, registry=REGISTRY):
+    def __init__(self, file: str, property_file: str, data_model: str | None,
+                 registry: Mapping[str, ComponentSpec] = REGISTRY):
         if data_model is None:
             print(f"CoOpeRace: no --arch given, assuming {DEFAULT_DATA_MODEL}", file=sys.stderr)
             data_model = DEFAULT_DATA_MODEL
@@ -147,22 +150,22 @@ class ComponentRunner:
         self.tools_dir = os.path.join(os.getcwd(), "tools")
         self.work_dir = None
 
-    def prepare(self):
+    def prepare(self) -> None:
         """Removes the witness files an earlier run delivered to the working
         directory and makes the work directory, which holds one directory per
         component run, made in run_component."""
         remove_old_witness_files()
         self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
 
-    def deliver(self, witness_files):
+    def deliver(self, witness_files: list[str]) -> None:
         """Delivers `witness_files` with witness_files_to_file_root."""
         witness_files_to_file_root(witness_files)
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Removes the work directory and everything in it."""
         shutil.rmtree(self.work_dir, ignore_errors=True)
 
-    def run_step(self, step, group):
+    def run_step(self, step: Step, group: ComponentGroup) -> Outcome:
         """Runs the config.Step `step` with run_component in the ComponentGroup
         `group` and returns the Outcome run_component returns.
 
@@ -187,7 +190,7 @@ class ComponentRunner:
                                 f"ERROR ({type(error).__name__}: {error})", "unknown")
             return NO_OUTCOME
 
-    def run_component(self, actor: BaseTool2, step, group):
+    def run_component(self, actor: BaseTool2, step: Step, group: ComponentGroup) -> Outcome:
         """Runs the component `actor` of the config.Step `step` on the task in
         the ComponentGroup `group`, with the step's limits, and prints its
         block. Returns the Outcome of its verdict, with the witness files it
@@ -257,7 +260,7 @@ class ComponentRunner:
         return Outcome(verdict, actor.name(), witness_files)
 
 
-def component_memory_limit(step):
+def component_memory_limit(step: Step) -> int | None:
     """Memory limit in bytes for the config.Step `step`, from its
     `memory_limit` (the conf's `memoryLimits`), or None.
 
@@ -274,14 +277,14 @@ def component_memory_limit(step):
     return None if value is None else int(value)
 
 
-def component_cpu_time_limit(step):
+def component_cpu_time_limit(step: Step) -> int | None:
     """CPU-time limit in seconds for the config.Step `step`, from its
     `cpu_time_limit` (the conf's `cpuTimeLimits`), or None."""
     value = step.cpu_time_limit
     return None if value is None else int(value)
 
 
-def with_resource_limits(step, command):
+def with_resource_limits(step: Step, command: list[str]) -> list[str]:
     """`command`, started with the limits of the config.Step `step`
     (processes.with_rlimits): RLIMIT_DATA set to its memory limit
     (component_memory_limit) and RLIMIT_CPU to its CPU-time limit
@@ -311,7 +314,8 @@ def with_resource_limits(step, command):
     return with_rlimits(command, memory, cpu)
 
 
-def component_status(actor, cmdline, tool_result):
+def component_status(actor: BaseTool2, cmdline: list[str],
+                     tool_result: subprocess.CompletedProcess) -> str:
     """The status BenchExec would give this run of `actor` (a
     subprocess.CompletedProcess from run_in_session): `actor.determine_result`
     on the output and the real exit code, and for an unspecific result
@@ -347,7 +351,7 @@ def component_status(actor, cmdline, tool_result):
     return status
 
 
-def confirm_verdict(tool_acceptance_criteria, verdict: str, expected_verdict: str):
+def confirm_verdict(tool_acceptance_criteria: str, verdict: str, expected_verdict: str) -> bool | None:
     """Whether `verdict` (a component's status in lower case) is
     `expected_verdict` ("true" or "false") for an acceptance
     `tool_acceptance_criteria` ("true", "false" or "all") that accepts it.
@@ -361,7 +365,8 @@ def confirm_verdict(tool_acceptance_criteria, verdict: str, expected_verdict: st
             return False
 
 
-def print_component_run(name, tool_result, status, verdict):
+def print_component_run(name: str, tool_result: subprocess.CompletedProcess, status: str,
+                        verdict: str | None) -> None:
     """Prints the output of a component run between "---<name> logs---"
     and "---end of <name> logs---", then the line "Tool name: <name>
     Status: <status> Exit code: <exit code>" and, unless `verdict` is None,
@@ -382,13 +387,13 @@ def print_component_run(name, tool_result, status, verdict):
         print("\n".join(lines), flush=True)
 
 
-def witness_options(witness, witness_dir):
+def witness_options(witness: WitnessSpec, witness_dir: str) -> list[str]:
     """The `options` of the WitnessSpec `witness`, with {dir} replaced by
     `witness_dir`."""
     return [option.replace("{dir}", witness_dir) for option in witness.options]
 
 
-def start_time(witness_dir):
+def start_time(witness_dir: str) -> int:
     """A time stamp of now, taken from the file system as the modification
     time of a new file in `witness_dir`, so that it compares exactly with
     the modification times of the files a component writes afterwards."""
@@ -397,7 +402,7 @@ def start_time(witness_dir):
     return os.stat(marker).st_mtime_ns
 
 
-def collect_witness_files(witness, cwd, witness_dir, started):
+def collect_witness_files(witness: WitnessSpec, cwd: str, witness_dir: str, started: int) -> list[str]:
     """Returns the witness files of the component run that began at
     `started`, all in `witness_dir`: the files that the component's
     WitnessSpec `witness` names, in `witness_dir` or under its own
@@ -435,7 +440,7 @@ def collect_witness_files(witness, cwd, witness_dir, started):
     return collected
 
 
-def witness_files_under(tool_dir):
+def witness_files_under(tool_dir: str) -> list[str]:
     """The files under `tool_dir` whose name contains "witness" in any case
     and ends in graphml or yml."""
     witness_files = []
@@ -448,7 +453,7 @@ def witness_files_under(tool_dir):
     return witness_files
 
 
-def witness_files_to_file_root(witness_files):
+def witness_files_to_file_root(witness_files: list[str]) -> None:
     """Copies the witness files of one component run, from
     collect_witness_files, to the working directory under the name of their
     format: a graphml file as witness.graphml, a YAML file as witness.yml."""
@@ -462,7 +467,7 @@ def witness_files_to_file_root(witness_files):
         shutil.copy2(file, os.path.join(os.getcwd(), name))
 
 
-def remove_old_witness_files():
+def remove_old_witness_files() -> None:
     """Removes witness.graphml and witness.yml, the names
     witness_files_to_file_root delivers witnesses under, from the working
     directory, so that one left there by an earlier run is not delivered
