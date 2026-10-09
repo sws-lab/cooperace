@@ -6,6 +6,11 @@ function that runs one Step (`run_step`), and execute a StepRunner, which
 components.ComponentRunner is and the unit tests fake. The ComponentGroup the
 components of a step are started in is passed down the tree as a parameter;
 run_parallel nests a new one for each Parallel.
+
+A failure of a component is the runner's to report (it returns NO_OUTCOME); an
+Exception that reaches execute is a defect of CoOpeRace itself, and execute
+propagates it after it has stopped every component and cleaned up, so that
+the command line ends without a verdict line.
 """
 from __future__ import annotations
 
@@ -141,8 +146,10 @@ def execute(root: Node, runner: StepRunner, group: ComponentGroup | None = None)
     For a verdict of "true" or "false" it prints "CoOpeRace result from:
     <name>" last, naming the component whose verdict it returns, so that the
     launcher's verdict line follows it directly. An Exception while the tree
-    runs is printed as "Error, something went wrong: <error>", with its
-    traceback on stderr, and gives "unknown".
+    runs (a defect of CoOpeRace; a component's failure is a step without a
+    verdict, see components.ComponentRunner.run_step) stops every component,
+    removes the work directory and then propagates, so that the caller ends
+    CoOpeRace without a verdict.
 
     If SIGTERM, SIGINT or SIGHUP arrives while it runs (in the main thread),
     it stops every component, prints that it was stopped, and ends CoOpeRace
@@ -181,9 +188,6 @@ def execute(root: Node, runner: StepRunner, group: ComponentGroup | None = None)
         component = outcome.component
     except StopSignal as stop:
         stopped_by = stop.signum
-    except Exception as error:
-        print("Error, something went wrong:", error)
-        traceback.print_exc()
     finally:
         ignoreStopSignals()
         group.stop()

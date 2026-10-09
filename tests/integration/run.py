@@ -28,7 +28,7 @@ of these checks (see README.md):
      expected verdict on every task it runs
   6  every output of CoOpeRace follows the protocol: the verdict line last,
      `CoOpeRace result from: X` before it, each component block closed, no
-     `Error, something went wrong`, one witness file for a `false`
+     `CoOpeRace: error:`, one witness file for a `false`
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
   8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends a level of Goblint's
@@ -757,8 +757,8 @@ def protocol_problems(r, lines):
             problems.append("not exactly one `CoOpeRace result from: X`, right before the verdict line")
     blocks, structure = component_blocks(lines)
     problems += structure
-    if any("Error, something went wrong" in line for line in lines):
-        problems.append("`Error, something went wrong` in the output")
+    if any(line.startswith("CoOpeRace: error:") for line in lines):
+        problems.append("`CoOpeRace: error:` in the output")
     if r["verdict"] is False:
         files = sorted(p for p in Path(r["files"]).rglob("*") if p.is_file()) if Path(r["files"]).is_dir() else []
         names = [p.relative_to(r["files"]).as_posix() for p in files]

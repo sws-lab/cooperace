@@ -200,6 +200,26 @@ def test_an_unknown_run_type_is_refused_before_anything_runs(make_runner, tmp_pa
     assert run.runner.work_dir is None
 
 
+def test_an_exception_while_the_tree_runs_stops_the_components_and_propagates(
+        make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(make_runner, tmp_path, "sequential",
+                         Stub_A='echo "STUB-STATUS: true"\n')
+
+    def deliver(witness_files):
+        raise RuntimeError("cannot deliver")
+
+    run.runner.deliver = deliver
+
+    with pytest.raises(RuntimeError, match="cannot deliver"):
+        run.execute()
+
+    out = capsys.readouterr().out
+    assert "Error, something went wrong" not in out
+    assert "CoOpeRace result from" not in out
+    assert not os.path.exists(run.runner.work_dir)
+    assert run.group.processes == set()
+
+
 def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: true"\n')

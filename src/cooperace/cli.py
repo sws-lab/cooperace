@@ -11,12 +11,14 @@ Exit status and output. A verdict line is printed only for a run that was
 carried out, and then the status is 0; the verdict is "unknown" when no
 component gave an accepted verdict, also when a component crashed (its status
 is printed in its block and CoOpeRace goes on with the next step). A defect of
-the command line, the property, the conf or the installation (a component
-the conf names whose executable is not under tools/) ends CoOpeRace without
-a verdict line, before any component starts: each problem is one line
-"CoOpeRace: error: <problem>" on stderr and the status is 1; argparse
-refuses a command line with status 2. BenchExec's tool-info module reads a
-run without a verdict line as ERROR, not UNKNOWN. After SIGTERM, SIGINT or SIGHUP, CoOpeRace ends by that
+the command line, the property, the conf or the installation, and an
+exception of CoOpeRace's own while the components run, end CoOpeRace without
+a verdict line: each problem is one line "CoOpeRace: error: <problem>" on
+stderr (an unexpected exception adds its traceback) and the status is 1;
+argparse refuses a command line with status 2. BenchExec's tool-info module
+reads a run without a verdict line as ERROR, not UNKNOWN. No component is
+started in these cases, except that an exception while they run first stops
+every component. After SIGTERM, SIGINT or SIGHUP, CoOpeRace ends by that
 signal (strategy.execute)."""
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+import traceback
 from typing import NoReturn
 
 from . import TOOL_DIR, config, strategy
@@ -107,6 +110,11 @@ def main() -> None:
         verdict = run(conf, runner)
     except SetupError as error:
         error_exit(*error.problems)
+    except Exception as error:
+        #A defect of CoOpeRace; strategy.execute has stopped every component
+        print(f"CoOpeRace: error: {type(error).__name__}: {error}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)
     print("CoOpeRace verdict: " + verdict)
 
 
@@ -118,7 +126,8 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     one if None). Returns the verdict.
 
     Raises SetupError, before any component starts, for a conf that
-    config.load refuses and for components that are not installed."""
+    config.load refuses and for components that are not installed. An
+    Exception of strategy.execute propagates."""
     try:
         root = config.load(conf, runner.registry)
     except config.ConfError as error:

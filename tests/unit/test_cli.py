@@ -1,7 +1,7 @@
 """The command line: what makes CoOpeRace end with status 1 or 2, one line on
 stderr and no "CoOpeRace verdict:" line (a defect of the command line, the
-property, the conf or the installation), and what does not (a component that
-crashes)."""
+property, the conf, the installation, or an exception of CoOpeRace's own), and
+what does not (a component that crashes)."""
 import json
 import subprocess
 import sys
@@ -233,6 +233,25 @@ def test_missing_executables_leaves_other_errors_to_the_step(make_runner):
     runner.registry["Broken"] = components.ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
 
     assert runner.missing_executables(["Broken"]) == []
+
+
+# --- an exception of CoOpeRace's own -------------------------------------------
+
+def test_an_unexpected_exception_ends_cooperace_with_its_traceback_and_no_verdict(
+        run_main, monkeypatch):
+    def failing_run(conf, runner, group=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli, "run", failing_run)
+
+    status, out, err = run_main("--prop", str(DATA_RACE))
+
+    assert status == 1
+    assert out == ""
+    lines = error_lines(err)
+    assert lines[0] == "CoOpeRace: error: RuntimeError: boom"
+    assert "Traceback (most recent call last):" in lines
+    assert lines[-1] == "RuntimeError: boom"
 
 
 # --- the launcher --------------------------------------------------------------
