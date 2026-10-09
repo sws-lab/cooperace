@@ -147,17 +147,38 @@ def run_memory_limit(cgroup_file: str = "/proc/self/cgroup",
     return min(limits) if limits else None
 
 
+class FinishedProcess(subprocess.CompletedProcess):
+    """A subprocess.CompletedProcess of a component, with `cpu_time`: the CPU
+    time in seconds, user and system, that os.wait4 reports for the
+    component's process when it is reaped, or None if it was not started.
+
+    That is the CPU time of the component's process and of every descendant
+    whose end it, or a descendant it waited for, waited for: the levels of
+    Goblint's portfolio runner, the JVM that Ultimate.py or
+    Dartagnan-SVCOMP.sh starts. It leaves out a descendant still running, or
+    not waited for, when the process ends. It is not the CPU time of one
+    process alone, which RLIMIT_CPU limits, nor of the whole session, which
+    the cgroup of a BenchExec run would give. resource.getrusage
+    (RUSAGE_CHILDREN) would add up every component CoOpeRace has waited for,
+    the ones of a parallel stage together."""
+
+    def __init__(self, args, returncode: int | None, stdout: str, stderr: str, cpu_time: float | None = None):
+        super().__init__(args, returncode, stdout, stderr)
+        self.cpu_time = cpu_time
+
+
 def run_in_session(command: list[str], cwd: str, group: ComponentGroup,
-                   env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+                   env: dict[str, str] | None = None) -> FinishedProcess:
     """Runs `command` in `cwd`, with the environment `env` (None: this
     process's environment), as the leader of a new session, so that the
     component and every process it starts form one process group, which
     ComponentGroup.stop can end, and records it in the ComponentGroup
-    `group` while it runs. Returns a subprocess.CompletedProcess whose
-    `stdout` is the component's standard output and standard error in one,
-    as BenchExec captures them, and whose `stderr` is empty; `returncode`
-    is negative if the component was ended by a signal, and None if the
-    group was stopped before it could start.
+    `group` while it runs. Returns a FinishedProcess whose `stdout` is the
+    component's standard output and standard error in one, as BenchExec
+    captures them, and whose `stderr` is empty; `returncode` is negative if
+    the component was ended by a signal, and None if the group was stopped
+    before it could start; `cpu_time` is what os.wait4 reports when the
+    process is reaped here.
 
     `group` can be stopped by another thread at any time. If it is stopped
     after the check of `group.stopped` and before `group.add`, the add is
@@ -168,7 +189,7 @@ def run_in_session(command: list[str], cwd: str, group: ComponentGroup,
     stopped group. If this thread (the main thread) is interrupted while it
     waits, by StopSignal, it stops and reaps the process and re-raises."""
     if group.stopped:
-        return subprocess.CompletedProcess(command, None, "", "")
+        return FinishedProcess(command, None, "", "")
     process = subprocess.Popen(command,
                     cwd=cwd,
                     env=env,
@@ -182,7 +203,12 @@ def run_in_session(command: list[str], cwd: str, group: ComponentGroup,
     try:
         if not group.add(process):
             stopProcessGroups([process])
-        output, _ = process.communicate()
+        #What communicate() does for a single pipe, with os.wait4 in place of
+        #wait() for the CPU time; setting returncode keeps Popen from waiting again
+        output = process.stdout.read()
+        process.stdout.close()
+        _pid, status, usage = os.wait4(process.pid, 0)
+        process.returncode = os.waitstatus_to_exitcode(status)
     except BaseException:
         #StopSignal while this thread (the main thread) waits
         stopProcessGroups([process])
@@ -190,7 +216,7 @@ def run_in_session(command: list[str], cwd: str, group: ComponentGroup,
         raise
     finally:
         group.remove(process)
-    return subprocess.CompletedProcess(command, process.returncode, output, "")
+    return FinishedProcess(command, process.returncode, output, "", usage.ru_utime + usage.ru_stime)
 
 
 

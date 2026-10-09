@@ -425,7 +425,7 @@ class ComponentRunner:
             print_component_run(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return NO_OUTCOME
 
-        status = component_status(actor, command.cmdline, tool_result)
+        status = component_status(actor, command.cmdline, tool_result, component_cpu_time_limit(step))
 
         if confirm_verdict(step.accept, status, "true"):
             verdict = "true"
@@ -495,18 +495,31 @@ def with_resource_limits(step: Step, command: list[str]) -> list[str]:
     return with_rlimits(command, memory, cpu)
 
 
-def component_status(actor: BaseTool2, cmdline: list[str],
-                     tool_result: subprocess.CompletedProcess) -> str:
+def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subprocess.CompletedProcess,
+                     cpu_time_limit: int | None = None) -> str:
     """The status BenchExec would give this run of `actor` (a
-    subprocess.CompletedProcess from run_in_session): `actor.determine_result`
-    on a Run as benchexec.model.Run.set_result makes it, with the output's
-    lines as output_lines splits them, the real exit code and no termination
-    reason (None: CoOpeRace's limits are not BenchExec's), and for an unspecific result
-    (unknown, error or done) the refinement of benchexec.model, which
-    names the signal that ended the component or, for an error, the exit
-    code. A component that crashes is so reported as, for example,
-    "EXCEPTION (SetDomain.Unsupported)" or "ERROR (1)", which
-    confirm_verdict does not accept."""
+    processes.FinishedProcess from run_in_session, or a
+    subprocess.CompletedProcess, which has no CPU time) under the CPU-time
+    limit `cpu_time_limit` in seconds that CoOpeRace set (None: none).
+
+    The status is `actor.determine_result` on a Run as
+    benchexec.model.Run.set_result makes it, with the output's lines as
+    output_lines splits them, the real exit code and no termination reason
+    (None: BenchExec did not end the run). An unspecific result (unknown,
+    error or done) is then refined as benchexec.model.Run._analyze_result
+    (BenchExec 3.31) refines it, which this copies: "TIMEOUT" if the CPU-time
+    limit ended the component (ended_by_cpu_time_limit), else "ABORTED",
+    "SEGMENTATION FAULT", "KILLED" or "KILLED BY SIGNAL <n>" for the signal
+    that ended it, or "ERROR (<code>)" for an error with a non-zero exit code.
+    A component that crashes is so reported as, for example,
+    "EXCEPTION (SetDomain.Unsupported)" or "ERROR (1)", which confirm_verdict
+    does not accept.
+
+    Where this differs from BenchExec: BenchExec gives TIMEOUT whenever the
+    run's CPU time exceeded its limit, and writes a specific result found
+    after that as "TIMEOUT (true)"; here a specific result is kept as the
+    module returns it, so a verdict a component printed before its limit
+    ended it is still accepted, as it was before TIMEOUT was reported."""
     returncode = tool_result.returncode
     if returncode < 0:
         exit_code = butil.ProcessExitCode.create(signal=-returncode)
@@ -521,7 +534,9 @@ def component_status(actor: BaseTool2, cmdline: list[str],
     status = actor.determine_result(run)
 
     if status in bresult.RESULT_LIST_OTHER:
-        if exit_code.signal == signal.SIGABRT:
+        if ended_by_cpu_time_limit(exit_code.signal, getattr(tool_result, "cpu_time", None), cpu_time_limit):
+            status = bresult.RESULT_TIMEOUT
+        elif exit_code.signal == signal.SIGABRT:
             status = "ABORTED"
         elif exit_code.signal == signal.SIGSEGV:
             status = "SEGMENTATION FAULT"
@@ -532,6 +547,31 @@ def component_status(actor: BaseTool2, cmdline: list[str],
         elif exit_code.value and status != bresult.RESULT_UNKNOWN:
             status = f"{bresult.RESULT_ERROR} ({exit_code.value})"
     return status
+
+
+def ended_by_cpu_time_limit(signal_number: int | None, cpu_time: float | None,
+                            cpu_time_limit: int | None) -> bool:
+    """Whether the RLIMIT_CPU that with_rlimits sets (soft limit
+    `cpu_time_limit` seconds, hard limit one second more) ended the
+    component's process, which ended by the signal `signal_number` (None: it
+    exited) after `cpu_time` seconds of CPU time (FinishedProcess.cpu_time;
+    None: not known): it ended by SIGXCPU, which only that limit sends, or by
+    SIGKILL after more CPU time than `cpu_time_limit`, which is how the kernel
+    ends a process at the hard limit (BenchExec's _is_timeout also compares the
+    CPU time with the limit, and its own limit ends a run by SIGKILL).
+
+    Only the component's own process is judged. A descendant that the limit
+    ends, such as a level of Goblint's portfolio runner (goblint exited with
+    code -24), makes no TIMEOUT when the process that started it exits by
+    itself, as goblint_runner.py does with exit code 0: its status is what
+    its tool-info module reads from the output. Adding up the CPU time of the
+    descendants would not tell this apart either: RLIMIT_CPU limits each
+    process on its own, so levels that each end by themselves can together use
+    more than the limit."""
+    if signal_number == signal.SIGXCPU:
+        return True
+    return (signal_number == signal.SIGKILL and cpu_time is not None and cpu_time_limit is not None
+            and cpu_time > cpu_time_limit)
 
 
 def output_lines(output: str) -> list[str]:

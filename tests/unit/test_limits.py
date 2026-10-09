@@ -1,14 +1,16 @@
 """Per-component resource limits: with_resource_limits, with_rlimits,
-component_memory_limit and run_memory_limit."""
+component_memory_limit and run_memory_limit, the CPU time run_in_session
+reports, and the status TIMEOUT of a component its CPU-time limit ends."""
 import inspect
 import subprocess
 import sys
 
 import pytest
+from support import make_script, register_stub
 
 from src.cooperace import components
 from src.cooperace.config import Step
-from src.cooperace.processes import run_memory_limit, with_rlimits
+from src.cooperace.processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
 
 MEBIBYTE = 2**20
 
@@ -49,6 +51,29 @@ def test_cpu_time_limit_ends_a_busy_loop_by_sigxcpu(tmp_path, capsys):
 
     assert result.returncode == -24
     assert "CPU-time limit of Goblint: 1 s (RLIMIT_CPU)" in capsys.readouterr().out
+
+
+def test_a_component_ended_by_its_cpu_time_limit_has_status_timeout(make_runner, group, tmp_path, capsys):
+    runner = make_runner()
+    loop = " ".join(f"'{part}'" for part in BUSY_LOOP)
+    register_stub(runner, "Looping", make_script(tmp_path / "stub", f"exec {loop}\n"))
+
+    outcome = runner.run_step(Step("Looping", "all", cpu_time_limit=1), group)
+
+    assert outcome.verdict == "unknown"
+    lines = capsys.readouterr().out.splitlines()
+    assert "Tool name: Looping Status: TIMEOUT Exit code: signal 24" in lines
+    assert "Tool name: Looping Result: unknown" in lines
+
+
+def test_run_in_session_reports_the_cpu_time_of_the_process_and_its_waited_for_children(tmp_path):
+    spin = "import time\nend = time.process_time() + 0.5\nwhile time.process_time() < end: pass"
+    code = f"import subprocess, sys; subprocess.run([sys.executable, '-c', {spin!r}])"
+
+    result = run_in_session([sys.executable, "-c", code], str(tmp_path), ComponentGroup())
+
+    assert result.returncode == 0
+    assert result.cpu_time >= 0.5
 
 
 def test_cpu_time_limit_does_not_touch_a_command_that_ends_by_itself(tmp_path):
