@@ -6,6 +6,15 @@
   "note": "Tasks are copied with their .yml trimmed to the no-data-race property; the .yml of an original task is c/<origin>. Licences are those of the task's directory (SPDX header or LICENSE file), texts in c/LICENSES/."
  },
  "sv_comp_2026_source": "verified and validated result XMLs of Goblint, Dartagnan, ULTIMATE Automizer in C.no-data-race.Concurrency, 2026-01; cpu_s is CPU time of the component's own run",
+ "configurations": {
+  "svcomp26-goblint-1s": {
+   "conf": "conf/svcomp26-goblint-1s.json",
+   "checks": [
+    "goblint-cpu-limit"
+   ],
+   "purpose": "conf/svcomp26.json with Goblint's CPU-time limit at 1 s, on a task where a level of Goblint's portfolio reaches it: the limit ends that level, the runner gives up the rest, and the next stage answers."
+  }
+ },
  "tasks": [
   {
    "name": "goblint-regression/28-race_reach_41-trylock_racefree",
@@ -294,6 +303,31 @@
    "license": "MIT (this repository)",
    "purpose": "The same program with the indices swapped: no race under LP64, expected true; ULTIMATE Automizer given ILP32 reports a race.",
    "sv_comp_2026": null
+  },
+  {
+   "name": "goblint-regression/04-mutex_19-call_by_ptr_rc",
+   "owners": [],
+   "configurations": [
+    "svcomp26-goblint-1s"
+   ],
+   "validator": "dartagnan",
+   "origin": "c/goblint-regression/04-mutex_19-call_by_ptr_rc.yml",
+   "license": "MIT",
+   "purpose": "Run by svcomp26-goblint-1s only. A level of Goblint's portfolio uses more than 1 s of CPU time, so the 1 s limit ends it (goblint exited with code -24) and the runner gives up the remaining levels; Dartagnan answers false in the next stage and the Dartagnan validator confirms its witness. ULTIMATE Automizer also answers false, with 20.6 s of CPU time against Dartagnan's 8.6 s in SV-COMP 2026, so CoOpeRace normally stops it. Goblint's own run needs 54 s to end in unknown, too long for the other configurations.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "dartagnan": {
+     "answer": "false",
+     "cpu_s": 8.6
+    },
+    "uautomizer": {
+     "answer": "false",
+     "cpu_s": 20.6
+    }
+   }
   }
  ]
 }

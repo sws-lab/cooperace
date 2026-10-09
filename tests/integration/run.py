@@ -27,6 +27,8 @@ of these checks (see README.md):
      `Error, something went wrong`, one witness file for a `false`
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
+  8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends a level of Goblint's
+     portfolio and a later stage gives the expected verdict
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
 `validate` and `check` take the runs and tasks recorded in DIR/meta.json by
@@ -317,15 +319,18 @@ def read_conf(path):
 
 
 def plan(args):
-    """The run definitions: alone-<c>, only-<c> for every component c, and one
-    per production configuration; with the tasks each one runs."""
+    """The run definitions: alone-<c>, only-<c> for every component c, one per
+    production configuration, and one per configuration of the suite
+    (`configurations` in manifest.json); with the tasks each one runs.  A task
+    that names `configurations` of its own is run by those only."""
     manifest, tasks = load_tasks(args.tasks)
+    regular = [t for t in tasks if not t.get("configurations")]
     cdir = Path(args.cooperace_dir).resolve()
     present = [c for c in COMPONENTS if (cdir / "tools" / c).is_dir()
                and c in args.components.split(",")]
     runs, skipped = {}, {}
     for c in present:
-        own = [t for t in tasks if c in t["owners"]] if not args.cross else tasks
+        own = [t for t in regular if c in t["owners"]] if not args.cross else regular
         if own:
             runs[f"alone-{c}"] = dict(kind="alone", component=c, tasks=own)
             conf = HERE / "conf" / f"only-{c}.json"
@@ -335,23 +340,28 @@ def plan(args):
         if c not in present:
             skipped[c] = f"tools/{c} is not installed"
     configs = args.config or [cdir / "conf" / "svcomp26.json", cdir / "conf" / "svcomp25.json"]
-    for path in configs:
-        path = Path(path).resolve()
-        name = path.stem
+    production = [(Path(p).stem, Path(p), "production", regular, []) for p in configs]
+    suite = [(name, HERE / entry["conf"], "suite",
+              [t for t in tasks if name in t.get("configurations", ())], entry.get("checks", []))
+             for name, entry in manifest.get("configurations", {}).items()]
+    for name, path, kind, its_tasks, checks in production + suite:
+        if not its_tasks:
+            continue
+        path = path.resolve()
         conf = read_conf(path)
         missing = [n for n in conf_components(conf)
                    if not (cdir / "tools" / TOOL_DIRS.get(n, n)).is_dir()]
         if missing:
             skipped[name] = "not run: " + ", ".join(sorted(set(missing))) + " not installed under tools/"
         else:
-            runs[name] = dict(kind="production", conf=path, config=conf, tasks=tasks)
+            runs[name] = dict(kind=kind, conf=path, config=conf, tasks=its_tasks, checks=checks)
     return manifest, tasks, runs, skipped, cdir
 
 
 def plan_from_meta(meta):
     """The tasks and run definitions that `run` recorded in meta.json, for
     `validate` and `check`, in the form `plan` returns them."""
-    _, all_tasks = load_tasks(None)
+    manifest, all_tasks = load_tasks(None)
     by_id = {t["id"]: t for t in all_tasks}
     cdir = Path(meta["cooperace_dir"])
     runs = {}
@@ -364,11 +374,12 @@ def plan_from_meta(meta):
         if r["kind"] in ("alone", "only"):
             # Run definitions alone-<component>, only-<component> (plan).
             run["component"] = r.get("component", name.split("-", 1)[1])
-        if r["kind"] in ("only", "production"):
-            default = (HERE / "conf" / f"{name}.json" if r["kind"] == "only"
-                       else cdir / "conf" / f"{name}.json")
+        if r["kind"] in ("only", "production", "suite"):
+            default = (cdir / "conf" / f"{name}.json" if r["kind"] == "production"
+                       else HERE / "conf" / f"{name}.json")
             run["conf"] = Path(r.get("conf", default))
             run["config"] = r["config"] if "config" in r else read_conf(run["conf"])
+            run["checks"] = manifest.get("configurations", {}).get(name, {}).get("checks", [])
         runs[name] = run
     ids = {t["id"] for r in runs.values() for t in r["tasks"]}
     tasks = [t for t in all_tasks if t["id"] in ids]
@@ -649,6 +660,31 @@ def limit_problems(run, r, lines):
     return problems
 
 
+def goblint_cpu_limit_problems(r, t, lines):
+    """What departs, in the run `r` of task `t`, from what a CPU-time limit of
+    Goblint that ends a level of its portfolio should cause (check 8): the
+    portfolio runner reports `goblint exited with code -24` (SIGXCPU) in
+    Goblint's block, Goblint's stage ends without a verdict, and a component
+    of a later stage gives the expected verdict."""
+    if lines is None:
+        return [f"cannot read the log {r['log']}"]
+    blocks, _ = component_blocks(lines)
+    goblint = [b for b in blocks if b["name"] == COMPONENTS["goblint"]["name"]]
+    problems = []
+    if not goblint:
+        return ["Goblint did not run"]
+    if not any("goblint exited with code -24" in line for line in goblint[0]["output"]):
+        problems.append("no level of Goblint's portfolio ended with `goblint exited with code -24`")
+    if goblint[0]["result"] != "unknown":
+        problems.append(f"Goblint's result is {goblint[0]['result']}, not unknown")
+    answered = answering_name(lines)
+    if answered in (None, COMPONENTS["goblint"]["name"]):
+        problems.append(f"the verdict is not from a later stage (answered by {answered})")
+    if r["verdict"] != t["expected"]:
+        problems.append(f"{r['status']}, expected {str(t['expected']).lower()}")
+    return problems
+
+
 def protocol_problems(r, lines):
     """What in the run `r` of CoOpeRace, whose output is `lines`, departs from
     the protocol that benchexec.tools.cooperace and this suite rely on (check
@@ -764,9 +800,18 @@ def check(results, runs, tasks, skipped, fmt):
             if r:
                 problems = limit_problems(run, r, cooperace_output(r))
                 add(7, rundef, t["id"], not problems, "limit line", "; ".join(problems))
+    # Check 8.
+    for rundef, run in runs.items():
+        if "goblint-cpu-limit" not in run.get("checks", ()):
+            continue
+        for t in run["tasks"]:
+            r = results.get((rundef, t["id"]))
+            if r:
+                problems = goblint_cpu_limit_problems(r, t, cooperace_output(r))
+                add(8, rundef, t["id"], not problems, "Goblint's CPU-time limit", "; ".join(problems))
     # Check 5.
     for rundef, run in runs.items():
-        if run["kind"] != "production":
+        if run["kind"] not in ("production", "suite"):
             continue
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
@@ -813,9 +858,10 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
     names = {1: "no wrong verdict", 2: "reference verdicts and witnesses on own tasks",
              3: "CoOpeRace with one component equals the component alone",
              4: "witness of every false is confirmed, produced by the answering component",
-             5: "production configurations give the expected verdict",
+             5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
-             7: "CoOpeRace prints the configured component limits"}
+             7: "CoOpeRace prints the configured component limits",
+             8: "Goblint's CPU-time limit ends a level and a later stage answers"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of a false witness], CPU time; WRONG = verdict differs from the expected one", ""]
     failed = False

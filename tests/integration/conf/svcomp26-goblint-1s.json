@@ -1,0 +1,12 @@
+{
+    "runType": "sequential",
+    "tools": [
+        {"Goblint": "true"},
+        [
+            {"Dartagnan": "all"},
+            {"ULTIMATE Automizer": "all"}
+        ]
+    ],
+    "cpuTimeLimits": {"Goblint": 1},
+    "memoryLimits": {"ULTIMATE Automizer": "70%"}
+}
