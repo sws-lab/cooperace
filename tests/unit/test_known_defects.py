@@ -34,11 +34,6 @@ def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop
     assert coop.runSequential(tools) == Outcome("true", "Deagle", [])
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "D2: runBranch catches Exception only; a branch that ends with a "
-    "BaseException (SystemExit) never puts an outcome, and runParallel waits "
-    "for it forever when no other branch reports an accepted verdict"))
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_D2_a_branch_ending_with_systemexit_does_not_hang_runParallel(make_coop):
     """Expected: runParallel returns once the other branch has reported, here
     NO_OUTCOME because that branch has no verdict. It is run in a daemon

@@ -505,13 +505,18 @@ class Cooperace:
         outcomes = queue.Queue()
 
         def runBranch(actor):
+            #Every branch puts exactly one outcome, also when it ends with a
+            #BaseException (such as SystemExit from a module), which is
+            #printed and counts as no verdict; otherwise the wait below would
+            #never end. StopSignal is raised in the main thread only.
             self.local.group = group
+            outcome = NO_OUTCOME
             try:
                 outcome = self.runActorThread(actor)
-            except Exception:
+            except BaseException:
                 traceback.print_exc()
-                outcome = NO_OUTCOME
-            outcomes.put(outcome)
+            finally:
+                outcomes.put(outcome)
 
         threads = [threading.Thread(target=runBranch, args=(actor,)) for actor in actors]
         for thread in threads:
