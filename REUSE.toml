@@ -1,0 +1,191 @@
+version = 1
+
+# Licensing of the files that carry no SPDX header of their own, as the REUSE
+# specification 3.3 describes. A file that has a header keeps it: with the
+# default precedence ("closest") an annotation applies only to a file without
+# one. Where several annotations match a file, the last one applies.
+#
+# The project's own files are MIT (LICENSE) and copyright University of Tartu,
+# as LICENSE says. The source files of the project carry their header in the
+# file. This file annotates what cannot carry a comment or is better annotated
+# in bulk. The maintainers should confirm the holder and the years.
+
+SPDX-PackageName = "CoOpeRace"
+SPDX-PackageDownloadLocation = "https://github.com/sws-lab/cooperace"
+
+[[annotations]]
+path = [
+    ".gitattributes",
+    ".gitignore",
+    ".github/**",
+    "README.md",
+    "REUSE.toml",
+    "pyproject.toml",
+    "conf/**",
+    "tools.txt",
+    "tools-pool.txt",
+    "tools-options.json",
+    "src/tool_combinations/README.md",
+    "svcomp2025_results/README.md",
+    "tests/Race.set",
+    "tests/table-generator.xml",
+    "tests/table-generator_combinations.xml",
+    "tests/bench-defs/**",
+    "tests/integration/README.md",
+    "tests/integration/manifest.json",
+    "tests/integration/conf/**",
+    "tests/svcomp25-no-data-race/README.md",
+]
+SPDX-FileCopyrightText = "2024-2026 University of Tartu"
+SPDX-License-Identifier = "MIT"
+
+# Task definitions and set files copied from the SV-Benchmarks collection. Its
+# .reuse/dep5 (tag svcomp26) puts c/*/*.yml under CC0-1.0, copyright
+# "2011-2020 The SV-Benchmarks Community".
+[[annotations]]
+path = [
+    "tests/no-data-race/*.yml",
+    "tests/svcomp25-no-data-race/*.yml",
+    "tests/integration/c/*/*.yml",
+]
+SPDX-FileCopyrightText = "2011-2020 The SV-Benchmarks Community"
+SPDX-License-Identifier = "CC0-1.0"
+
+# Property files copied from the SV-Benchmarks collection (tests/properties has
+# a .license file for each; this one has none).
+[[annotations]]
+path = "tests/integration/c/properties/*.prp"
+SPDX-FileCopyrightText = "2011-2020 The SV-Benchmarks Community"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Preprocessed sources of SV-COMP 2025 tasks that lost the header of the
+# original file in preprocessing. SV-Benchmarks (tag svcomp26, .reuse/dep5)
+# puts c/pthread-ext/ under LicenseRef-unknown and the other directories these
+# files come from (c/pthread-wmm, c/pthread-atomic, c/pthread-driver-races,
+# c/pthread-lit, c/pthread-complex, c/pthread-nondet, c/pthread-C-DAC,
+# c/pthread-divine, c/ldv-races, c/ldv-linux-3.14-races) under
+# LicenseRef-in-text-file, with the copyright unknown. The original .c files
+# there carry no header either. The two LicenseRef texts are those of
+# SV-Benchmarks.
+[[annotations]]
+path = "tests/svcomp25-no-data-race/*.i"
+SPDX-FileCopyrightText = "unknown: the SV-Benchmarks collection does not record the authors of these files"
+SPDX-License-Identifier = "LicenseRef-in-text-file"
+
+[[annotations]]
+path = [
+    "tests/svcomp25-no-data-race/01_inc.i",
+    "tests/svcomp25-no-data-race/01b_inc.i",
+    "tests/svcomp25-no-data-race/02_inc_cas.i",
+    "tests/svcomp25-no-data-race/03_incdec.i",
+    "tests/svcomp25-no-data-race/04_incdec_cas-race.i",
+    "tests/svcomp25-no-data-race/04_incdec_cas.i",
+    "tests/svcomp25-no-data-race/05_tas.i",
+    "tests/svcomp25-no-data-race/06_ticket.i",
+    "tests/svcomp25-no-data-race/07_rand.i",
+    "tests/svcomp25-no-data-race/08_rand_cas-race.i",
+    "tests/svcomp25-no-data-race/08_rand_cas.i",
+    "tests/svcomp25-no-data-race/09_fmaxsym-race.i",
+    "tests/svcomp25-no-data-race/09_fmaxsym-zero.i",
+    "tests/svcomp25-no-data-race/09_fmaxsym.i",
+    "tests/svcomp25-no-data-race/10_fmaxsym_cas.i",
+    "tests/svcomp25-no-data-race/11_fmaxsymopt-race.i",
+    "tests/svcomp25-no-data-race/11_fmaxsymopt-zero.i",
+    "tests/svcomp25-no-data-race/11_fmaxsymopt.i",
+    "tests/svcomp25-no-data-race/12_fmaxsymopt_cas.i",
+    "tests/svcomp25-no-data-race/13_unverif.i",
+    "tests/svcomp25-no-data-race/14_spin2003.i",
+    "tests/svcomp25-no-data-race/17_szymanski.i",
+    "tests/svcomp25-no-data-race/18_read_write_lock.i",
+    "tests/svcomp25-no-data-race/23_lu-fig2.fixed.i",
+    "tests/svcomp25-no-data-race/25_stack-race.i",
+    "tests/svcomp25-no-data-race/25_stack.i",
+    "tests/svcomp25-no-data-race/25_stack_longer-1-race.i",
+    "tests/svcomp25-no-data-race/25_stack_longer-1.i",
+    "tests/svcomp25-no-data-race/25_stack_longer-2-race.i",
+    "tests/svcomp25-no-data-race/25_stack_longer-2.i",
+    "tests/svcomp25-no-data-race/25_stack_longest-1-race.i",
+    "tests/svcomp25-no-data-race/25_stack_longest-1.i",
+    "tests/svcomp25-no-data-race/25_stack_longest-2-race.i",
+    "tests/svcomp25-no-data-race/25_stack_longest-2.i",
+    "tests/svcomp25-no-data-race/26_stack_cas-race.i",
+    "tests/svcomp25-no-data-race/26_stack_cas.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longer-1-race.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longer-1.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longer-2-race.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longer-2.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longest-1-race.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longest-1.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longest-2-race.i",
+    "tests/svcomp25-no-data-race/26_stack_cas_longest-2.i",
+    "tests/svcomp25-no-data-race/27_Boop_simple_vf.i",
+    "tests/svcomp25-no-data-race/28_buggy_simple_loop1_vf.i",
+    "tests/svcomp25-no-data-race/29_conditionals_vs.i",
+    "tests/svcomp25-no-data-race/30_Function_Pointer3_vs.i",
+    "tests/svcomp25-no-data-race/31_simple_loop5_vs.i",
+    "tests/svcomp25-no-data-race/32_pthread5_vs.i",
+    "tests/svcomp25-no-data-race/33_double_lock_p1_vs.i",
+    "tests/svcomp25-no-data-race/34_double_lock_p2_vs.i",
+    "tests/svcomp25-no-data-race/35_double_lock_p3_vs.i",
+    "tests/svcomp25-no-data-race/36_stack_cas_p0_vs_concur-race.i",
+    "tests/svcomp25-no-data-race/36_stack_cas_p0_vs_concur.i",
+    "tests/svcomp25-no-data-race/37_stack_lock_p0_vs_concur-race.i",
+    "tests/svcomp25-no-data-race/37_stack_lock_p0_vs_concur.i",
+    "tests/svcomp25-no-data-race/38_rand_cas_vs_concur.i",
+    "tests/svcomp25-no-data-race/39_rand_lock_p0_vs-b.i",
+    "tests/svcomp25-no-data-race/39_rand_lock_p0_vs.i",
+    "tests/svcomp25-no-data-race/40_barrier_vf-b.i",
+    "tests/svcomp25-no-data-race/40_barrier_vf.i",
+    "tests/svcomp25-no-data-race/41_FreeBSD_abd_kbd_sliced.i",
+    "tests/svcomp25-no-data-race/42_FreeBSD_rdma_addr_sliced.i",
+    "tests/svcomp25-no-data-race/43_NetBSD_sysmon_power_sliced-pthread.i",
+    "tests/svcomp25-no-data-race/43_NetBSD_sysmon_power_sliced.i",
+    "tests/svcomp25-no-data-race/43_NetBSD_sysmon_power_sliced_2.i",
+    "tests/svcomp25-no-data-race/44_Solaris_space_map_sliced.i",
+    "tests/svcomp25-no-data-race/45_monabsex1_vs-b.i",
+    "tests/svcomp25-no-data-race/45_monabsex1_vs.i",
+    "tests/svcomp25-no-data-race/46_monabsex2_vs-b.i",
+    "tests/svcomp25-no-data-race/46_monabsex2_vs.i",
+    "tests/svcomp25-no-data-race/47_ticket_lock_hc_backoff_vs.i",
+    "tests/svcomp25-no-data-race/48_ticket_lock_low_contention_vs-b.i",
+    "tests/svcomp25-no-data-race/48_ticket_lock_low_contention_vs-pthread.i",
+    "tests/svcomp25-no-data-race/48_ticket_lock_low_contention_vs.i",
+]
+SPDX-FileCopyrightText = "unknown: the SV-Benchmarks collection does not record the authors of these files"
+SPDX-License-Identifier = "LicenseRef-unknown"
+
+# Preprocessed sources of tasks in tests/integration/c; the licenses are those
+# the manifest records for the task's directory, with the texts in LICENSES/.
+[[annotations]]
+path = "tests/integration/c/pthread-divine/*.i"
+SPDX-FileCopyrightText = "The authors of the DIVINE tests, https://divine.fi.muni.cz"
+SPDX-License-Identifier = "ISC"
+
+[[annotations]]
+path = "tests/integration/c/ldv-races/*.i"
+SPDX-FileCopyrightText = "The authors of the Linux Driver Verification races benchmarks"
+SPDX-License-Identifier = "GPL-2.0-only"
+
+# The two programs written for this repository's integration suite.
+[[annotations]]
+path = "tests/integration/c/lp64/*"
+SPDX-FileCopyrightText = "2024-2026 University of Tartu"
+SPDX-License-Identifier = "MIT"
+
+# The bundled BenchExec wheel and the license texts that scripts/download-
+# benchexec.py extracted from it (benchexec-*.whl.license). The wheel is
+# third-party: BenchExec is Apache-2.0, and its license files cover the
+# further licenses listed here. "override" because the .license file beside the
+# wheel holds license texts, not SPDX tags.
+[[annotations]]
+path = "lib/benchexec-*"
+precedence = "override"
+SPDX-FileCopyrightText = "Dirk Beyer and the BenchExec contributors"
+SPDX-License-Identifier = "Apache-2.0 AND BSD-3-Clause AND CC-BY-4.0 AND ISC AND LicenseRef-BSD-3-Clause-CMU AND MIT"
+
+# SV-COMP 2025 result files (bzip2-compressed BenchExec result XML), published
+# by the competition under CC-BY-4.0.
+[[annotations]]
+path = "svcomp2025_results/*.bz2"
+SPDX-FileCopyrightText = "SV-COMP 2025 organizers and participants"
+SPDX-License-Identifier = "CC-BY-4.0"
