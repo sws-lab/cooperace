@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Check for required arguments
 if [ "$#" -ne 3 ]; then
     echo "Usage: $0 <source_directory> <destination_directory> <property_file_path>"
@@ -25,7 +27,7 @@ find "$SOURCE_DIR" -type f -name '*.yml' | while read -r yml_file; do
         cp "$yml_file" "$DEST_DIR"
 
         # Extract the corresponding .i or .c file from the yml_file
-        source_file=$(grep -oP "(?<=input_files: ').*\.(i|c)(?=')" "$yml_file")
+        source_file=$(grep -oP "(?<=input_files: ').*\.(i|c)(?=')" "$yml_file") || true
 
         # If the source file exists, copy it too
         if [ -n "$source_file" ] && [ -f "$(dirname "$yml_file")/$source_file" ]; then
