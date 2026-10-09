@@ -10,7 +10,7 @@ python3 tests/integration/run.py             # or: make integration
 
 The exit status is 0 when every check passes, 1 when one fails, 2 when the suite could not run (a missing task, tool or validator, an unreadable configuration, a failed `benchexec` call), with the reason on standard error. The table and the failed checks go to standard output and to `tests/integration/out/table.txt`; `out/results.json` has every run (status, CPU time, memory, witness, validation) and the failed and passed checks.
 
-Requirements: Linux with BenchExec (`benchexec` on the path, cgroups as BenchExec needs them; tested with BenchExec 3.35), Python 3 with `yaml` (a BenchExec dependency), and a `tools/` directory made by `scripts/download-tools.py`. Every verifier, validator and `./cooperace` run goes through `benchexec`; nothing is started outside it. Set `TMPDIR=/tmp` if `TMPDIR` points to a directory BenchExec overlays (BenchExec's container then refuses to start).
+Requirements: Linux with BenchExec (`benchexec` on the path, cgroups as BenchExec needs them; tested with BenchExec 3.35), Python 3 with `yaml` (a BenchExec dependency), and a `tools/` directory made by `scripts/download-tools.py`. Every verifier, validator and `./cooperace` run goes through `benchexec`; nothing is started outside it. The `alone-` runs put the checkout's `lib/benchexec-*.whl` first on `PYTHONPATH`, so the `benchexec` command runs them with the wheel's executor and tool-info modules, the BenchExec version CoOpeRace bundles; the other runs, and the validators, use the installed BenchExec. Set `TMPDIR=/tmp` if `TMPDIR` points to a directory BenchExec overlays (BenchExec's container then refuses to start).
 
 ## What is run
 

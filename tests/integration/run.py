@@ -6,7 +6,8 @@ ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
 
   * with the component alone, through the component's own BenchExec tool-info
     module and the options of its fm-tools entry for SV-COMP 2026 (the
-    reference);
+    reference), under the BenchExec of the wheel in the checkout's lib/, the
+    version whose tool-info modules CoOpeRace itself imports;
   * inside CoOpeRace with a one-component configuration (conf/only-*.json);
   * inside CoOpeRace with each production configuration (conf/svcomp26.json,
     conf/svcomp25.json, and any --config given);
@@ -249,27 +250,45 @@ def option_pairs(options):
 SECRET_NAME = re.compile("TOKEN|SECRET|PASSWORD|KEY", re.IGNORECASE)
 
 
-def benchexec_environment():
+def bundled_benchexec(cdir):
+    """The one BenchExec wheel `lib/benchexec-*.whl` of the checkout `cdir`,
+    the BenchExec version whose tool-info modules CoOpeRace imports.  Raises
+    CouldNotRun unless there is exactly one."""
+    wheels = sorted((cdir / "lib").glob("benchexec-*.whl"))
+    if len(wheels) != 1:
+        raise CouldNotRun(f"expected one lib/benchexec-*.whl in {cdir}, found {len(wheels)}")
+    return wheels[0]
+
+
+def benchexec_environment(wheel=None):
     """The environment `benchexec` is started with.  BenchExec writes the
     environment of its own process into every result XML, so variables whose
     name contains TOKEN, SECRET, PASSWORD or KEY are left out; TMPDIR is /tmp,
-    since a TMPDIR that BenchExec overlays makes its container refuse to start."""
+    since a TMPDIR that BenchExec overlays makes its container refuse to start.
+    With `wheel`, the wheel is first on PYTHONPATH, so that the `benchexec`
+    command imports the BenchExec package (the executor and the tool-info
+    modules) from the wheel and not from the system's installation."""
     env = {k: v for k, v in os.environ.items() if not SECRET_NAME.search(k)}
     env["TMPDIR"] = "/tmp"
+    if wheel is not None:
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(wheel)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     return env
 
 
-def run_benchexec(definition, workdir, tool_directory, out_dir, name, args):
-    """Run `benchexec` on `definition` with `workdir` as the working directory."""
+def run_benchexec(definition, workdir, tool_directory, out_dir, name, args, wheel=None):
+    """Run `benchexec` on `definition` with `workdir` as the working directory,
+    with `wheel` (see benchexec_environment) as its BenchExec if given."""
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = ["benchexec", "--tool-directory", str(tool_directory), "-N", str(args.parallel),
            "--no-compress-results", "--name", name, "-o", str(out_dir) + os.sep]
     if args.allowed_cores:
         cmd += ["--allowedCores", args.allowed_cores]
     cmd.append(str(definition))
-    print("+ (cd", workdir, "&&", " ".join(shlex.quote(c) for c in cmd), ")", flush=True)
+    prefix = f"PYTHONPATH={shlex.quote(str(wheel))} " if wheel is not None else ""
+    print("+ (cd", workdir, "&&", prefix + " ".join(shlex.quote(c) for c in cmd), ")", flush=True)
     with open(out_dir / f"{name}.stdout.txt", "w") as log:
-        proc = subprocess.run(cmd, cwd=workdir, env=benchexec_environment(),
+        proc = subprocess.run(cmd, cwd=workdir, env=benchexec_environment(wheel),
                               stdout=log, stderr=subprocess.STDOUT)
     if proc.returncode != 0:
         raise CouldNotRun(f"benchexec exited with {proc.returncode}; see {out_dir}/{name}.stdout.txt")
@@ -414,6 +433,7 @@ def machine_description(cdir):
                 cpus=os.cpu_count(), mem_kb=mem, python=platform.python_version(),
                 benchexec=subprocess.run(["benchexec", "--version"], capture_output=True,
                                          text=True).stdout.strip(),
+                benchexec_bundled=bundled_benchexec(cdir).name,
                 cooperace_commit=git.stdout.strip() if git.returncode == 0 else None,
                 cooperace_describe=git_describe(cdir),
                 tools=tools.read_text().splitlines() if tools.exists() else [])
@@ -425,7 +445,9 @@ def verify(args, runs, cdir, out):
     """Run every verification run definition: the components alone (one
     BenchExec benchmark each, since each has its own tool-info module and
     working directory) and CoOpeRace's configurations (one benchmark, the
-    configuration given as the option --conf)."""
+    configuration given as the option --conf).  A component alone runs under
+    the BenchExec of `cdir`'s lib/ wheel, the one whose tool-info modules
+    CoOpeRace uses; the other benchmarks use the installed BenchExec."""
     limits = dict(timelimit=f"{args.timelimit} s", hardtimelimit=f"{int(args.timelimit * 1.25)} s",
                   memlimit=args.memlimit, cores=str(args.cores))
     vdir = out / "verify"
@@ -439,7 +461,8 @@ def verify(args, runs, cdir, out):
         definition = out / "defs" / f"{name}.xml"
         write_definition(definition, comp["module"], {name: option_pairs(comp["options"])},
                          limits, {name: runs[name]["tasks"]})
-        run_benchexec(definition, tool_dir, tool_dir, vdir, name, args)
+        run_benchexec(definition, tool_dir, tool_dir, vdir, name, args,
+                      wheel=bundled_benchexec(cdir))
     coop = {n: r for n, r in runs.items() if r["kind"] != "alone"}
     if coop:
         definition = out / "defs" / "cooperace.xml"
