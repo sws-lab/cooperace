@@ -1,7 +1,7 @@
-"""Defects of src/cooperace.py known when the suite was written, one strict
-xfail each. A test here states the behaviour the code should have; it fails
-today, and fixing the defect makes it pass, which strict xfail reports as an
-error until the marker is removed."""
+"""Tests for defects of src/cooperace.py found in review (D1, D2 and D4 of the
+review's table), each stating the behaviour the fixed code has. D2 runs
+runParallel in a daemon thread so that a hang is a failure and not a stuck
+test run."""
 import threading
 import time
 
