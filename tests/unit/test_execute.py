@@ -222,7 +222,6 @@ DRIVER = textwrap.dedent('''
     from pathlib import Path
 
     root, support_dir, stub_dir, run_dir = sys.argv[1:5]
-    os.chdir(root)
     sys.path[:0] = [root, support_dir]
     from src.cooperace import cli
     from src.cooperace.components import ComponentRunner

@@ -4,7 +4,10 @@ verdict: <verdict>" as the last line of standard output, which BenchExec's
 tool-info module for CoOpeRace reads. The exit status is 0 when a verdict
 is printed, 2 for a command line argparse refuses, and 1 for an error that
 ends CoOpeRace, such as a conf that config.load refuses; after SIGTERM,
-SIGINT or SIGHUP, CoOpeRace ends by that signal (strategy.execute)."""
+SIGINT or SIGHUP, CoOpeRace ends by that signal (strategy.execute).
+
+The task, the property file and `--conf` are paths relative to the working
+directory; without `--conf`, conf/svcomp26.json of TOOL_DIR is read."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +15,7 @@ import json
 import os
 import traceback
 
-from . import config, strategy
+from . import TOOL_DIR, config, strategy
 from .components import DATA_MODELS, ComponentRunner, remove_old_witness_files
 from .processes import ComponentGroup
 
@@ -35,7 +38,7 @@ def main() -> None:
         with open(args.conf) as file:
             conf = json.load(file)
     else:
-        with open("conf/svcomp26.json") as file:
+        with open(os.path.join(TOOL_DIR, "conf", "svcomp26.json")) as file:
             conf = json.load(file)
 
     runner = ComponentRunner(abs_path, args.prop, args.arch)

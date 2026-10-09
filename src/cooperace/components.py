@@ -30,6 +30,7 @@ from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 
+from . import TOOL_DIR
 from .config import Step
 from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
 from .strategy import NO_OUTCOME, Outcome
@@ -78,9 +79,7 @@ class ComponentSpec:
     def tool(self) -> BaseTool2:
         """A new object of the tool-info module's class Tool. The module is
         imported here, from the BenchExec wheel that src/cooperace/__init__.py
-        puts on sys.path relative to the working directory, so the working
-        directory must still be the one CoOpeRace was started in; CoOpeRace
-        never changes it."""
+        puts first on sys.path, whatever the working directory is."""
         return importlib.import_module(self.module).Tool()
 
 
@@ -134,8 +133,8 @@ class ComponentRunner:
     """Runs the components of the steps of a strategy on one task: the
     StepRunner that strategy.execute is given. It holds the task (`file`,
     `property_file`, `data_model`), the components it can run (`registry`),
-    the directory that holds their directories (`tools_dir`, tools/ in the
-    working directory) and, between prepare and cleanup, the work directory
+    the directory that holds their directories (`tools_dir`, tools/ in
+    TOOL_DIR, wherever the working directory is) and, between prepare and cleanup, the work directory
     with one directory per component run (`work_dir`).
 
     `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
@@ -160,7 +159,7 @@ class ComponentRunner:
         #The components this runner can run, by name
         self.registry = dict(registry)
         #The directory that holds the components' directories
-        self.tools_dir = os.path.join(os.getcwd(), "tools")
+        self.tools_dir = os.path.join(TOOL_DIR, "tools")
         self.work_dir = None
 
     def prepare(self) -> None:
@@ -218,7 +217,7 @@ class ComponentRunner:
         tool_locator = BaseTool2.ToolLocator(tool_directory=tool_location)
         executable = actor.executable(tool_locator)
 
-        cwd = str.rsplit(executable, "/", 1)[0]
+        cwd = os.path.dirname(executable)
 
         task = BaseTool2.Task.with_files(
             input_files=[self.file],

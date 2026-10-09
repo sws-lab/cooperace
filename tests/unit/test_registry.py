@@ -53,10 +53,7 @@ def test_components_without_a_witness_spec_of_their_own_use_the_default():
 
 
 @pytest.mark.parametrize("name", sorted(DIRECTORIES))
-def test_every_tool_info_module_imports_and_names_its_component(name, monkeypatch):
-    # The BenchExec wheel is on sys.path relative to the repository root.
-    monkeypatch.chdir(ROOT)
-
+def test_every_tool_info_module_imports_and_names_its_component(name):
     tool = REGISTRY[name].tool()
 
     expected = "SV-sanitizers" if name == "sv-sanitizers" else name
@@ -77,8 +74,8 @@ def test_tool_makes_a_new_object_of_the_module_s_class_Tool(monkeypatch):
 
 
 def test_importing_components_imports_no_tool_info_module():
-    code = ("import os, sys\n"
-            f"os.chdir({str(ROOT)!r}); sys.path.insert(0, {str(ROOT)!r})\n"
+    code = ("import sys\n"
+            f"sys.path.insert(0, {str(ROOT)!r})\n"
             "import src.cooperace.components\n"
             "print(sorted(m for m in sys.modules if m.startswith('benchexec.tools.')))\n")
 
@@ -106,10 +103,9 @@ def test_a_tool_info_module_that_cannot_be_imported_is_a_step_without_a_verdict(
 
 
 def test_sv_sanitizers_is_reported_as_an_error_because_its_name_differs(
-        runner, group, capsys, monkeypatch):
+        runner, group, capsys):
     """The tool-info module names the component "SV-sanitizers", and run_component
     looks the entry up by that name; see the entry in REGISTRY."""
-    monkeypatch.chdir(ROOT)
 
     outcome = runner.run_step(Step("sv-sanitizers", "all"), group)
 

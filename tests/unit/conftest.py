@@ -1,9 +1,6 @@
 """Imports the package src/cooperace, and the tool-info module of every
-component in its registry, with the repository root as the working
-directory, because src/cooperace/__init__.py puts lib/*.whl (the bundled
-BenchExec) on sys.path relative to the working directory, and a module is
-read from the wheel by that relative path when it is first imported. The
-tests can then be run from any directory."""
+component in its registry. The package finds the bundled BenchExec (lib/*.whl)
+from its own location, so the tests can be run from any directory."""
 import importlib
 import os
 import subprocess
@@ -14,18 +11,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
-_start_directory = os.getcwd()
-os.chdir(ROOT)
-try:
-    sys.path.insert(0, str(ROOT))
-    import src.cooperace.components
+sys.path.insert(0, str(ROOT))
+import src.cooperace.components  # noqa: E402
 
-    for spec in src.cooperace.components.REGISTRY.values():
-        importlib.import_module(spec.module)
-finally:
-    os.chdir(_start_directory)
+for spec in src.cooperace.components.REGISTRY.values():
+    importlib.import_module(spec.module)
 
-# Imported after the import above, which needs the repository root as working directory.
 from src.cooperace.components import ComponentRunner  # noqa: E402
 from src.cooperace.processes import ComponentGroup  # noqa: E402
 
