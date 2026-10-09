@@ -167,6 +167,17 @@ def test_a_conf_with_a_strategy_for_the_property_runs_it(run_main, no_run, tmp_p
     assert no_run == [(conf, name)]
 
 
+@pytest.mark.parametrize("result", ["true", "false", "unknown", "false(unreach-call)", "false(no-overflow)",
+                                    "false(valid-deref)", "false(valid-free)", "false(valid-memtrack)"])
+def test_main_prints_the_result_of_run_as_the_verdict_line(run_main, monkeypatch, result):
+    monkeypatch.setattr(cli, "run", lambda conf, runner, group=None: result)
+
+    status, out, _ = run_main("--prop", str(DATA_RACE))
+
+    assert status == 0
+    assert out.splitlines()[-1] == f"CoOpeRace verdict: {result}"
+
+
 def test_a_conf_of_properties_refuses_a_property_it_has_no_strategy_for(run_main, no_run, tmp_path):
     conf = {"properties": {"unreach-call": {"runType": "sequential", "tools": [{"Goblint": "all"}]}}}
     (tmp_path / "conf.json").write_text(json.dumps(conf))

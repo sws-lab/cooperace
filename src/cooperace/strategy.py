@@ -28,10 +28,12 @@ from .processes import ComponentGroup
 
 # What run_node, run_sequence, run_parallel and a StepRunner's run_step
 # return: the verdict ("true", "false" or "unknown"), the name of the
-# component that gave it (None for "unknown") and that component's witness
-# files from this run.
-Outcome = namedtuple("Outcome", "verdict component witness_files")
-NO_OUTCOME = Outcome("unknown", None, [])
+# component that gave it (None for "unknown"), that component's witness
+# files from this run, and the result that execute returns for it, which the
+# command line prints after "CoOpeRace verdict: " (the StepRunner's to choose:
+# components.reported_result, for example "false(valid-deref)").
+Outcome = namedtuple("Outcome", "verdict component witness_files result")
+NO_OUTCOME = Outcome("unknown", None, [], "unknown")
 
 RunStep = Callable[[Step, ComponentGroup], Outcome]
 
@@ -141,7 +143,9 @@ def run_parallel(parallel: Parallel, parent: ComponentGroup, run_step: RunStep) 
 
 def execute(root: Node, runner: StepRunner, group: ComponentGroup | None = None) -> str:
     """Runs the tree `root` with `runner`, in the ComponentGroup `group` (a
-    new one if None), and returns its verdict. No component is running when it
+    new one if None), and returns the `result` of the tree's Outcome: "unknown"
+    without an accepted verdict, else what the runner's run_step gave as the
+    result of the accepted one. No component is running when it
     returns. Only the witness files of the Outcome it returns are delivered.
     For a verdict of "true" or "false" it prints "CoOpeRace result from:
     <name>" last, naming the component whose verdict it returns, so that the
@@ -176,16 +180,13 @@ def execute(root: Node, runner: StepRunner, group: ComponentGroup | None = None)
             if signal.getsignal(signum) != signal.SIG_IGN:
                 handlers[signum] = signal.signal(signum, raiseStopSignal)
 
-    verdict = "unknown"
-    component = None
+    outcome = NO_OUTCOME
     stopped_by = None
     runner.prepare()
     try:
         outcome = run_node(root, group, runner.run_step)
         #Only the witness of the component whose verdict is returned
         runner.deliver(outcome.witness_files)
-        verdict = outcome.verdict
-        component = outcome.component
     except StopSignal as stop:
         stopped_by = stop.signum
     finally:
@@ -198,6 +199,6 @@ def execute(root: Node, runner: StepRunner, group: ComponentGroup | None = None)
         print(f"CoOpeRace stopped by signal {stopped_by}", flush=True)
         signal.signal(stopped_by, signal.SIG_DFL)
         os.kill(os.getpid(), stopped_by)
-    if verdict == "true" or verdict == "false":
-        print(f"CoOpeRace result from: {component}", flush=True)
-    return verdict
+    if outcome.verdict == "true" or outcome.verdict == "false":
+        print(f"CoOpeRace result from: {outcome.component}", flush=True)
+    return outcome.result

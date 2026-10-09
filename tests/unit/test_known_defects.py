@@ -22,12 +22,12 @@ def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_runn
     def run_component(actor, step, group):
         if actor.name() == "Goblint":
             raise RuntimeError("Could not find executable")
-        return Outcome("true", actor.name(), [])
+        return Outcome("true", actor.name(), [], "true")
 
     runner.run_component = run_component
     root = config.load(tree, runner.registry)
 
-    assert strategy.run_sequence(root, group, runner.run_step) == Outcome("true", "Deagle", [])
+    assert strategy.run_sequence(root, group, runner.run_step) == Outcome("true", "Deagle", [], "true")
 
 
 def test_D2_a_branch_ending_with_systemexit_does_not_hang_run_parallel(make_runner, group):
@@ -105,12 +105,12 @@ def test_D1_a_failing_branch_of_a_parallel_node_does_not_stop_its_sibling(make_r
     def run_component(actor, step, group):
         if actor.name() == "Goblint":
             raise RuntimeError("Could not find executable")
-        return Outcome("false", actor.name(), [])
+        return Outcome("false", actor.name(), [], "false")
 
     runner.run_component = run_component
     root = config.load(tree, runner.registry)
 
-    assert strategy.run_parallel(root, group, runner.run_step) == Outcome("false", "Deagle", [])
+    assert strategy.run_parallel(root, group, runner.run_step) == Outcome("false", "Deagle", [], "false")
 
 
 def test_D1_a_stop_signal_in_a_step_propagates(make_runner, group):

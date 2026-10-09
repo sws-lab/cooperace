@@ -62,7 +62,7 @@ class Script:
         if group.stopped:
             return NO_OUTCOME
         if verdict in ("true", "false"):
-            return Outcome(verdict, actor.name(), witness[0] if witness else [])
+            return Outcome(verdict, actor.name(), witness[0] if witness else [], verdict)
         return NO_OUTCOME
 
 
@@ -83,7 +83,7 @@ def test_sequence_stops_at_the_first_accepted_verdict(make_runner, group, tmp_pa
 
     outcome = run(runner, tree, group)
 
-    assert outcome == Outcome("true", "Deagle", [])
+    assert outcome == Outcome("true", "Deagle", [], "true")
     assert script.started == ["a", "b"]
 
 
@@ -155,7 +155,7 @@ def test_parallel_returns_the_first_accepted_verdict_and_stops_the_loser(make_ru
     outcome = run(runner, tree, group)
     elapsed = time.monotonic() - started
 
-    assert outcome == Outcome("false", "Deagle", ["/run/b/w.yml"])
+    assert outcome == Outcome("false", "Deagle", ["/run/b/w.yml"], "false")
     assert elapsed < 10  # the 60 s sleep was ended, not waited for
     assert script.returncodes["a"] in (-15, -9)
     assert script.returncodes["b"] == 0
@@ -223,7 +223,7 @@ def test_parallel_returns_the_verdict_when_another_branch_ends_with_systemexit(m
     def run_step(step, group):
         if step.component == "Goblint":
             raise SystemExit(3)
-        return Outcome("true", step.component, [])
+        return Outcome("true", step.component, [], "true")
 
     runner.run_step = run_step
 

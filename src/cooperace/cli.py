@@ -1,8 +1,14 @@
 """The command line of CoOpeRace (the launcher `cooperace` calls main): reads
 the arguments, the property file and the conf, checks them and the
 installation, runs the conf's strategy for the property on the task, and
-prints "CoOpeRace verdict: <verdict>" as the last line of standard output,
-which BenchExec's tool-info module for CoOpeRace reads.
+prints "CoOpeRace verdict: <result>" as the last line of standard output,
+which BenchExec's tool-info module for CoOpeRace reads. <result> is
+"unknown", "true", or the "false" of the component whose verdict was
+accepted (components.reported_result): for no-data-race plain "false", the
+line that module (BenchExec 3.31 to 3.35) maps to false(no-data-race), and for the
+other properties the status with its property, as "false(unreach-call)",
+"false(no-overflow)" or, for valid-memsafety, "false(valid-deref)",
+"false(valid-free)" or "false(valid-memtrack)".
 
 The task, the property file and `--conf` are paths relative to the working
 directory; without `--conf`, conf/svcomp26.json of TOOL_DIR is read. The
@@ -13,7 +19,7 @@ no strategy for (config.load_strategies: a conf that is one strategy has one
 for no-data-race only), are refused as a defect of the property below.
 
 Exit status and output. A verdict line is printed only for a run that was
-carried out, and then the status is 0; the verdict is "unknown" when no
+carried out, and then the status is 0; the result is "unknown" when no
 component gave an accepted verdict, also when a component crashed (its status
 is printed in its block and CoOpeRace goes on with the next step). A defect of
 the command line, the property, the conf or the installation, and an
@@ -177,7 +183,8 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     every strategy of the conf is installed in the version whose options
     `runner` has (ComponentRunner.installation_problems), and runs the
     strategy taken with strategy.execute in the ComponentGroup `group` (a new
-    one if None). Returns the verdict.
+    one if None). Returns the result strategy.execute returns, which main
+    prints after "CoOpeRace verdict: ".
 
     Raises SetupError, before any component starts, for a conf that
     config.load_strategies refuses, for a property the conf has no strategy

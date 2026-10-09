@@ -11,7 +11,8 @@ logs---", "Tool name: <name> Status: <status> Exit code: <code>" and, unless
 CoOpeRace stopped it, "Tool name: <name> Result: <verdict>"; "Memory limit
 of <name>: ..." and "CPU-time limit of <name>: ..." before a component with
 a limit starts. strategy.execute adds "CoOpeRace result from: <name>" and
-"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <verdict>".
+"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <result>",
+where <result> is "unknown" or reported_result of the returned status.
 A component that cannot be run or crashes is reported in its block and is a
 step without a verdict (run_step). A component that is not installed, or
 whose installed version is not the one whose options tools-options.json
@@ -50,7 +51,7 @@ from benchexec.tools.template import BaseTool2, ToolNotFoundException
 from . import TOOL_DIR
 from .config import Step
 from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
-from .properties import FORMULAS, NO_DATA_RACE
+from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
 
 
@@ -437,9 +438,9 @@ class ComponentRunner:
 
         status = component_status(actor, command.cmdline, tool_result, component_cpu_time_limit(step))
 
-        if confirm_verdict(step.accept, status, "true"):
+        if confirm_verdict(step.accept, status, "true", self.property_name):
             verdict = "true"
-        elif confirm_verdict(step.accept, status, "false"):
+        elif confirm_verdict(step.accept, status, "false", self.property_name):
             verdict = "false"
         else:
             verdict = "unknown"
@@ -448,7 +449,7 @@ class ComponentRunner:
 
         if verdict == "unknown":
             return NO_OUTCOME
-        return Outcome(verdict, actor.name(), witness_files)
+        return Outcome(verdict, actor.name(), witness_files, reported_result(self.property_name, status))
 
 
 def component_memory_limit(step: Step) -> int | None:
@@ -598,28 +599,62 @@ def output_lines(output: str) -> list[str]:
 
 
 #The statuses of a component, as BenchExec's tool-info modules return them, that
-#are a component's verdict "true" or "false" on the no-data-race property. Any
-#other status, among them a violation of another property such as
-#"false(unreach-call)", is no verdict. BenchExec's RESULT_FALSE_PROP, plain
-#"false", is what Dartagnan's tool-info module (benchexec/tools/dartagnan.py,
-#the same in BenchExec 3.31 to 3.35) returns for a FAIL without a line that
-#names the data race.
+#are a component's verdict "true" or "false" on each property (a key of
+#properties.FORMULAS). Any other status, among them a violation of another
+#property such as "false(unreach-call)" on a no-data-race task, is no verdict.
+#BenchExec's RESULT_FALSE_PROP, plain "false", is what Dartagnan's tool-info
+#module (benchexec/tools/dartagnan.py, the same in BenchExec 3.31 to 3.35)
+#returns for a FAIL without a line that names the violation. BenchExec's
+#get_result_category scores it as the property's "false" on a task whose
+#expected verdict has no sub-property, but on a valid-memsafety task, whose
+#expected "false" names one (valid-deref, valid-free or valid-memtrack), it
+#is "result does not match property" (0 points) where the expected verdict
+#is false, and wrong (-16) where it is true; so for valid-memsafety only the
+#three statuses with a sub-property are a "false".
 ACCEPTED_STATUSES = {
-    "true": (bresult.RESULT_TRUE_PROP,),
-    "false": (bresult.RESULT_FALSE_DATARACE, bresult.RESULT_FALSE_PROP),
+    UNREACH_CALL: {"true": (bresult.RESULT_TRUE_PROP,),
+                   "false": (bresult.RESULT_FALSE_REACH, bresult.RESULT_FALSE_PROP)},
+    NO_OVERFLOW: {"true": (bresult.RESULT_TRUE_PROP,),
+                  "false": (bresult.RESULT_FALSE_OVERFLOW, bresult.RESULT_FALSE_PROP)},
+    VALID_MEMSAFETY: {"true": (bresult.RESULT_TRUE_PROP,),
+                      "false": (bresult.RESULT_FALSE_DEREF, bresult.RESULT_FALSE_FREE,
+                                bresult.RESULT_FALSE_MEMTRACK)},
+    NO_DATA_RACE: {"true": (bresult.RESULT_TRUE_PROP,),
+                   "false": (bresult.RESULT_FALSE_DATARACE, bresult.RESULT_FALSE_PROP)},
 }
 
 
-def confirm_verdict(tool_acceptance_criteria: str, status: str, expected_verdict: str) -> bool:
+def confirm_verdict(tool_acceptance_criteria: str, status: str, expected_verdict: str,
+                    property_name: str) -> bool:
     """Whether the status `status` of a component run (from component_status)
-    is the verdict `expected_verdict` ("true" or "false") and the acceptance
+    is the verdict `expected_verdict` ("true" or "false") on the property
+    `property_name` (a key of ACCEPTED_STATUSES) and the acceptance
     `tool_acceptance_criteria` ("true", "false" or "all") accepts that verdict.
-    `status` is the verdict if it is one of ACCEPTED_STATUSES[expected_verdict],
-    compared as it is, including the case; any other status, such as
-    "false(unreach-call)", "unknown", "TIMEOUT" or "ERROR (1)", is not."""
-    if status not in ACCEPTED_STATUSES.get(expected_verdict, ()):
+    `status` is the verdict if it is one of
+    ACCEPTED_STATUSES[property_name][expected_verdict], compared as it is,
+    including the case; any other status, such as "false(unreach-call)" on
+    another property, "unknown", "TIMEOUT" or "ERROR (1)", is not."""
+    if status not in ACCEPTED_STATUSES[property_name].get(expected_verdict, ()):
         return False
     return tool_acceptance_criteria in ("all", expected_verdict)
+
+
+def reported_result(property_name: str, status: str) -> str:
+    """What CoOpeRace prints after "CoOpeRace verdict: " for a status `status`
+    of a component that confirm_verdict accepted on the property
+    `property_name`. For no-data-race it is "true" or "false", the line
+    BenchExec's tool-info module for CoOpeRace (BenchExec 3.31 to 3.35) maps to
+    "true" and "false(no-data-race)", for both accepted "false" statuses.
+    For another property it is `status`, the result BenchExec gives the
+    component alone, except that a plain "false" (accepted only for a
+    property without sub-properties) becomes "false(<property_name>)", which
+    BenchExec scores the same on a task of that property and which names the
+    property in the result."""
+    if property_name == NO_DATA_RACE:
+        return "true" if status == bresult.RESULT_TRUE_PROP else "false"
+    if status == bresult.RESULT_FALSE_PROP:
+        return f"{bresult.RESULT_FALSE_PROP}({property_name})"
+    return status
 
 
 def print_component_run(name: str, tool_result: subprocess.CompletedProcess, status: str,

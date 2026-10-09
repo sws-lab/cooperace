@@ -249,6 +249,48 @@ def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
     assert {s: signal.getsignal(s) for s in before} == before
 
 
+# --- the result per property ---------------------------------------------------
+
+@pytest.mark.parametrize("property_name, statuses, expected", [
+    ("no-data-race", ["false(no-data-race)"], "false"),
+    ("no-data-race", ["false"], "false"),
+    ("no-data-race", ["true"], "true"),
+    ("no-data-race", ["false(unreach-call)", "false(valid-deref)"], "unknown"),
+    ("unreach-call", ["false(unreach-call)"], "false(unreach-call)"),
+    ("unreach-call", ["false"], "false(unreach-call)"),
+    ("unreach-call", ["false(no-data-race)", "true"], "true"),
+    ("no-overflow", ["false(no-overflow)"], "false(no-overflow)"),
+    ("no-overflow", ["false"], "false(no-overflow)"),
+    ("no-overflow", ["false(unreach-call)", "unknown"], "unknown"),
+    ("valid-memsafety", ["false(valid-deref)"], "false(valid-deref)"),
+    ("valid-memsafety", ["false(valid-free)"], "false(valid-free)"),
+    ("valid-memsafety", ["false(valid-memtrack)"], "false(valid-memtrack)"),
+    ("valid-memsafety", ["false", "false(valid-memcleanup)", "false(valid-free)"], "false(valid-free)"),
+    ("valid-memsafety", ["true"], "true"),
+], ids=lambda value: ",".join(value) if isinstance(value, list) else value)
+def test_run_returns_the_result_of_the_accepted_status_for_the_property(
+        tmp_path, run_dir, capsys, property_name, statuses, expected):
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=property_name)
+    names = [f"Stub {index}" for index in range(len(statuses))]
+    for name, status in zip(names, statuses, strict=True):
+        register_stub(runner, name, make_script(tmp_path / "stubs" / name.replace(" ", "_"),
+                                                f'echo "STUB-STATUS: {status}"\n'))
+    strategy = {"runType": "sequential", "tools": [{name: "all"} for name in names]}
+
+    result = cli.run({"properties": {property_name: strategy}}, runner)
+    lines = lines_of(capsys.readouterr())
+
+    assert result == expected
+    #A component's own Result line keeps the verdict, without the property
+    results = [line.split(" Result: ")[1] for line in lines if line.startswith("Tool name: ") and " Result: " in line]
+    assert len(results) == len(statuses)
+    assert set(results) <= {"true", "false", "unknown"}
+    if expected == "unknown":
+        assert not any(line.startswith("CoOpeRace result from:") for line in lines)
+    else:
+        assert lines[-1] == f"CoOpeRace result from: {names[-1]}"
+
+
 # --- per-component limits ----------------------------------------------------
 
 # A stub that runs until a signal ends it. It first makes itself non-dumpable
