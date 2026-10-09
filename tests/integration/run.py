@@ -25,6 +25,8 @@ of these checks (see README.md):
   6  every output of CoOpeRace follows the protocol: the verdict line last,
      `CoOpeRace result from: X` before it, each component block closed, no
      `Error, something went wrong`, one witness file for a `false`
+  7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
+     is printed with the configured value whenever that component started
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
 `validate` and `check` take the runs and tasks recorded in DIR/meta.json by
@@ -272,6 +274,7 @@ def read_results(out_dir):
             continue
         root = ET.parse(bz2.open(xml) if xml.endswith(".bz2") else xml).getroot()
         rundef = root.get("name").rsplit(".", 1)[0]
+        memlimit = root.get("memlimit")
         logs = Path(re.sub(r"\.results\..*", ".logfiles", xml))
         files = Path(re.sub(r"\.results\..*", ".files", xml))
         for run in root.iter("run"):
@@ -284,6 +287,7 @@ def read_results(out_dir):
                 wall=float((cols.get("walltime") or "0s").rstrip("s")),
                 memory=int((cols.get("memory") or "0B").rstrip("B")),
                 reason=cols.get("terminationreason"),
+                memlimit=int(memlimit.rstrip("B")) if memlimit else None,
                 log=logs / f"{rundef}.{task}.yml.log",
                 files=files / rundef / f"{task}.yml")
     return results
@@ -304,6 +308,14 @@ def conf_components(conf):
     return names
 
 
+def read_conf(path):
+    """The CoOpeRace configuration in the file `path`."""
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        raise CouldNotRun(f"cannot read the configuration {path}: {e}")
+
+
 def plan(args):
     """The run definitions: alone-<c>, only-<c> for every component c, and one
     per production configuration; with the tasks each one runs."""
@@ -316,8 +328,9 @@ def plan(args):
         own = [t for t in tasks if c in t["owners"]] if not args.cross else tasks
         if own:
             runs[f"alone-{c}"] = dict(kind="alone", component=c, tasks=own)
+            conf = HERE / "conf" / f"only-{c}.json"
             runs[f"only-{c}"] = dict(kind="only", component=c, tasks=own,
-                                     conf=HERE / "conf" / f"only-{c}.json")
+                                     conf=conf, config=read_conf(conf))
     for c in args.components.split(","):
         if c not in present:
             skipped[c] = f"tools/{c} is not installed"
@@ -325,16 +338,13 @@ def plan(args):
     for path in configs:
         path = Path(path).resolve()
         name = path.stem
-        try:
-            conf = json.loads(path.read_text())
-        except (OSError, ValueError) as e:
-            raise CouldNotRun(f"cannot read the configuration {path}: {e}")
+        conf = read_conf(path)
         missing = [n for n in conf_components(conf)
                    if not (cdir / "tools" / TOOL_DIRS.get(n, n)).is_dir()]
         if missing:
             skipped[name] = "not run: " + ", ".join(sorted(set(missing))) + " not installed under tools/"
         else:
-            runs[name] = dict(kind="production", conf=path, tasks=tasks)
+            runs[name] = dict(kind="production", conf=path, config=conf, tasks=tasks)
     return manifest, tasks, runs, skipped, cdir
 
 
@@ -358,6 +368,7 @@ def plan_from_meta(meta):
             default = (HERE / "conf" / f"{name}.json" if r["kind"] == "only"
                        else cdir / "conf" / f"{name}.json")
             run["conf"] = Path(r.get("conf", default))
+            run["config"] = r["config"] if "config" in r else read_conf(run["conf"])
         runs[name] = run
     ids = {t["id"] for r in runs.values() for t in r["tasks"]}
     tasks = [t for t in all_tasks if t["id"] in ids]
@@ -603,6 +614,41 @@ def is_yaml_witness(path):
 DELIVERED_WITNESSES = {"witness.graphml": is_graphml, "witness.yml": is_yaml_witness}
 
 
+def limit_problems(run, r, lines):
+    """What is wrong with the lines in which CoOpeRace announces the limits of
+    `memoryLimits` and `cpuTimeLimits` of the run's configuration (check 7):
+    each component with a limit that started must have its line, and every
+    such line must give the configured limit, a percentage taken of the
+    memory limit BenchExec records for the run, within 1 %."""
+    config = run.get("config") or {}
+    if lines is None or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
+        return []
+    blocks, _ = component_blocks(lines)
+    started = {b["name"] for b in blocks if b["exit_code"] != "none, not started"}
+    problems = []
+    # The lines withResourceLimits of src/cooperace.py prints.
+    for key, label, unit in (("memoryLimits", "Memory limit", "bytes"),
+                             ("cpuTimeLimits", "CPU-time limit", "s")):
+        for name, value in config.get(key, {}).items():
+            if isinstance(value, str) and value.endswith("%"):
+                if not r.get("memlimit"):
+                    problems.append(f"{key} gives {name} {value}, but BenchExec records no memory limit")
+                    continue
+                expected = r["memlimit"] * float(value[:-1]) / 100
+                wanted = f"{value} of the run's {r['memlimit']} bytes"
+            else:
+                expected, wanted = float(value), f"{value} {unit}"
+            line_of = re.compile(rf"{label} of {re.escape(name)}: (\d+) {unit}\b")
+            printed = [int(m.group(1)) for line in lines if (m := line_of.match(line))]
+            if name in started and not printed:
+                problems.append(f"{name} started without a line `{label} of {name}: N {unit}` "
+                                f"({key}: {wanted})")
+            for n in printed:
+                if abs(n - expected) > 0.01 * expected:
+                    problems.append(f"{name}'s limit is printed as {n} {unit}, but {key} gives {wanted}")
+    return problems
+
+
 def protocol_problems(r, lines):
     """What in the run `r` of CoOpeRace, whose output is `lines`, departs from
     the protocol that benchexec.tools.cooperace and this suite rely on (check
@@ -708,6 +754,16 @@ def check(results, runs, tasks, skipped, fmt):
             if r:
                 problems = protocol_problems(r, cooperace_output(r))
                 add(6, rundef, t["id"], not problems, "protocol", "; ".join(problems))
+    # Check 7.
+    for rundef, run in runs.items():
+        config = run.get("config") or {}
+        if run["kind"] == "alone" or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
+            continue
+        for t in run["tasks"]:
+            r = results.get((rundef, t["id"]))
+            if r:
+                problems = limit_problems(run, r, cooperace_output(r))
+                add(7, rundef, t["id"], not problems, "limit line", "; ".join(problems))
     # Check 5.
     for rundef, run in runs.items():
         if run["kind"] != "production":
@@ -758,7 +814,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              3: "CoOpeRace with one component equals the component alone",
              4: "witness of every false is confirmed, produced by the answering component",
              5: "production configurations give the expected verdict",
-             6: "every CoOpeRace output follows the protocol"}
+             6: "every CoOpeRace output follows the protocol",
+             7: "CoOpeRace prints the configured component limits"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of a false witness], CPU time; WRONG = verdict differs from the expected one", ""]
     failed = False
@@ -830,6 +887,7 @@ def suite(args):
                                 allowed_cores=args.allowed_cores),
                     sv_benchmarks=manifest["sv_benchmarks"],
                     runs={n: dict({k: str(r[k]) for k in ("component", "conf") if k in r},
+                                  **({"config": r["config"]} if "config" in r else {}),
                                   kind=r["kind"], tasks=[t["id"] for t in r["tasks"]])
                           for n, r in runs.items()},
                     skipped=skipped)
