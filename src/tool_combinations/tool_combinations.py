@@ -57,81 +57,57 @@ class ToolData:
         return cls(name, score, results)
 
     @staticmethod
-    def tool_results_per_task(path, result_type="validated"):
-        data = read_result_xml(path)
+    def task_result(expected_verdict, category, status, result_type):
+        """Returns (kind, points) of one run, or None when its category is not
+        one of those scored (for example "missing"): such a task has no entry.
 
-        tree = ET.ElementTree(ET.fromstring(data))
-        root = tree.getroot()
+        expected_verdict is the run's expectedVerdict, "true" or "false";
+        category and status are the values of the columns of that name. In
+        the "verified" result type a correct result whose witness no
+        validator confirmed (category "correct-unconfirmed", or category
+        "error" with status "witness missing (false(no-data-race))") counts
+        as correct for a task expecting "false"."""
+        if expected_verdict == "false":
+            #Tool gives true when expected false
+            if category == "wrong":
+                return ("wrong", -32)
+            if category == "correct":
+                return ("correct", 1)
+            if result_type == "verified":
+                if category == "correct-unconfirmed":
+                    return ("correct", 1)
+                if category == "error" and status == "witness missing (false(no-data-race))":
+                    return ("correct", 1)
+            if category in ("error", "unknown", "correct-unconfirmed"):
+                return ("unknown", 0)
+        elif expected_verdict == "true":
+            #Tool gives false when expected true
+            if category == "wrong":
+                return ("wrong", -16)
+            if category == "correct":
+                return ("correct", 2)
+            if category in ("error", "unknown", "correct-unconfirmed"):
+                return ("unknown", 0)
+        return None
+
+    @staticmethod
+    def tool_results_per_task(path, result_type="validated"):
+        """Returns ({task name: (kind, points)}, score) for a result file;
+        score is the sum of the points of the tasks."""
+        root = ET.fromstring(read_result_xml(path))
 
         tasks = {}
-        score = 0
 
-        for run in root:
-            if run.tag == "run":
-                name = run.attrib["name"]
-                for column in run:
-                    if column.attrib["title"] == "category":
-                        if run.attrib["expectedVerdict"] == "false":
-                            #Tool gives true when expected false
-                            if column.attrib["value"] == "wrong":
-                                tasks[name] = ("wrong", -32)
-                                score -= 32
-                            elif column.attrib["value"] == "correct":
-                                tasks[name] = ("correct", 1)
-                                score += 1
-                            elif column.attrib["value"] == "error" and result_type == "verified":
-                                for column2 in run:
-                                    if column2.attrib["title"] == "status" and column2.attrib["value"] == "witness missing (false(no-data-race))":
-                                        tasks[name] = ("correct", 1)
-                                        score += 1
-                                    else:
-                                        tasks[name] = ("unknown", 0)
-                            elif column.attrib["value"] == "correct-unconfirmed" and result_type == "verified":
-                                tasks[name] = ("correct", 1)
-                                score += 1
-                            elif column.attrib["value"] == "error" or column.attrib["value"] == "unknown" or column.attrib["value"] == "correct-unconfirmed":
-                                tasks[name] = ("unknown", 0)
-                        elif run.attrib["expectedVerdict"] == "true":
-                            #Tool gives false when expected true
-                            if column.attrib["value"] == "wrong":
-                                tasks[name] = ("wrong", -16)
-                                score -= 16
-                            elif column.attrib["value"] == "correct":
-                                tasks[name] = ("correct", 2)
-                                score += 2
-                            elif column.attrib["value"] == "error" or column.attrib["value"] == "unknown" or column.attrib["value"] == "correct-unconfirmed":
-                                tasks[name] = ("unknown", 0)
+        for run in root.findall("run"):
+            columns = {column.attrib["title"]: column.attrib.get("value") for column in run if "title" in column.attrib}
+            if "category" not in columns:
+                continue
+            result = ToolData.task_result(run.attrib["expectedVerdict"], columns["category"],
+                                          columns.get("status"), result_type)
+            if result is not None:
+                tasks[run.attrib["name"]] = result
 
-        return tasks, score
-
-
-    def tool_score(self, path, result_type="validated"):
-        data = read_result_xml(path)
-
-        tree = ET.ElementTree(ET.fromstring(data))
-        root = tree.getroot()
-
-        score = 0
-
-        for run in root:
-            if run.tag == "run":
-                for column in run:
-                    if column.attrib["title"] == "category":
-                        if run.attrib["expectedVerdict"] == "false":
-                            #Tool gives true when expected false
-                            if column.attrib["value"] == "wrong":
-                                score -= 32
-                            elif column.attrib["value"] == "correct":
-                                score += 1
-                            elif column.attrib["value"] == "error" and column.attrib["status"] == "witness missing (false(no-data-race))" and result_type == "verified":
-                                score += 1
-                        elif run.attrib["expectedVerdict"] == "true":
-                            #Tool gives false when expected true
-                            if column.attrib["value"] == "wrong":
-                                score -= 16
-                            elif column.attrib["value"] == "correct":
-                                score += 2
-        return score
+        return tasks, sum(points for _, points in tasks.values())
 
 
 def parse_xml_data(result_type, results_folder):
@@ -142,7 +118,7 @@ def parse_xml_data(result_type, results_folder):
 
     tools = {}
 
-    for file_name in os.listdir(dir):
+    for file_name in sorted(os.listdir(dir)):
         if os.path.isfile(os.path.join(dir, file_name)) and file_name.endswith((".xml", ".xml.bz2")):
             path = os.path.join(dir, file_name)
             tool_name = file_name.split(".")[0]
@@ -151,48 +127,45 @@ def parse_xml_data(result_type, results_folder):
     return tools
 
 #Gives all combinations of given tools.
-#Returns in the format of a dict, where key is n and value is a list of lists containing n tools
+#Returns in the format of a dict, where key is r, for r from 1 to min(n, number of tools),
+#and value is a list of lists containing r tools
 def n_combinations(tools: dict, n=5):
-    tool_names = []
-
-    for name in tools.keys():
-        tool_names.append(name)
+    tool_names = list(tools.keys())
 
     sublists_dict = {}
 
-    for r in range(1, min(n + 1, len(tool_names))):
-        sublists = [list(combination) for combination in combinations(tool_names, r)]
-        sublists_dict[r] = sublists
-    
-    if n == len(tool_names):
-        sublists_dict[n] = [tool_names]
+    for r in range(1, min(n, len(tool_names)) + 1):
+        sublists_dict[r] = [list(combination) for combination in combinations(tool_names, r)]
 
     return sublists_dict
 
-#Takes a list of tool names and gets the result and score of that combination
+#Takes a list of tool names and gets the result and score of that combination.
+#The list is not modified.
 def tools_list_score_result(tool_names: list, tools_dict: dict, base: ToolData = None):
+    names = list(tool_names)
+
     if base is None:
-        base_tool_name = tool_names[0]
-        tool_names.remove(base_tool_name)
-        base_tool = tools_dict[base_tool_name]
-    else:  
+        base_tool = tools_dict[names.pop(0)]
+    else:
         base_tool = ToolData(
             name=base.name,
             score=base.score,
             results=base.results
         )
 
-    for name in tool_names:
+    for name in names:
         base_tool = ToolData.from_combination(base_tool.name + "_" + name, base_tool.results, tools_dict[name].results)
 
     return base_tool
 
 #Writes results into a csv file, if individual_tasks is set to false, then csv will have combinations and their theoretical scores,
-#otherwise it will also show results for each task for each combination
+#otherwise it will also show results for each task for each combination.
+#Only combinations with a score of at least score_limit are written.
+#Raises OSError, with the file name, when the file cannot be written.
 def write_result_csv(location: str, data: list, score_limit, individual_tasks):
     rows = []
 
-    new_data = list(filter(lambda x: x[1] > score_limit, data))
+    new_data = list(filter(lambda x: x[1] >= score_limit, data))
 
     header = ["Tool combination"] + [name for name, _, _ in new_data]
     rows.append(header)
@@ -209,58 +182,53 @@ def write_result_csv(location: str, data: list, score_limit, individual_tasks):
                 row.append(tool[2][task_name][0])
             rows.append(row)
 
-    #Some gigahack line of code from Chat-GPT to make the data table transposed
+    #Transpose the table: one row per combination
     transposed_rows = list(map(list, zip(*rows)))
 
-    try:    
-        with open(location, "w", newline="") as outputfile:
-            writer = csv.writer(outputfile)
-            writer.writerows(transposed_rows)
-    except:
-        raise Exception("Given output directory does not exist")
+    with open(location, "w", newline="") as outputfile:
+        writer = csv.writer(outputfile)
+        writer.writerows(transposed_rows)
 
-def parse_arguments():
+def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description="Process tool results and generate combination scores.")
-    
-    parser.add_argument('-r', '--result_type', type=str, required=True,
+
+    parser.add_argument('-r', '--result_type', type=str, required=True, choices=['verified', 'validated'],
                         help='Type of result to parse (verified, validated)')
-    
+
     parser.add_argument('-o', '--output_path', type=str, required=True,
                         help='Directory path where result CSVs will be saved')
 
     parser.add_argument('-i', '--input_path', type=str, required=True,
-                        help='Directory path to the input XML data')
-    
+                        help='Directory path to the input XML data (.xml or .xml.bz2)')
+
     parser.add_argument('-v', '--verbose', action='store_true',
-                    help='CSV files will also incluse data about individual task results')
-    
+                    help='CSV files will also include data about individual task results')
+
     parser.add_argument('-m', '--min_score', type=int, default=1400,
-                    help='Minimum score (integer) required for a combination to be included in the CSV (default: 0)')
-    
+                    help='Minimum score (integer) required for a combination to be included in the CSV (default: 1400)')
+
     parser.add_argument('-c', '--max_combination', type=int, default=6,
                     help='Maximum combination size (default 6)')
 
-    
-    args = parser.parse_args()
-    
-    return args
+    return parser.parse_args(argv)
 
-if __name__ == "__main__":
-    # TODO Integrate tool input path into the code
-    args = parse_arguments()
+def main(argv=None):
+    args = parse_arguments(argv)
 
     tools_dict = parse_xml_data(result_type=args.result_type, results_folder=args.input_path)
 
     all_combinations = n_combinations(tools_dict, args.max_combination)
 
-    for i in range(len(all_combinations)):
+    for size, size_combinations in all_combinations.items():
         combination_list = []
-        for tool_combination in all_combinations[i+1]:
+        for tool_combination in size_combinations:
             data = tools_list_score_result(tool_combination, tools_dict)
             combination_list.append((data.name, data.score, data.results))
-        write_result_csv(os.path.join(args.output_path + f"results-{i+1}-combinations-{args.result_type}.csv"), combination_list, args.min_score, args.verbose)
+        location = os.path.join(args.output_path, f"results-{size}-combinations-{args.result_type}.csv")
+        try:
+            write_result_csv(location, combination_list, args.min_score, args.verbose)
+        except OSError as error:
+            raise SystemExit(f"Could not write {location}: {error.strerror}") from error
 
-
-
-
-
+if __name__ == "__main__":
+    main()
