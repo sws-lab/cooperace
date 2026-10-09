@@ -14,17 +14,17 @@ a limit starts. strategy.execute adds "CoOpeRace result from: <name>" and
 "CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <verdict>"."""
 from __future__ import annotations
 
+import importlib
 import os
+import shutil
 import signal
 import subprocess
-import shutil
 import sys
-import importlib
 import tempfile
 import threading
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from benchexec import result as bresult
 from benchexec import util as butil
@@ -33,7 +33,6 @@ from benchexec.tools.template import BaseTool2
 from .config import Step
 from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
 from .strategy import NO_OUTCOME, Outcome
-
 
 
 @dataclass(frozen=True)
@@ -220,7 +219,7 @@ class ComponentRunner:
         executable = actor.executable(tool_locator)
 
         cwd = str.rsplit(executable, "/", 1)[0]
-        
+
         task = BaseTool2.Task.with_files(
             input_files=[self.file],
             property_file=self.property_file,
@@ -459,7 +458,7 @@ def witness_files_under(tool_dir: str) -> list[str]:
     and ends in graphml or yml."""
     witness_files = []
 
-    for root, dirs, files in os.walk(tool_dir):
+    for root, _dirs, files in os.walk(tool_dir):
         for file in files:
             if 'witness' in file.lower() and (file.endswith("graphml") or file.endswith("yml")):
                 witness_files.append(os.path.join(root, file))

@@ -11,8 +11,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Iterable
-
+from collections.abc import Iterable
 
 # Seconds a component's process group has to exit after SIGTERM before
 # stopProcessGroups sends it SIGKILL.

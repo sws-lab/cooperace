@@ -15,7 +15,8 @@ import signal
 import threading
 import traceback
 from collections import namedtuple
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from .config import Node, Parallel, Sequence, Step
 from .processes import ComponentGroup

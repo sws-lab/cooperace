@@ -1,10 +1,10 @@
 """Witness files: the time filter and WitnessSpecs of collect_witness_files, the
 delivery of witness_files_to_file_root and remove_old_witness_files."""
 import os
+
 import pytest
 
 from src.cooperace import components
-
 from src.cooperace.components import DEFAULT_WITNESS, REGISTRY, WitnessSpec
 
 LONG_AGO = 946684800 * 10**9  # 2000-01-01 in nanoseconds

@@ -17,8 +17,8 @@ the conf gives them; components.py resolves a percentage when the step starts.
 """
 from __future__ import annotations
 
+from collections.abc import Container
 from dataclasses import dataclass
-from typing import Container, Union
 
 # The values a conf may give for the verdicts accepted from a component.
 ACCEPTANCES = ("true", "false", "all")
@@ -51,7 +51,7 @@ class Parallel:
     steps: tuple[Node, ...]
 
 
-Node = Union[Step, Sequence, Parallel]
+Node = Step | Sequence | Parallel
 
 
 class RunTypeError(ValueError):

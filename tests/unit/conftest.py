@@ -25,8 +25,9 @@ try:
 finally:
     os.chdir(_start_directory)
 
-from src.cooperace.components import ComponentRunner
-from src.cooperace.processes import ComponentGroup
+# Imported after the import above, which needs the repository root as working directory.
+from src.cooperace.components import ComponentRunner  # noqa: E402
+from src.cooperace.processes import ComponentGroup  # noqa: E402
 
 
 @pytest.fixture

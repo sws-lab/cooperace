@@ -1,4 +1,5 @@
-# Holds the pytest configuration only; CoOpeRace is a script, not a package.
+# The configuration of pytest and ruff. CoOpeRace is not installed: the
+# launcher `cooperace` runs the package src/cooperace from its checkout.
 [project]
 name = "cooperace"
 version = "0.2"
@@ -7,3 +8,15 @@ requires-python = ">=3.10"
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+# Analysis scripts of earlier SV-COMP results, not part of the tool.
+extend-exclude = ["src/tool_combinations"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, bugbear and pyupgrade. Naming (N) is
+# not checked: older names such as processExited and ComponentGroup.markStopped
+# are camelCase, and renaming them alone would change no behaviour.
+select = ["E", "F", "W", "I", "B", "UP"]
