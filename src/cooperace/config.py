@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The conf of CoOpeRace, checked once and turned into a tree of steps per
 property.
 

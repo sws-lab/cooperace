@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Witness files: the time filter and WitnessSpecs of collect_witness_files, the
 delivery of witness_files_to_file_root and remove_old_witness_files."""
 import os

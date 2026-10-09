@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """scripts/sv-comp/upload-zenodo.py against a stub of Zenodo's deposit API on
 127.0.0.1: the archive goes in one PUT to the draft's bucket, as the bare
 bytes of the file with a Content-Length, and the script exits 1 unless the

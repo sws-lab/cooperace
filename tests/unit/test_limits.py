@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Per-component resource limits: with_resource_limits, with_rlimits,
 component_memory_limit and run_memory_limit, the CPU time run_in_session
 reports, and the status TIMEOUT of a component its CPU-time limit ends."""

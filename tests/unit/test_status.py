@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The status of a component run (component_status), which verdicts an
 acceptance accepts on each property (confirm_verdict), and what CoOpeRace
 prints for an accepted one (reported_result)."""

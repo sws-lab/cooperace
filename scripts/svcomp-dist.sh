@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 # Builds dist/cooperace.zip, the SV-COMP archive, from the commit HEAD of the
 # repository this script is in; it can be run from any directory.
 #

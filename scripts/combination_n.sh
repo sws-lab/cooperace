@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 # Usage: combination_n.sh N BENCHEXEC_COMMAND [ARGUMENT...]
 # Runs the five combinations of size N with the given BenchExec command line.
 # Run in the root directory.

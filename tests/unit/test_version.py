@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The version that `cooperace --version` prints (cli.version_string): the
 file VERSION beside the launcher, else git describe, else "unknown"."""
 import os

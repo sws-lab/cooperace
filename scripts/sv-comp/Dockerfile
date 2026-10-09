@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 # The competition image, by tag and by digest (read 2026-10-09 with `docker
 # buildx imagetools inspect`). Docker pulls by the digest, so a later push to
 # the tag does not change the image; to move to a new image, change both.

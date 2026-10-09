@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Helpers shared by the unit tests: polling, process-group inspection and a
 stub component that CoOpeRace can run without anything under tools/."""
 import os

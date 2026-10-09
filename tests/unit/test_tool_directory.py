@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The tool directory: CoOpeRace finds lib/, conf/ and tools/ from the
 location of its package and not from the working directory, and imports the
 one BenchExec wheel in lib/."""

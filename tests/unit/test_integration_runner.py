@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """tests/integration/run.py: which BenchExec the runs of a component alone
 use. subprocess.run is replaced by a stub, so no BenchExec is started."""
 import importlib.util

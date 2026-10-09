@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Download the witness validators that tests/integration/run.py uses into
 validators/ (git-ignored), one directory per validator version.
 

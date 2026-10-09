@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The strategy: run_sequence, run_parallel and their nesting, with fake
 components. Each fake runs a real `sleep` child through run_in_session, so that
 stopping a loser really ends a process; only run_component is replaced."""

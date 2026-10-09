@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Integration suite for the components of CoOpeRace.
 
 For every component that is installed under tools/ (Goblint, Dartagnan,

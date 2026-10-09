@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Tests for defects of CoOpeRace found in review (D1, D2 and D4 of the
 review's table), each stating the behaviour the fixed code has. D2 runs
 run_parallel in a daemon thread so that a hang is a failure and not a stuck

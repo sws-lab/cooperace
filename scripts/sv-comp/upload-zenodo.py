@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Upload the CoOpeRace SV-COMP archive to a Zenodo deposition.
 
 This script targets private (draft) Zenodo records.  It expects an editable

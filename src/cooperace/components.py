@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The components CoOpeRace runs (REGISTRY) and how one is run: its command
 line, working directory and environment from its BenchExec tool-info module
 (ComponentRunner.command), its limits, its status and verdict, its witness

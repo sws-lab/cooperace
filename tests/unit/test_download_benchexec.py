@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """scripts/download-benchexec.py: the requirements file it hands to pip, what it
 does with a wheel already in lib/, and the .license file. pip and PyPI are
 replaced by stubs."""

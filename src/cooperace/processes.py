@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Starting and stopping the processes of components: each runs as the
 leader of a session of its own (run_in_session), under its rlimits
 (with_rlimits), recorded in a ComponentGroup that stops the whole process

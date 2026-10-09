@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Recognizing the property of a property file: properties.recognize."""
 from pathlib import Path
 

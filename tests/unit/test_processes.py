@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Process control: stopProcessGroups, processExited, ComponentGroup and
 run_in_session."""
 import sys

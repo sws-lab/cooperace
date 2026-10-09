@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The command line of CoOpeRace (the launcher `cooperace` calls main): reads
 the arguments, the property file and the conf, checks them and the
 installation, runs the conf's strategy for the property on the task, and

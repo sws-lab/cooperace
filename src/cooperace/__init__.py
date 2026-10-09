@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """CoOpeRace: runs verifiers ("components") on a task, as the strategy of a
 configuration (conf/*.json) for the task's property says, and returns the
 first verdict it accepts.

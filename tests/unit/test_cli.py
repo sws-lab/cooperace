@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The command line: what makes CoOpeRace end with status 1 or 2, one line on
 stderr and no "CoOpeRace verdict:" line (a defect of the command line, the
 property, the conf, the installation, or an exception of CoOpeRace's own), and

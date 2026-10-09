@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Installs the BenchExec wheel that CoOpeRace bundles into lib/.
 
 CoOpeRace reads each component's output with that component's BenchExec

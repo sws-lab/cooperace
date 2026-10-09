@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """src/tool_combinations/tool_combinations.py: the per-task results and score of
 a BenchExec result file (plain or bzip2), the combination sizes, the
 combination of two tools, and the CSV output."""

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Loading a conf: config.load_strategies and config.load, the trees they build
 and the confs they refuse."""
 import dataclasses

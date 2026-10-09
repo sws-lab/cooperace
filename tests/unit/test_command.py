@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """How a component is started (ComponentRunner.command): the command line from
 benchexec.model.cmdline_for_run, the working directory from the tool-info
 module's working_directory() and the environment from its environment()

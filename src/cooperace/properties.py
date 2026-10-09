@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The properties of SV-COMP's C.Concurrency that a conf can give a strategy
 for, and how a property is recognized from the content of a property file.
 

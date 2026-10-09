@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """scripts/download-tools.py: which components the lock files tools.txt and
 tools-pool.txt make it install, how it checks the DOIs against fm-tools before
 installing, the record tools/<name>/.doi, and the options it writes into

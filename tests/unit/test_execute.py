@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """cli.run and strategy.execute end to end with stub components: shell scripts
 run through the real run_component, run_in_session and component_status, and the
 stop on a signal in a separate process."""

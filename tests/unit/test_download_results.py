@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """src/tool_combinations/download_results.py, with `requests` and `bs4` replaced
 by stubs, so that nothing is downloaded."""
 import importlib.util

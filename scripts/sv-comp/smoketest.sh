@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 # Runs CoOpeRace on its own smoke-test task from the root of the unpacked
 # archive, and fails unless the task gets the verdict it is known to have:
 # the last line of the output is exactly "CoOpeRace verdict: false" (the line

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """Imports the package src/cooperace, and the tool-info module of every
 component in its registry. The package finds the bundled BenchExec (lib/*.whl)
 from its own location, so the tests can be run from any directory."""

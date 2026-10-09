@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
 """The registry of components: its entries, their options in
 tools-options.json, the lazy import of the tool-info modules, and how a step
 reports a component that cannot be set up."""
