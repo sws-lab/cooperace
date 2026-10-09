@@ -49,15 +49,15 @@ class Script:
         self.returncodes = {}
         coop.runActor = self.runActor
 
-    def runActor(self, actor):
+    def runActor(self, actor, group):
         letter, seconds, verdict, *witness = self.components[actor.name()]
-        result = self.coop.actorResult(["sleep", str(seconds)], str(self.tmp_path))
+        result = self.coop.actorResult(["sleep", str(seconds)], str(self.tmp_path), group)
         if result.returncode is None:
             return "unknown"
         with self.lock:
             self.started.append(letter)
             self.returncodes[letter] = result.returncode
-        if self.coop.currentGroup().stopped:
+        if group.stopped:
             return "unknown"
         if verdict in ("true", "false"):
             self.coop.local.witness_files = witness[0] if witness else []
@@ -67,7 +67,9 @@ class Script:
 def run(coop):
     """What execute does with the conf, without the witness delivery."""
     run_type, tools = coop.parseConf()
-    return coop.runSequential(tools) if run_type == "sequential" else coop.runParallel(tools)
+    if run_type == "sequential":
+        return coop.runSequential(tools, coop.root_group)
+    return coop.runParallel(tools, coop.root_group)
 
 
 # --- runSequential ----------------------------------------------------------
@@ -128,7 +130,7 @@ def test_runOne_gives_no_witness_files_for_an_unknown_verdict(make_coop, tmp_pat
     Script(coop, tmp_path, a=(0.1, "unknown", ["/run/a/witness.yml"]))
     _, (actor,) = coop.parseConf()
 
-    assert coop.runOne(actor) == NO_OUTCOME
+    assert coop.runOne(actor, coop.root_group) == NO_OUTCOME
 
 
 def test_runOne_forgets_the_witness_files_of_the_previous_component(make_coop, tmp_path):
@@ -136,8 +138,8 @@ def test_runOne_forgets_the_witness_files_of_the_previous_component(make_coop, t
     Script(coop, tmp_path, a=(0.1, "true", ["/run/a/witness.yml"]), b=(0.1, "true"))
     _, (first, second) = coop.parseConf()
 
-    assert coop.runOne(first).witness_files == ["/run/a/witness.yml"]
-    assert coop.runOne(second).witness_files == []
+    assert coop.runOne(first, coop.root_group).witness_files == ["/run/a/witness.yml"]
+    assert coop.runOne(second, coop.root_group).witness_files == []
 
 
 # --- runParallel ------------------------------------------------------------
@@ -197,10 +199,10 @@ def test_exception_in_a_parallel_branch_leaves_the_other_branches(make_coop, tmp
     script = Script(coop, tmp_path, b=(0.3, "true"))
     fake_runActor = coop.runActor
 
-    def runActor(actor):
+    def runActor(actor, group):
         if actor.name() == "Goblint":
             raise RuntimeError("setup failed")
-        return fake_runActor(actor)
+        return fake_runActor(actor, group)
 
     coop.runActor = runActor
 
@@ -215,7 +217,7 @@ def test_parallel_returns_the_verdict_when_another_branch_ends_with_systemexit(m
     other branch reports one it hangs; test_known_defects.py, D2.)"""
     coop = make_coop(conf("parallel", "a", "b"))
 
-    def runOne(actor):
+    def runOne(actor, group):
         if actor.name() == "Goblint":
             raise SystemExit(3)
         return Outcome("true", actor.name(), [])

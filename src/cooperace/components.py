@@ -117,12 +117,9 @@ class Cooperace(Strategy):
 
         #Components started outside any runParallel; execute stops it on return
         self.root_group = ComponentGroup()
-        #Per thread: `group`, the ComponentGroup the thread starts components in
+        #Per thread: `witness_files`, set by runActor for runOne
         self.local = threading.local()
         self.print_lock = threading.Lock()
-
-    def currentGroup(self):
-        return getattr(self.local, "group", self.root_group)
 
     def componentMemoryLimit(self, tool_name):
         """Memory limit in bytes for one component, from the conf's `memoryLimits`, or None.
@@ -204,16 +201,15 @@ class Cooperace(Strategy):
                   "os.execvp(sys.argv[2], sys.argv[2:])")
         return [sys.executable, "-c", setter, ",".join(limits)] + command
 
-    def actorResult(self, command, cwd):
+    def actorResult(self, command, cwd, group):
         """Runs `command` in `cwd` as the leader of a new session, so that the
         component and every process it starts form one process group, which
-        ComponentGroup.stop can end, and records it in the current thread's
-        group while it runs. Returns a subprocess.CompletedProcess whose
+        ComponentGroup.stop can end, and records it in the ComponentGroup
+        `group` while it runs. Returns a subprocess.CompletedProcess whose
         `stdout` is the component's standard output and standard error in one,
         as BenchExec captures them, and whose `stderr` is empty; `returncode`
         is negative if the component was ended by a signal, and None if the
         group was stopped before it could start."""
-        group = self.currentGroup()
         if group.stopped:
             return subprocess.CompletedProcess(command, None, "", "")
         process = subprocess.Popen(command,
@@ -290,9 +286,10 @@ class Cooperace(Strategy):
         
         return execution_type, execution_tools
         
-    def runOne(self, actor):
-        """Runs `actor` with runActor and returns its Outcome. runActor sets
-        `witness_files` of the current thread for an accepted verdict.
+    def runOne(self, actor, group):
+        """Runs `actor` with runActor in the ComponentGroup `group` and returns
+        its Outcome. runActor sets `witness_files` of the current thread for
+        an accepted verdict.
 
         An Exception from runActor, from setting the run up (for example
         ToolNotFoundException from the tool-info module's `executable`) or
@@ -303,7 +300,7 @@ class Cooperace(Strategy):
         a BaseException and propagates."""
         self.local.witness_files = []
         try:
-            verdict = self.runActor(actor)
+            verdict = self.runActor(actor, group)
         except Exception as error:
             traceback.print_exc()
             self.printComponentRun(actor.name(),
@@ -413,7 +410,7 @@ class Cooperace(Strategy):
                 return False
     
 
-    def runActor(self, actor: BaseTool2):
+    def runActor(self, actor: BaseTool2, group):
         tool_location = os.path.join(os.getcwd(), "tools")
         tool_location = os.path.join(tool_location, self.tool_locations[actor.name()])
 
@@ -455,12 +452,13 @@ class Cooperace(Strategy):
         started = self.startTime(witness_dir)
         tool_result = self.actorResult(
             command=self.withResourceLimits(actor.name(), cmdline),
-            cwd=cwd
+            cwd=cwd,
+            group=group
             )
         #Also for a stopped component, so that no file it wrote stays in its directory
         witness_files = self.collectWitnessFiles(actor, cwd, witness_dir, started)
 
-        if self.currentGroup().stopped:
+        if group.stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
             #the component was ended or never started, and its result is not used.
             #This check is also why componentStatus never gets a returncode of
