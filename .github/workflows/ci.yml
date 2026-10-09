@@ -1,0 +1,53 @@
+name: CI
+
+# The checks that need no component under tools/ and no BenchExec run: lint,
+# license headers, shell scripts, the launcher and the unit tests. The
+# integration suite (tests/integration) and the smoke test of the archive
+# (make svcomp) need the components and Docker and are run by hand.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is the Python of the competition image, 3.10 the oldest the
+        # project supports (requires-python in pyproject.toml).
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the dev dependency group of pyproject.toml
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: reuse lint
+        run: reuse lint
+
+      - name: shellcheck
+        run: find scripts -name '*.sh' -print0 | xargs -0 shellcheck
+
+      - name: The launcher runs from another directory
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$GITHUB_WORKSPACE/cooperace" --version | tee version.txt
+          grep -q '^CoOpeRace ' version.txt
+
+      - name: Unit tests
+        run: python -m pytest -q tests/unit

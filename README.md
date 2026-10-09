@@ -18,6 +18,11 @@ The goal of the CoOpeRace project is to identify the ultimate state-of-the-art i
 attempt better ways of communicating intermediate results between tools, and 
 provide a user interface for comparing output of different tools.
 
+CoOpeRace needs Python 3.10 or later and PyYAML, which the bundled BenchExec wheel in `lib/` imports (the
+competition image has it as `python3-yaml`). The helper scripts need more: [`pyproject.toml`](pyproject.toml)
+lists their packages as the `scripts` extra, and the packages of the checks in `.github/workflows/ci.yml`
+as the `dev` dependency group. The project is not installed as a package; the launcher runs from its checkout.
+
 To test the sv-comp package, run `./cooperace --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i`,
 which prints `CoOpeRace verdict: false` as its last line and writes `witness.graphml`.
 `scripts/sv-comp/smoketest.sh` checks exactly that, and the archive carries both files at these paths.

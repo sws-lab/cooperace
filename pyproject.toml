@@ -22,7 +22,7 @@ scripts = ["fm-tools", "requests", "beautifulsoup4", "PyYAML"]
 [dependency-groups]
 # What the checks of .github/workflows/ci.yml install: `pip install --group dev`
 # (pip 25.1 or later) reads this table without building the project.
-dev = ["PyYAML", "pytest", "reuse", "ruff"]
+dev = ["PyYAML", "pytest", "requests", "reuse", "ruff~=0.16"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
