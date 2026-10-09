@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from support import make_script, register_stub
 
 from src.cooperace.components import DEFAULT_WITNESS, REGISTRY, ComponentSpec
 from src.cooperace.config import Step
@@ -102,14 +103,17 @@ def test_a_tool_info_module_that_cannot_be_imported_is_a_step_without_a_verdict(
     ]
 
 
-def test_sv_sanitizers_is_reported_as_an_error_because_its_name_differs(
-        runner, group, capsys):
-    """The tool-info module names the component "SV-sanitizers", and run_component
-    looks the entry up by that name; see the entry in REGISTRY."""
+def test_a_component_is_found_by_its_name_in_the_conf_whatever_the_case_of_the_name_of_its_tool(
+        runner, group, capsys, tmp_path):
+    """BenchExec's sv-sanitizers module names itself "SV-sanitizers", the entry in
+    REGISTRY is "sv-sanitizers": the entry is looked up by the conf's name, and the
+    block is printed under the module's name."""
+    register_stub(runner, "stub-case", make_script(tmp_path, 'echo "STUB-STATUS: true"\n'),
+                  name_of_tool="STUB-Case")
 
-    outcome = runner.run_step(Step("sv-sanitizers", "all"), group)
+    outcome = runner.run_step(Step("stub-case", "all"), group)
 
-    assert outcome.verdict == "unknown"
+    assert (outcome.verdict, outcome.component) == ("true", "STUB-Case")
     lines = capsys.readouterr().out.splitlines()
-    assert ("Tool name: SV-sanitizers Status: ERROR (KeyError: 'SV-sanitizers') "
-            "Exit code: none, not started") in lines
+    assert "Tool name: STUB-Case Status: true Exit code: 0" in lines
+    assert "Tool name: STUB-Case Result: true" in lines

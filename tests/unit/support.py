@@ -85,17 +85,22 @@ def make_script(directory, body):
 @dataclass(frozen=True)
 class StubSpec(ComponentSpec):
     """A registry entry whose tool-info object is a StubTool for `script`,
-    in the script's directory, with the default WitnessSpec."""
+    in the script's directory, with the default WitnessSpec. The tool-info
+    object's name() is `tool_name`, or the entry's `name` if that is None."""
 
     script: str = ""
+    tool_name: str | None = None
 
     def tool(self):
-        return StubTool(self.name, self.script)
+        return StubTool(self.tool_name or self.name, self.script)
 
 
-def register_stub(runner, tool_name, script):
+def register_stub(runner, tool_name, script, name_of_tool=None):
     """Makes `runner` run the shell script `script` for the component
     `tool_name`, which the conf can then name. This is the test hook: the
     ComponentRunner looks components up in its `registry`, a copy of
-    components.REGISTRY, which can be added to after construction."""
-    runner.registry[tool_name] = StubSpec(tool_name, "", str(Path(script).parent), script=str(script))
+    components.REGISTRY, which can be added to after construction.
+    `name_of_tool` is what the tool-info object's name() returns, if that
+    is not `tool_name`."""
+    runner.registry[tool_name] = StubSpec(tool_name, "", str(Path(script).parent), script=str(script),
+                                          tool_name=name_of_tool)

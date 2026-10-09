@@ -113,11 +113,6 @@ REGISTRY = {spec.name: spec for spec in (
                   options=("--full-output",), witness=_ULTIMATE_WITNESS),
     ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
     ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "CPAchecker-4.0-unix"),
-    # The tool-info module's name() is "SV-sanitizers", not "sv-sanitizers",
-    # and run_component looks a component's entry up by name(), as the tables this
-    # registry replaced did. A run of sv-sanitizers therefore raises KeyError
-    # before the component starts, and is reported with status "ERROR
-    # (KeyError: 'SV-sanitizers')" and result unknown.
     ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers"),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
 )}
@@ -234,9 +229,12 @@ class ComponentRunner:
         wrote during this run, if `step.accept` accepts the verdict and `group`
         was not stopped, and NO_OUTCOME otherwise.
 
-        The component's entry in the registry is looked up by `actor.name()`;
-        see the entry of sv-sanitizers in REGISTRY."""
-        spec = self.registry[actor.name()]
+        The component's entry in the registry is looked up by the conf's name
+        of the component, `step.component`, which config.load has checked is
+        in the registry; the case of `actor.name()` (BenchExec's sv-sanitizers
+        module names itself "SV-sanitizers") does not matter. The block is
+        printed under `actor.name()`."""
+        spec = self.registry[step.component]
         tool_location = os.path.join(self.tools_dir, spec.directory)
 
         tool_locator = BaseTool2.ToolLocator(tool_directory=tool_location)
