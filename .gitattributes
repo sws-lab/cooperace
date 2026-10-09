@@ -1,0 +1,12 @@
+# Text files are LF in the repository and in the working tree, on every platform.
+* text=auto eol=lf
+
+# Binary files that git would otherwise only guess about.
+*.whl binary
+*.bz2 binary
+
+# Verification tasks and property files copied from the SV-Benchmarks collection
+# keep their upstream bytes, including their CRLF line endings: a task is given
+# to the components as it is, and a witness refers to it by its hash.
+tests/no-data-race/** -text
+tests/properties/** -text
