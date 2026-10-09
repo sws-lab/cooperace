@@ -14,9 +14,7 @@ for i in 3; do #number represents the size of combinations to test, can also be 
 
     # read-only and overlay dirs for Value too large for defined data type workaround
     BENCHEXEC="benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath $RESULTS_DIR --numOfThreads $PARALLEL"
-    PYTHONPATH=$THIS_DIR:$PYTHONPATH
 
-    export PYTHONPATH=$PYTHONPATH:$THIS_DIR/tool_info
 
     rm -rf $RESULTS_DIR  #for now, we want to start fresh
     mkdir $RESULTS_DIR || true

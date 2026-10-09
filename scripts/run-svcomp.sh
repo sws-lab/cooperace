@@ -15,9 +15,7 @@ PARALLEL=6  # The limiting factor is RAM (32 on the server); 6 * 4Gb is okay for
 
 # read-only and overlay dirs for Value too large for defined data type workaround
 BENCHEXEC="benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath $RESULTS_DIR --numOfThreads $PARALLEL"
-PYTHONPATH=$THIS_DIR:$PYTHONPATH
 
-export PYTHONPATH=$PYTHONPATH:$THIS_DIR/tool_info
 
 rm -rf $RESULTS_DIR  #for now, we want to start fresh
 mkdir $RESULTS_DIR || true
@@ -30,7 +28,7 @@ echo "Running Goblint"
 cd $GOBLINT_DIR
 $BENCHEXEC $THIS_DIR/tests/bench-defs/goblint.xml
 
-echo "Running Cooperace (uses local tool-info module)"
+echo "Running Cooperace (tool-info module benchexec.tools.cooperace)"
 cd $THIS_DIR
 $BENCHEXEC $THIS_DIR/tests/bench-defs/cooperace.xml
 
