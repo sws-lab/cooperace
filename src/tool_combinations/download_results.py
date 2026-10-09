@@ -1,8 +1,9 @@
-from bs4 import BeautifulSoup
-import requests
+import argparse
 import os
 import sys
-import argparse
+
+import requests
+from bs4 import BeautifulSoup
 
 TIMEOUT = 60  # seconds, for every request
 

@@ -1,10 +1,10 @@
-import bz2
-import os
-import csv
-import xml.etree.ElementTree as ET
 import argparse
-
+import bz2
+import csv
+import os
+import xml.etree.ElementTree as ET
 from itertools import combinations
+
 
 def read_result_xml(path):
     """Returns the text of a BenchExec result file, plain (.xml) or compressed
@@ -158,8 +158,8 @@ def tools_list_score_result(tool_names: list, tools_dict: dict, base: ToolData =
 
     return base_tool
 
-#Writes results into a csv file, if individual_tasks is set to false, then csv will have combinations and their theoretical scores,
-#otherwise it will also show results for each task for each combination.
+#Writes results into a csv file, if individual_tasks is set to false, then csv will have combinations and their
+#theoretical scores, otherwise it will also show results for each task for each combination.
 #Only combinations with a score of at least score_limit are written.
 #Raises OSError, with the file name, when the file cannot be written.
 def write_result_csv(location: str, data: list, score_limit, individual_tasks):
@@ -183,7 +183,7 @@ def write_result_csv(location: str, data: list, score_limit, individual_tasks):
             rows.append(row)
 
     #Transpose the table: one row per combination
-    transposed_rows = list(map(list, zip(*rows)))
+    transposed_rows = list(map(list, zip(*rows, strict=True)))
 
     with open(location, "w", newline="") as outputfile:
         writer = csv.writer(outputfile)

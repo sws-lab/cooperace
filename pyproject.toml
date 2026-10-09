@@ -12,8 +12,6 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-# Analysis scripts of earlier SV-COMP results, not part of the tool.
-extend-exclude = ["src/tool_combinations"]
 
 [tool.ruff.lint]
 # pycodestyle, pyflakes, import order, bugbear and pyupgrade. Naming (N) is

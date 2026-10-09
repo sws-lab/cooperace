@@ -138,9 +138,11 @@ WITNESS_FORMATS = {
                                         "--benchmark",
                                         "--option", "witness.checkProgramHash=false",
                                         "--option", "cpa.predicate.memoryAllocationsAlwaysSucceed=true",
-                                        "--option", "cpa.smg.memoryAllocationFunctions=malloc,__kmalloc,kmalloc,kzalloc,kzalloc_node,ldv_zalloc,ldv_malloc",
+                                        "--option", "cpa.smg.memoryAllocationFunctions="
+                                                    "malloc,__kmalloc,kmalloc,kzalloc,kzalloc_node,ldv_zalloc,ldv_malloc",
                                         "--option", "cpa.smg.arrayAllocationFunctions=calloc,kmalloc_array,kcalloc",
-                                        "--option", "cpa.smg.zeroingMemoryAllocation=calloc,kzalloc,kcalloc,kzalloc_node,ldv_zalloc",
+                                        "--option", "cpa.smg.zeroingMemoryAllocation="
+                                                    "calloc,kzalloc,kcalloc,kzalloc_node,ldv_zalloc",
                                         "--option", "cpa.smg.deallocationFunctions=free,kfree,kfree_const"],
                                witness_option="--witness"),
         }),
@@ -171,7 +173,7 @@ def load_tasks(selectors):
         try:
             text = yml.read_text()
         except OSError as e:
-            raise CouldNotRun(f"missing task {yml}: {e.strerror}")
+            raise CouldNotRun(f"missing task {yml}: {e.strerror}") from e
         expected = re.search(r"no-data-race\.prp\s+expected_verdict:\s*(true|false)\b", text)
         if not expected:
             raise CouldNotRun(f"{yml} has no expected verdict for no-data-race.prp")
@@ -341,7 +343,7 @@ def read_conf(path):
     try:
         return json.loads(Path(path).read_text())
     except (OSError, ValueError) as e:
-        raise CouldNotRun(f"cannot read the configuration {path}: {e}")
+        raise CouldNotRun(f"cannot read the configuration {path}: {e}") from e
 
 
 def plan(args):
@@ -929,7 +931,7 @@ def table(results, runs, tasks, skipped):
         label = f"{t['name']} ({str(t['expected']).lower()}, {t['data_model']})"
         rows.append([label] + [cell(results.get((c, t["id"])), t) for c in cols])
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
-    lines = ["  ".join(c.ljust(w) for c, w in zip(row, widths)).rstrip() for row in rows]
+    lines = ["  ".join(c.ljust(w) for c, w in zip(row, widths, strict=True)).rstrip() for row in rows]
     lines.insert(1, "  ".join("-" * w for w in widths))
     for name, why in skipped.items():
         lines.append(f"{name}: {why}")
@@ -946,7 +948,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              8: "Goblint's CPU-time limit ends a level and a later stage answers",
              9: "a parallel stage stops its other components once one answers"}
     lines = [table(results, runs, tasks, skipped), "",
-             "cells: verdict, [validation of a false witness], CPU time; WRONG = verdict differs from the expected one", ""]
+             "cells: verdict, [validation of a false witness], CPU time; "
+             "WRONG = verdict differs from the expected one", ""]
     failed = False
     for n in sorted(names):
         rel = [c for c in checks if c[0] == n]
@@ -954,7 +957,7 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
         failed |= bool(bad)
         lines.append(f"check {n} ({names[n]}): {'FAIL' if bad else 'pass'} "
                      f"({len(rel) - len(bad)} of {len(rel)} pass)")
-        for _, rundef, task, ok, kind, detail in bad:
+        for _, rundef, task, _ok, kind, detail in bad:
             lines.append(f"    FAIL [{kind}] {rundef} / {task}: {detail}")
     lines += ["", "result: " + ("FAIL" if failed else "pass")]
     text = "\n".join(lines) + "\n"
@@ -980,7 +983,8 @@ def main():
     ap.add_argument("--validators", default=os.environ.get("COOPERACE_VALIDATORS", str(REPO / "validators")),
                     help="directory made by scripts/download-validators.py (env COOPERACE_VALIDATORS)")
     ap.add_argument("--config", action="append", type=Path,
-                    help="a further production configuration (JSON); default: conf/svcomp26.json and conf/svcomp25.json")
+                    help="a further production configuration (JSON); "
+                         "default: conf/svcomp26.json and conf/svcomp25.json")
     ap.add_argument("--components", default=",".join(COMPONENTS))
     ap.add_argument("--tasks", action="append", help="only tasks whose name contains this")
     ap.add_argument("--cross", action="store_true",
@@ -1026,9 +1030,9 @@ def suite(args):
         try:
             meta = json.loads((out / "meta.json").read_text())
         except OSError as e:
-            raise CouldNotRun(f"cannot read {out / 'meta.json'}, which `run` writes: {e.strerror}")
+            raise CouldNotRun(f"cannot read {out / 'meta.json'}, which `run` writes: {e.strerror}") from e
         except ValueError as e:
-            raise CouldNotRun(f"{out / 'meta.json'} is not JSON: {e}")
+            raise CouldNotRun(f"{out / 'meta.json'} is not JSON: {e}") from e
         tasks, runs, skipped, cdir = plan_from_meta(meta)
     # Only the runs of this plan; out/verify may hold results of an earlier run.
     ids = {t["id"] for t in tasks}
