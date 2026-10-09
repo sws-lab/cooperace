@@ -9,7 +9,10 @@ ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
     reference);
   * inside CoOpeRace with a one-component configuration (conf/only-*.json);
   * inside CoOpeRace with each production configuration (conf/svcomp26.json,
-    conf/svcomp25.json, and any --config given),
+    conf/svcomp25.json, and any --config given);
+  * inside CoOpeRace with each configuration of the suite (`configurations`
+    in manifest.json, conf/svcomp26-goblint-1s.json), on the tasks that name
+    it,
 
 validates the witness of every `false` verdict with a SV-COMP 2026 violation
 witness validator, and prints one table of task x configuration and the result
@@ -21,7 +24,8 @@ of these checks (see README.md):
   3  CoOpeRace with one component gives the verdict that component gives alone
   4  every `false` of CoOpeRace delivers a witness file that the validator
      named in manifest.json confirms, produced by the component that answered
-  5  each production configuration gives the expected verdict on every task
+  5  each production configuration and configuration of the suite gives the
+     expected verdict on every task it runs
   6  every output of CoOpeRace follows the protocol: the verdict line last,
      `CoOpeRace result from: X` before it, each component block closed, no
      `Error, something went wrong`, one witness file for a `false`
