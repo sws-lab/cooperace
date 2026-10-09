@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from support import make_script, register_stub, wait_until
 
-from src.cooperace.components import processExited
+from src.cooperace.processes import processExited
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPPORT_DIR = Path(__file__).resolve().parent

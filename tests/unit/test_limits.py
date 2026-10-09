@@ -7,7 +7,7 @@ import sys
 import pytest
 
 from src.cooperace import components
-from src.cooperace.components import run_memory_limit
+from src.cooperace.processes import run_memory_limit
 
 MEBIBYTE = 2**20
 
