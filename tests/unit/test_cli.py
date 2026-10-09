@@ -1,0 +1,191 @@
+"""The command line: what makes CoOpeRace end with status 1 or 2, one line on
+stderr and no "CoOpeRace verdict:" line (a defect of the command line, the
+property or the conf), and what does not (a component that crashes)."""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from src.cooperace import cli
+
+ROOT = Path(__file__).resolve().parents[2]
+DATA_RACE = ROOT / "tests" / "properties" / "no-data-race.prp"
+OTHER_PROPERTIES = sorted(path for path in (ROOT / "tests" / "properties").glob("*.prp")
+                          if path.name != "no-data-race.prp")
+FORMULA = "CHECK( init(main()), LTL(G ! data-race) )"
+
+
+@pytest.fixture
+def run_main(tmp_path, monkeypatch, capsys):
+    """Returns a function that runs cli.main in `tmp_path`, where the task
+    foo.c exists, with the arguments it is given and a task foo.c appended,
+    and returns (exit status, standard output, standard error)."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "foo.c").touch()
+
+    def run(*arguments):
+        monkeypatch.setattr(sys, "argv", ["cooperace", *arguments, "foo.c"])
+        try:
+            cli.main()
+            status = 0
+        except SystemExit as exit_:
+            status = exit_.code
+        captured = capsys.readouterr()
+        return status, captured.out, captured.err
+
+    return run
+
+
+@pytest.fixture
+def no_run(monkeypatch):
+    """Replaces cli.run by a function that records its calls and returns "false"."""
+    calls = []
+
+    def fake_run(conf, runner, group=None):
+        calls.append(conf)
+        return "false"
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    return calls
+
+
+def error_lines(stderr):
+    return [line for line in stderr.splitlines() if not line.startswith("CoOpeRace: no --arch")]
+
+
+def assert_refused(result, message):
+    """`result` of run_main: status 1, no standard output (so no verdict
+    line) and exactly one line on stderr, which has `message`."""
+    status, out, err = result
+    assert status == 1
+    assert out == ""
+    lines = error_lines(err)
+    assert len(lines) == 1, err
+    assert lines[0].startswith("CoOpeRace: error: ")
+    assert message in lines[0]
+
+
+# --- the command line ----------------------------------------------------------
+
+def test_prop_is_required(run_main, no_run):
+    status, out, err = run_main()
+
+    assert status == 2
+    assert out == ""
+    assert "--prop" in err
+    assert no_run == []
+
+
+def test_a_task_that_is_not_a_file_is_refused(run_main, no_run, tmp_path):
+    (tmp_path / "foo.c").unlink()
+
+    assert_refused(run_main("--prop", str(DATA_RACE)), "the task foo.c is not a file")
+    assert no_run == []
+
+
+def test_a_data_race_run_prints_the_verdict_line_last_and_exits_normally(run_main, no_run):
+    status, out, _ = run_main("--prop", str(DATA_RACE))
+
+    assert status == 0
+    assert out.splitlines()[-1] == "CoOpeRace verdict: false"
+
+
+# --- the property --------------------------------------------------------------
+
+@pytest.mark.parametrize("path", OTHER_PROPERTIES, ids=lambda path: path.name)
+def test_a_property_other_than_no_data_race_is_refused_and_no_component_starts(
+        run_main, no_run, path):
+    assert_refused(run_main("--prop", str(path)), "unsupported property")
+    assert no_run == []
+
+
+def test_the_property_is_recognized_by_its_content_and_not_by_its_name(run_main, no_run, tmp_path):
+    (tmp_path / "anything.txt").write_text("CHECK(init(main()),\n  LTL(G !   data-race))\n\n")
+    (tmp_path / "no-data-race.prp").write_text("CHECK( init(main()), LTL(G ! call(reach_error())) )")
+
+    accepted = run_main("--prop", "anything.txt")
+    refused = run_main("--prop", "no-data-race.prp")
+
+    assert accepted[0] == 0
+    assert_refused(refused, "unsupported property")
+    assert len(no_run) == 1
+
+
+@pytest.mark.parametrize("text", [
+    "",
+    FORMULA + "\nCHECK( init(main()), LTL(G ! overflow) )\n",
+    FORMULA + " extra",
+    "LTL(G ! data-race)",
+    "CHECK( init(main()), LTL(G ! data-races) )",
+], ids=["empty", "two-formulas", "trailing-text", "no-check", "different-atom"])
+def test_a_property_file_that_is_not_the_data_race_formula_is_refused(run_main, no_run, tmp_path, text):
+    (tmp_path / "p.prp").write_text(text)
+
+    assert_refused(run_main("--prop", "p.prp"), "unsupported property")
+    assert no_run == []
+
+
+def test_a_property_file_that_cannot_be_read_is_refused(run_main, no_run):
+    assert_refused(run_main("--prop", "missing.prp"), "cannot read the property file")
+    assert no_run == []
+
+
+def test_is_data_race_property_ignores_white_space_only():
+    assert cli.is_data_race_property(FORMULA)
+    assert cli.is_data_race_property("CHECK(init(main()),LTL(G!data-race))")
+    assert not cli.is_data_race_property("CHECK( init(main()), LTL(G data-race) )")
+
+
+# --- the conf ------------------------------------------------------------------
+
+def test_a_conf_that_does_not_exist_or_is_not_json_is_refused(run_main, no_run, tmp_path):
+    (tmp_path / "bad.json").write_text("{not json")
+
+    assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "missing.json"), "cannot read the conf missing.json")
+    assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "bad.json"), "cannot read the conf bad.json")
+    assert no_run == []
+
+
+@pytest.mark.parametrize("conf, message", [
+    ({"runType": "sequential", "tools": [{"Goblnt": "true"}]}, "'Goblnt' in the conf's tools is not a component"),
+    ({"runType": "sequential", "tools": [{"Goblint": "True"}]}, "'Goblint' has acceptance 'True'"),
+    ({"runType": "interleaved", "tools": []}, "runType is 'interleaved'"),
+    ({"tools": []}, "the conf has no 'runType'"),
+    ({"runType": "parallel", "tools": [{"Goblint": "all"}], "cpuTimeLimits": {"Deagle": 5}},
+     "cpuTimeLimits has a limit for 'Deagle'"),
+    ({"runType": "parallel", "tools": [{"Goblint": "all"}], "memoryLimits": {"Dartagnan": "70%"}},
+     "memoryLimits has a limit for 'Dartagnan'"),
+    ({"runType": "parallel", "tools": [{"Goblint": "all"}, {"Goblint": "all"}]}, "named more than once"),
+], ids=["unknown-component", "acceptance", "run-type", "no-run-type", "cpu-limit-key", "memory-limit-key", "twice"])
+def test_a_conf_that_load_refuses_ends_cooperace_without_a_verdict(run_main, tmp_path, conf, message):
+    (tmp_path / "conf.json").write_text(json.dumps(conf))
+
+    assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "conf.json"), message)
+
+
+# --- the launcher --------------------------------------------------------------
+
+def launch(tmp_path, *arguments):
+    return subprocess.run([sys.executable, str(ROOT / "cooperace"), *arguments], cwd=tmp_path,
+                          capture_output=True, text=True, timeout=60, check=False)
+
+
+def test_the_launcher_without_prop_exits_with_status_2(tmp_path):
+    result = launch(tmp_path, "foo.c")
+
+    assert result.returncode == 2
+    assert "CoOpeRace verdict" not in result.stdout
+
+
+def test_the_launcher_refuses_another_property_with_status_1_and_no_verdict_line(tmp_path):
+    (tmp_path / "foo.c").touch()
+
+    result = launch(tmp_path, "--prop", str(ROOT / "tests/properties/unreach-call.prp"), "foo.c")
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert error_lines(result.stderr) == [
+        f"CoOpeRace: error: unsupported property in {ROOT / 'tests/properties/unreach-call.prp'}: "
+        f"CoOpeRace checks only {FORMULA}"]

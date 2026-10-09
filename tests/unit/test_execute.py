@@ -190,16 +190,14 @@ def test_the_work_directory_is_removed_and_no_component_is_left(
     assert run.group.processes == set()
 
 
-def test_an_unknown_run_type_prints_an_error_and_gives_unknown(
-        make_runner, tmp_path, run_dir, capsys):
+def test_an_unknown_run_type_is_refused_before_anything_runs(make_runner, tmp_path, run_dir, capsys):
     run = Run(make_runner(), {"runType": "interleaved", "tools": []})
 
-    verdict = run.execute()
-    out = capsys.readouterr().out
+    with pytest.raises(cli.SetupError, match="runType is 'interleaved'"):
+        run.execute()
 
-    assert verdict == "unknown"
-    assert "Error, something went wrong:" in out
-    assert "execution type in conf file is incorrect" in out
+    assert capsys.readouterr().out == ""
+    assert run.runner.work_dir is None
 
 
 def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):

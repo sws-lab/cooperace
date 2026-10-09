@@ -54,62 +54,77 @@ class Parallel:
 Node = Step | Sequence | Parallel
 
 
-class RunTypeError(ValueError):
-    """Raised by load for a conf whose runType is neither "sequential" nor
-    "parallel". A ValueError like the other errors of load, but a class of its
-    own, because CoOpeRace reports it differently: as a run that went wrong,
-    with verdict unknown, and not as an error that ends CoOpeRace."""
+class ConfError(ValueError):
+    """Raised by load for a conf that CoOpeRace refuses; its message says what
+    is wrong with the conf."""
+
+
+def _entries(tools: object, where: str = "tools") -> list[tuple[str, object]]:
+    """The (component name, acceptance) pairs of the conf's `tools` list
+    `tools`, in order, nested lists included. `where` names the list in the
+    message. Raises ConfError for a `tools` that is not a list or an element
+    that is neither an object nor a list."""
+    if not isinstance(tools, list):
+        raise ConfError(f"the conf's {where} must be a list, not {tools!r}")
+    entries = []
+    for tool in tools:
+        if isinstance(tool, list):
+            entries.extend(_entries(tool, "a list nested in tools"))
+        elif isinstance(tool, dict):
+            entries.extend(tool.items())
+        else:
+            raise ConfError(f"the conf's tools has an element that is neither an object nor a list: {tool!r}")
+    return entries
 
 
 def load(conf: dict, known: Container[str]) -> Sequence | Parallel:
     """The tree of `conf`, a Sequence for runType "sequential" and a Parallel
     for "parallel", with every component's acceptance and limits in its Step.
 
-    Raises ValueError, naming the component or the key, if the conf names a
-    component more than once anywhere in its `tools` tree, has a key in
-    `memoryLimits` or `cpuTimeLimits` that names no component of the tree,
-    names a component that is not in `known` (the names of the components
-    CoOpeRace can run), or gives an acceptance that is not one of ACCEPTANCES;
-    then RunTypeError for a runType that is neither "sequential" nor
-    "parallel". A missing "tools" or "runType" raises KeyError.
+    Raises ConfError (a ValueError), with a message that names the component
+    or the key, if the conf is not an object, lacks "runType" or "tools", has
+    a `tools` that is not a list of objects and lists, names a component more
+    than once anywhere in its `tools` tree, has a key in `memoryLimits` or
+    `cpuTimeLimits` that names no component of the tree, names a component
+    that is not in `known` (the names of the components CoOpeRace can run),
+    gives an acceptance that is not one of ACCEPTANCES, or has a runType that
+    is neither "sequential" nor "parallel".
 
     A repeated component would share one tool-info object between its
     occurrences, and, in a Parallel, one output directory of the component
     between concurrent runs. A limit for a component that is not run would be
     ignored."""
-    entries = []
-
-    def collect(tools):
-        for tool in tools:
-            if isinstance(tool, list):
-                collect(tool)
-            else:
-                entries.extend(tool.items())
-
-    collect(conf["tools"])
+    if not isinstance(conf, dict):
+        raise ConfError("the conf must be a JSON object")
+    for key in ("runType", "tools"):
+        if key not in conf:
+            raise ConfError(f"the conf has no {key!r}")
+    entries = _entries(conf["tools"])
     names = [name for name, _ in entries]
     for name in names:
         if names.count(name) > 1:
-            raise ValueError(f"component {name!r} is named more than once in the conf's tools")
+            raise ConfError(f"component {name!r} is named more than once in the conf's tools")
     for limits in ("memoryLimits", "cpuTimeLimits"):
+        if not isinstance(conf.get(limits, {}), dict):
+            raise ConfError(f"the conf's {limits} must be an object")
         for name in conf.get(limits, {}):
             if name not in names:
-                raise ValueError(f"{limits} has a limit for {name!r}, "
-                                 "which is not a component of the conf's tools")
+                raise ConfError(f"{limits} has a limit for {name!r}, "
+                                "which is not a component of the conf's tools")
     run_type = conf["runType"]
     for name, accept in entries:
         if name not in known:
-            raise ValueError(f"component {name!r} in the conf's tools is not a component "
-                             "CoOpeRace can run")
+            raise ConfError(f"component {name!r} in the conf's tools is not a component "
+                            "CoOpeRace can run")
         if accept not in ACCEPTANCES:
-            raise ValueError(f"component {name!r} has acceptance {accept!r}, "
-                             f"expected one of {', '.join(ACCEPTANCES)}")
+            raise ConfError(f"component {name!r} has acceptance {accept!r}, "
+                            f"expected one of {', '.join(ACCEPTANCES)}")
     if run_type == "sequential":
         kind = Sequence
     elif run_type == "parallel":
         kind = Parallel
     else:
-        raise RunTypeError("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
+        raise ConfError(f"runType is {run_type!r}, expected 'sequential' or 'parallel'")
     return _node(kind, conf["tools"], conf.get("memoryLimits", {}), conf.get("cpuTimeLimits", {}))
 
 

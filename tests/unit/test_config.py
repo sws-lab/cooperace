@@ -143,7 +143,7 @@ def test_load_prints_nothing(known, capsys):
 def test_load_refuses_a_component_named_twice(known, tools):
     conf = {"runType": "parallel", "tools": tools}
 
-    with pytest.raises(ValueError, match=r"'(Goblint|Deagle)' is named more than once"):
+    with pytest.raises(config.ConfError, match=r"'(Goblint|Deagle)' is named more than once"):
         config.load(conf, known)
 
 
@@ -152,7 +152,7 @@ def test_load_refuses_a_limit_for_a_component_that_is_not_in_the_tree(known, lim
     conf = {"runType": "sequential", "tools": [{"Goblint": "all"}],
             limits: {"Goblint": 1000, "Deagle": 1000}}
 
-    with pytest.raises(ValueError, match=f"{limits} has a limit for 'Deagle'"):
+    with pytest.raises(config.ConfError, match=f"{limits} has a limit for 'Deagle'"):
         config.load(conf, known)
 
 
@@ -167,7 +167,7 @@ def test_load_accepts_limits_for_components_in_nested_lists(known):
 def test_load_refuses_a_component_it_does_not_know(known):
     conf = {"runType": "sequential", "tools": [{"Goblint": "all"}, [{"Goblin": "all"}]]}
 
-    with pytest.raises(ValueError, match="'Goblin' in the conf's tools is not a component"):
+    with pytest.raises(config.ConfError, match="'Goblin' in the conf's tools is not a component"):
         config.load(conf, known)
 
 
@@ -175,32 +175,46 @@ def test_load_refuses_a_component_it_does_not_know(known):
 def test_load_refuses_an_acceptance_other_than_true_false_or_all(known, acceptance):
     conf = {"runType": "sequential", "tools": [{"Goblint": acceptance}]}
 
-    with pytest.raises(ValueError, match="'Goblint' has acceptance"):
+    with pytest.raises(config.ConfError, match="'Goblint' has acceptance"):
         config.load(conf, known)
 
 
-def test_load_refuses_an_unknown_run_type_with_RunTypeError(known):
+def test_load_refuses_an_unknown_run_type(known):
     conf = {"runType": "interleaved", "tools": [{"Goblint": "all"}]}
 
-    with pytest.raises(config.RunTypeError,
-                       match="execution type in conf file is incorrect. "
-                             "Must be 'parallel' or 'sequential'"):
+    with pytest.raises(config.ConfError, match="runType is 'interleaved', expected 'sequential' or 'parallel'"):
         config.load(conf, known)
-    assert issubclass(config.RunTypeError, ValueError)
+
+
+def test_every_refusal_of_load_is_a_ConfError_and_so_a_ValueError():
+    assert issubclass(config.ConfError, ValueError)
 
 
 def test_a_conf_error_in_the_tools_comes_before_the_run_type(known):
     conf = {"runType": "interleaved", "tools": [{"Goblint": "all"}, {"Goblint": "all"}]}
 
-    with pytest.raises(ValueError, match="named more than once") as raised:
+    with pytest.raises(config.ConfError, match="named more than once"):
         config.load(conf, known)
-    assert not isinstance(raised.value, config.RunTypeError)
 
 
 @pytest.mark.parametrize("key", ["runType", "tools"])
-def test_a_conf_without_run_type_or_tools_raises_KeyError(known, key):
+def test_load_refuses_a_conf_without_run_type_or_tools(known, key):
     conf = {"runType": "sequential", "tools": [{"Goblint": "all"}]}
     del conf[key]
 
-    with pytest.raises(KeyError, match=key):
+    with pytest.raises(config.ConfError, match=f"the conf has no '{key}'"):
+        config.load(conf, known)
+
+
+@pytest.mark.parametrize("conf, message", [
+    ([], "the conf must be a JSON object"),
+    ({"runType": "sequential", "tools": {"Goblint": "all"}}, "the conf's tools must be a list"),
+    ({"runType": "sequential", "tools": [[{"Goblint": "all"}], "Goblint"]},
+     "neither an object nor a list: 'Goblint'"),
+    ({"runType": "sequential", "tools": ["Goblint"]}, "neither an object nor a list"),
+    ({"runType": "sequential", "tools": [{"Goblint": "all"}], "memoryLimits": [1]},
+     "memoryLimits must be an object"),
+], ids=["array", "tools-object", "nested-string", "string", "limits-array"])
+def test_load_refuses_a_conf_of_the_wrong_shape(known, conf, message):
+    with pytest.raises(config.ConfError, match=message):
         config.load(conf, known)
