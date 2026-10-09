@@ -1,28 +1,37 @@
 #!/usr/bin/env python3
-"""Installs the components that tools.txt names into tools/.
+"""Installs the components that the lock files name into tools/.
 
-tools.txt is the lock file of the components: a tracked file with one
-"<name>: <doi>" line per component, where <name> is the fm-tools entry of the
-component (data/<name>.yml of the fm-tools repository) and <doi> is the DOI of
-one of the versions that entry lists. The script installs exactly those
-archives, and never chooses a version itself.
+A lock file has one "<name>: <doi>" line per component, where <name> is the
+fm-tools entry of the component (data/<name>.yml of the fm-tools repository)
+and <doi> is the DOI of one of the versions that entry lists. There are two,
+both tracked:
+
+- tools.txt names the components of the SV-COMP archive, the ones the
+  strategy conf/svcomp26.json runs; scripts/svcomp-dist.sh packs exactly
+  these. They are always installed.
+- tools-pool.txt names the further components that CoOpeRace's registry can
+  run (src/cooperace/components.py, REGISTRY) and that are not in the
+  archive. They are installed only with `--pool`.
+
+The script installs exactly those archives, and never chooses a version
+itself.
 
 Each installed component records its DOI in tools/<name>/.doi, written after
 the installation has finished. A component is installed again when its
 directory is missing, has no record, or has a record other than the DOI in
-tools.txt. A directory without a record is replaced even if it was in fact
-installed from the same DOI (as every directory made by earlier versions of
-this script was): its origin cannot be told, and an interrupted installation
-leaves such a directory. To keep a directory whose origin you know, write the
+its lock file. A directory without a record is replaced even if it was in
+fact installed from the same DOI: its origin cannot be told, and an
+interrupted installation leaves such a directory. To keep a directory whose origin you know, write the
 record yourself: `echo 10.5281/zenodo.NNN > tools/<name>/.doi`.
 
-Without a network connection `--check` compares tools/ with tools.txt and
-exits 1 if any component would be installed. `--dry-run` also looks up the
+Without a network connection `--check` compares tools/ with tools.txt (and
+with tools-pool.txt, with `--pool`) and exits 1 if any component would be
+installed. `--dry-run` also looks up the
 DOIs in fm-tools, and fails on one that fm-tools does not list, but installs
 nothing.
 
-The script can be run from any directory; tools.txt and tools/ are in the
-repository that contains it.
+The script can be run from any directory; the lock files and tools/ are in
+the repository that contains it.
 """
 from __future__ import annotations
 
@@ -34,12 +43,13 @@ from pathlib import Path
 FM_TOOLS_DATA_URL = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/main/data/"
 ROOT = Path(__file__).resolve().parent.parent
 DOI_FILE = ROOT / "tools.txt"
+POOL_FILE = ROOT / "tools-pool.txt"
 TOOLS_ROOT = ROOT / "tools"
 RECORD_NAME = ".doi"
 
 
 def parse_tools_file(text: str) -> dict[str, str]:
-    """The components of the text of a tools.txt, as {name: doi}, in file
+    """The components of the text of a lock file, as {name: doi}, in file
     order. Blank lines and lines starting with '#' are skipped. A line without
     a name and a DOI, or a name given twice, is a ValueError."""
     wanted: dict[str, str] = {}
@@ -49,11 +59,33 @@ def parse_tools_file(text: str) -> dict[str, str]:
             continue
         name, separator, doi = (part.strip() for part in line.partition(":"))
         if not separator or not name or not doi:
-            raise ValueError(f"tools.txt line {number}: expected '<name>: <doi>', got '{raw}'")
+            raise ValueError(f"line {number}: expected '<name>: <doi>', got '{raw}'")
         if name in wanted:
-            raise ValueError(f"tools.txt line {number}: {name} is listed twice")
+            raise ValueError(f"line {number}: {name} is listed twice")
         wanted[name] = doi
     return wanted
+
+
+def read_lock_files(archive_file: Path, pool_file: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """The components of the lock files `archive_file` (tools.txt) and
+    `pool_file` (tools-pool.txt), each as {name: doi}. A missing pool file
+    names no component. Raises ValueError, naming the file, for a file that
+    cannot be read or parsed and for a component that both files name."""
+    locks = []
+    for path, required in ((archive_file, True), (pool_file, False)):
+        try:
+            locks.append(parse_tools_file(path.read_text()))
+        except FileNotFoundError as error:
+            if required:
+                raise ValueError(f"{path}: {error}") from error
+            locks.append({})
+        except (OSError, ValueError) as error:
+            raise ValueError(f"{path}: {error}") from error
+    archive, pool = locks
+    both = sorted(set(archive) & set(pool))
+    if both:
+        raise ValueError(f"{pool_file} names {', '.join(both)}, which {archive_file.name} names too")
+    return archive, pool
 
 
 def installed_doi(tool_dir: Path) -> str | None:
@@ -125,30 +157,35 @@ def install(name: str, data: dict, version_id: str, doi: str, tools_root: Path) 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install the components named in tools.txt into tools/.")
+    parser = argparse.ArgumentParser(
+        description="Install the components named in tools.txt (and tools-pool.txt) into tools/.")
     parser.add_argument("--check", action="store_true",
-                        help="only compare tools/ with tools.txt, offline; exit 1 if a component would be installed")
+                        help="only compare tools/ with the lock files, offline; exit 1 if a component would be installed")
     parser.add_argument("--dry-run", action="store_true",
                         help="look the DOIs up in fm-tools and print what would be installed, but install nothing")
+    parser.add_argument("--pool", action="store_true",
+                        help="also install (or, with --check, also check) the components of tools-pool.txt, "
+                             "which are not in the SV-COMP archive")
     parser.add_argument("--fm-tools-dir", type=Path,
                         help="read the fm-tools entries from this checkout of the fm-tools repository, "
                              "not from gitlab.com")
     args = parser.parse_args()
 
     try:
-        wanted = parse_tools_file(DOI_FILE.read_text())
-    except (OSError, ValueError) as error:
-        sys.exit(f"Cannot read {DOI_FILE}: {error}")
+        archive, pool = read_lock_files(DOI_FILE, POOL_FILE)
+    except ValueError as error:
+        sys.exit(f"Cannot read the lock files: {error}")
+    wanted = {**archive, **pool} if args.pool else archive
     stale = stale_tools(wanted, TOOLS_ROOT)
     for name, doi in wanted.items():
         recorded = stale.get(name, doi)
         print(f"{name}: {doi}: " + ("up to date" if name not in stale
                                    else f"to install (recorded: {recorded or 'none'})"))
     if not stale:
-        print(f"All components in {TOOLS_ROOT} match {DOI_FILE.name}.")
+        print(f"All components in {TOOLS_ROOT} match the lock files.")
         return
     if args.check:
-        sys.exit(f"{len(stale)} component(s) in {TOOLS_ROOT} do not match {DOI_FILE.name}: {', '.join(stale)}")
+        sys.exit(f"{len(stale)} component(s) in {TOOLS_ROOT} do not match the lock files: {', '.join(stale)}")
 
     # Look every DOI up before installing any, so that a wrong line in
     # tools.txt stops the script before it changes tools/.

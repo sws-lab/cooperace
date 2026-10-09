@@ -1,6 +1,8 @@
-"""scripts/download-tools.py: which components tools.txt makes it install,
-how it checks the DOIs against fm-tools before installing, and the record
-tools/<name>/.doi. The network and fm_tools are replaced by stubs."""
+"""scripts/download-tools.py: which components the lock files tools.txt and
+tools-pool.txt make it install, how it checks the DOIs against fm-tools before
+installing, and the record tools/<name>/.doi. The network and fm_tools are
+replaced by stubs, and every file the script reads is redirected into
+tmp_path."""
 import importlib.util
 import sys
 import types
@@ -19,7 +21,8 @@ GOBLINT_DATA = {"versions": [
     {"version": "svcomp25", "doi": "10.5281/zenodo.2"},
     {"version": "by-url", "url": "https://example.org/g.zip"},
 ]}
-FM_TOOLS = {"goblint": GOBLINT_DATA, "dartagnan": {"versions": [{"version": "svcomp26", "doi": "10.5281/zenodo.3"}]}}
+FM_TOOLS = {"goblint": GOBLINT_DATA, "dartagnan": {"versions": [{"version": "svcomp26", "doi": "10.5281/zenodo.3"}]},
+            "deagle": {"versions": [{"version": "svcomp26", "doi": "10.5281/zenodo.4"}]}}
 
 
 def test_parse_tools_file():
@@ -32,6 +35,19 @@ def test_parse_tools_file():
 def test_parse_tools_file_refuses_a_bad_line(text):
     with pytest.raises(ValueError):
         dt.parse_tools_file(text)
+
+
+def test_read_lock_files(tmp_path):
+    (tmp_path / "a.txt").write_text("goblint: 10.5281/zenodo.1\n")
+    (tmp_path / "p.txt").write_text("# pool\ndeagle: 10.5281/zenodo.4\n")
+    assert dt.read_lock_files(tmp_path / "a.txt", tmp_path / "p.txt") == (
+        {"goblint": "10.5281/zenodo.1"}, {"deagle": "10.5281/zenodo.4"})
+    assert dt.read_lock_files(tmp_path / "a.txt", tmp_path / "absent.txt") == ({"goblint": "10.5281/zenodo.1"}, {})
+    with pytest.raises(ValueError, match="absent.txt"):
+        dt.read_lock_files(tmp_path / "absent.txt", tmp_path / "p.txt")
+    (tmp_path / "p.txt").write_text("goblint: 10.5281/zenodo.2\n")
+    with pytest.raises(ValueError, match="goblint"):
+        dt.read_lock_files(tmp_path / "a.txt", tmp_path / "p.txt")
 
 
 def make_tool(root, name, record):
@@ -58,16 +74,19 @@ def test_version_lookup():
 
 
 class Setup:
-    """A repository with tools.txt, a tools/ directory and a stub for the
-    fm-tools lookup and for the installation."""
+    """A repository with tools.txt, tools-pool.txt (`pool`), a tools/
+    directory and a stub for the fm-tools lookup and for the installation."""
 
-    def __init__(self, tmp_path, monkeypatch, lock):
+    def __init__(self, tmp_path, monkeypatch, lock, pool=""):
         self.tools = tmp_path / "tools"
         self.lock = tmp_path / "tools.txt"
         self.lock.write_text(lock)
+        self.pool = tmp_path / "tools-pool.txt"
+        self.pool.write_text(pool)
         self.loaded = []
         self.installed = []
         monkeypatch.setattr(dt, "DOI_FILE", self.lock)
+        monkeypatch.setattr(dt, "POOL_FILE", self.pool)
         monkeypatch.setattr(dt, "TOOLS_ROOT", self.tools)
         monkeypatch.setattr(dt, "load_fm_tool_data", self.load)
         monkeypatch.setattr(dt, "install", lambda *args: self.installed.append(args[0]))
@@ -86,7 +105,19 @@ def test_nothing_is_looked_up_when_the_records_match(tmp_path, monkeypatch, caps
     make_tool(setup.tools, "goblint", "10.5281/zenodo.1")
     setup.run(monkeypatch)
     assert setup.loaded == [] and setup.installed == []
-    assert "match tools.txt" in capsys.readouterr().out
+    assert "match the lock files" in capsys.readouterr().out
+
+
+def test_the_pool_is_installed_and_checked_only_with_pool(tmp_path, monkeypatch):
+    setup = Setup(tmp_path, monkeypatch, "goblint: 10.5281/zenodo.1\n", pool="deagle: 10.5281/zenodo.4\n")
+    make_tool(setup.tools, "goblint", "10.5281/zenodo.1")
+    setup.run(monkeypatch)
+    setup.run(monkeypatch, "--check")
+    assert setup.installed == []
+    with pytest.raises(SystemExit, match="deagle"):
+        setup.run(monkeypatch, "--check", "--pool")
+    setup.run(monkeypatch, "--pool")
+    assert setup.installed == ["deagle"]
 
 
 def test_stale_components_are_installed(tmp_path, monkeypatch):

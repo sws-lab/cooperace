@@ -1,5 +1,8 @@
-"""The registry of components: its entries, the lazy import of the tool-info
-modules, and how a step reports a component that cannot be set up."""
+"""The registry of components: its entries, the lock files that name them,
+the lazy import of the tool-info modules, and how a step reports a component
+that cannot be set up."""
+import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +16,13 @@ from src.cooperace.config import Step
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# The directory under tools/ of every component, as download-tools.py unpacks them.
+# scripts/download-tools.py, which reads the lock files
+_spec = importlib.util.spec_from_file_location("download_tools", ROOT / "scripts" / "download-tools.py")
+download_tools = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(download_tools)
+
+# The directory under tools/ of every component, its fm-tools name, as
+# download-tools.py unpacks them.
 DIRECTORIES = {
     "Goblint": "goblint",
     "Deagle": "deagle",
@@ -22,7 +31,7 @@ DIRECTORIES = {
     "ULTIMATE GemCutter": "ugemcutter",
     "ULTIMATE Taipan": "utaipan",
     "nacpa": "nacpa",
-    "CPAchecker": "CPAchecker-4.0-unix",
+    "CPAchecker": "cpachecker",
     "sv-sanitizers": "sv-sanitizers",
     "RacerF": "racerf",
 }
@@ -35,6 +44,21 @@ def test_the_registry_has_every_component_under_its_own_name():
 
 def test_every_component_has_its_directory():
     assert {name: spec.directory for name, spec in REGISTRY.items()} == DIRECTORIES
+
+
+def test_every_component_is_in_exactly_one_lock_file():
+    archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
+
+    assert sorted(spec.directory for spec in REGISTRY.values()) == sorted([*archive, *pool])
+
+
+def test_the_archive_lock_holds_the_components_of_svcomp26_only():
+    archive, _pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
+    conf = json.loads((ROOT / "conf" / "svcomp26.json").read_text())
+    names = {name for stage in conf["tools"] for entry in (stage if isinstance(stage, list) else [stage])
+             for name in entry}
+
+    assert set(archive) == {REGISTRY[name].directory for name in names}
 
 
 def test_the_options_of_each_component():

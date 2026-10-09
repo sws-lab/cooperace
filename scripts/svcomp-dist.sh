@@ -7,7 +7,7 @@
 # The archive holds the tracked files cooperace, src/, conf/, lib/, LICENSE,
 # README.md and tools.txt, the smoke-test script and the two files it runs on,
 # exactly as committed, and the components that tools.txt names, copied from
-# tools/<name>. The file VERSION in it holds the fm-tools version name
+# tools/<name>. The components of tools-pool.txt are not packed. The file VERSION in it holds the fm-tools version name
 # (FMTOOLS_VERSION, or the first argument) and `git describe --always
 # --dirty`, which `cooperace --version` prints.
 #

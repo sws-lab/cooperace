@@ -70,8 +70,8 @@ _ULTIMATE_WITNESS = WitnessSpec("run", ("--witness-dir", "{dir}"), ("witness.gra
 class ComponentSpec:
     """A component CoOpeRace can run. `name` is its name in the conf, `module`
     the name of its BenchExec tool-info module, imported when the component is
-    first run, `directory` its directory under tools/ (where
-    download-tools.py unpacks it), `options` the options it is run with, before
+    first run, `directory` its name in fm-tools, which is its directory under
+    tools/ (where download-tools.py unpacks it), `options` the options it is run with, before
     those of `witness`, the WitnessSpec of its witness files."""
 
     name: str
@@ -88,7 +88,9 @@ class ComponentSpec:
 
 
 # The components CoOpeRace can run, by their name in the conf. A new
-# component needs only an entry here.
+# component needs an entry here and a line in tools.txt (the components of
+# the SV-COMP archive) or tools-pool.txt (the others), from which
+# download-tools.py installs it into tools/<directory>.
 REGISTRY = {spec.name: spec for spec in (
     # The options of Goblint's own SV-COMP entry (benchexec_toolinfo_options
     # of version svcomp26 in its fm-tools file goblint.yml). The portfolio
@@ -112,7 +114,7 @@ REGISTRY = {spec.name: spec for spec in (
     ComponentSpec("ULTIMATE Taipan", "benchexec.tools.ultimatetaipan", "utaipan",
                   options=("--full-output",), witness=_ULTIMATE_WITNESS),
     ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
-    ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "CPAchecker-4.0-unix"),
+    ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "cpachecker"),
     ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers"),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
 )}

@@ -92,7 +92,7 @@ TOOL_DIRS = {
     "Goblint": "goblint", "Deagle": "deagle", "Dartagnan": "dartagnan",
     "ULTIMATE Automizer": "uautomizer", "ULTIMATE GemCutter": "ugemcutter",
     "ULTIMATE Taipan": "utaipan", "nacpa": "nacpa",
-    "CPAchecker": "CPAchecker-4.0-unix", "sv-sanitizers": "sv-sanitizers",
+    "CPAchecker": "cpachecker", "sv-sanitizers": "sv-sanitizers",
     "RacerF": "racerf",
 }
 

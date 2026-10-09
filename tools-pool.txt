@@ -1,0 +1,11 @@
+# The components of CoOpeRace's registry that are not in the SV-COMP archive:
+# one "<fm-tools name>: <doi>" line each, the version each ran in the
+# Verification track of SV-COMP 2026. scripts/download-tools.py --pool
+# installs them into tools/; scripts/svcomp-dist.sh packs only tools.txt.
+deagle: 10.5281/zenodo.17636587
+ugemcutter: 10.5281/zenodo.17735380
+utaipan: 10.5281/zenodo.17735313
+nacpa: 10.5281/zenodo.17734971
+cpachecker: 10.5281/zenodo.17777566
+sv-sanitizers: 10.5281/zenodo.17400380
+racerf: 10.5281/zenodo.17589798
