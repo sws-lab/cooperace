@@ -478,9 +478,24 @@ class Cooperace:
 
     def runOne(self, actor):
         """Runs `actor` with runActor and returns its Outcome. runActor sets
-        `witness_files` of the current thread for an accepted verdict."""
+        `witness_files` of the current thread for an accepted verdict.
+
+        An Exception from runActor, from setting the run up (for example
+        ToolNotFoundException from the tool-info module's `executable`) or
+        from the run, makes this step a step without a verdict: the traceback
+        goes to stderr, the component's block is printed with status "ERROR
+        (<exception class>: <message>)" and result "unknown", and NO_OUTCOME
+        is returned, so that the next step of a sequence runs. StopSignal is
+        a BaseException and propagates."""
         self.local.witness_files = []
-        verdict = self.runActor(actor)
+        try:
+            verdict = self.runActor(actor)
+        except Exception as error:
+            traceback.print_exc()
+            self.printComponentRun(actor.name(),
+                                   subprocess.CompletedProcess(None, None, "", ""),
+                                   f"ERROR ({type(error).__name__}: {error})", "unknown")
+            return NO_OUTCOME
         if verdict == "true" or verdict == "false":
             return Outcome(verdict, actor.name(), self.local.witness_files)
         return NO_OUTCOME

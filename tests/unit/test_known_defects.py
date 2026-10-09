@@ -8,14 +8,9 @@ import time
 import pytest
 
 from src import cooperace
-from src.cooperace import NO_OUTCOME, Outcome
+from src.cooperace import NO_OUTCOME, Outcome, StopSignal
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "D1: an exception while a sequential step is set up (for example "
-    "ToolNotFoundException from actor.executable) propagates out of "
-    "runSequential and execute, so the later steps never run; in a parallel "
-    "branch runBranch catches it"))
 def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop):
     """Expected: runSequential([failing, true]) treats the failing step as
     having no verdict and returns the second step's `true`."""
@@ -75,3 +70,61 @@ def test_D4_a_percentage_limit_without_a_cgroup_limit_says_that_no_limit_applies
     assert coop.withResourceLimits("Goblint", command) is command
     lines = capsys.readouterr().out.splitlines()
     assert any(line.startswith("Memory limit of Goblint:") for line in lines)
+
+
+def test_D1_a_failing_step_prints_its_block_with_an_error_status(make_coop, capsys):
+    """A step whose runActor raises prints the component's block in the usual
+    protocol, with the exception in the status, and its traceback goes to
+    stderr."""
+    coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}]})
+
+    def runActor(actor):
+        raise RuntimeError("Could not find executable")
+
+    coop.runActor = runActor
+    _, tools = coop.parseConf()
+    capsys.readouterr()
+
+    assert coop.runSequential(tools) == NO_OUTCOME
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "---Goblint logs---",
+        "",
+        "---end of Goblint logs---",
+        ("Tool name: Goblint Status: ERROR (RuntimeError: Could not find executable)"
+         " Exit code: none, not started"),
+        "Tool name: Goblint Result: unknown",
+    ]
+    assert "RuntimeError: Could not find executable" in captured.err
+
+
+def test_D1_a_failing_branch_of_a_parallel_node_does_not_stop_its_sibling(make_coop):
+    coop = make_coop({"runType": "parallel",
+                      "tools": [{"Goblint": "all"}, {"Deagle": "all"}]})
+
+    def runActor(actor):
+        if actor.name() == "Goblint":
+            raise RuntimeError("Could not find executable")
+        coop.local.witness_files = []
+        return "false"
+
+    coop.runActor = runActor
+    _, tools = coop.parseConf()
+
+    assert coop.runParallel(tools) == Outcome("false", "Deagle", [])
+
+
+def test_D1_a_stop_signal_in_a_step_propagates(make_coop):
+    coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}, {"Deagle": "all"}]})
+    ran = []
+
+    def runActor(actor):
+        ran.append(actor.name())
+        raise StopSignal(15)
+
+    coop.runActor = runActor
+    _, tools = coop.parseConf()
+
+    with pytest.raises(StopSignal):
+        coop.runSequential(tools)
+    assert ran == ["Goblint"]
