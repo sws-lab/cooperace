@@ -169,7 +169,7 @@ class StopSignal(BaseException):
         self.signum = signum
 
 
-def run_memory_limit():
+def run_memory_limit(cgroup_file="/proc/self/cgroup", cgroup_root="/sys/fs/cgroup"):
     """Memory limit in bytes of the cgroup this process runs in, or None.
 
     BenchExec puts each run into a cgroup with the run's memory limit. Under
@@ -177,19 +177,24 @@ def run_memory_limit():
     cgroup is the root of the cgroup namespace); under cgroups v1 it is
     `memory.limit_in_bytes` of the memory cgroup named in /proc/self/cgroup.
     The smallest limit of that cgroup and its ancestors is returned.
+
+    `cgroup_file` is the file that names the process's cgroups and
+    `cgroup_root` the directory the cgroup file systems are mounted under (the
+    v1 memory controller is `cgroup_root`/memory). The defaults are the real
+    ones; the unit tests pass a fake tree.
     """
     limits = []
     try:
-        with open("/proc/self/cgroup") as f:
+        with open(cgroup_file) as f:
             lines = f.read().splitlines()
     except OSError:
         return None
     for line in lines:
         _, controllers, path = line.split(":", 2)
         if controllers == "":
-            base, name = "/sys/fs/cgroup", "memory.max"
+            base, name = cgroup_root, "memory.max"
         elif "memory" in controllers.split(","):
-            base, name = "/sys/fs/cgroup/memory", "memory.limit_in_bytes"
+            base, name = os.path.join(cgroup_root, "memory"), "memory.limit_in_bytes"
         else:
             continue
         parts = [p for p in path.split("/") if p]
