@@ -13,7 +13,7 @@ ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
 
 validates the witness of every `false` verdict with a SV-COMP 2026 violation
 witness validator, and prints one table of task x configuration and the result
-of five checks (see README.md):
+of these checks (see README.md):
 
   1  no run gives a wrong verdict
   2  each component alone gives the expected verdict on its own tasks, and a
@@ -22,6 +22,9 @@ of five checks (see README.md):
   4  every `false` of CoOpeRace delivers a witness file that the validator
      named in manifest.json confirms, produced by the component that answered
   5  each production configuration gives the expected verdict on every task
+  6  every output of CoOpeRace follows the protocol: the verdict line last,
+     `CoOpeRace result from: X` before it, each component block closed, no
+     `Error, something went wrong`, one witness file for a `false`
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
 `validate` and `check` take the runs and tasks recorded in DIR/meta.json by
@@ -483,29 +486,163 @@ def component_of_producer(producer):
     return None
 
 
-def answered_by(r):
-    """The component whose verdict CoOpeRace returned, as a key of COMPONENTS
-    (or the name CoOpeRace printed, for a component not in COMPONENTS): the
-    `CoOpeRace result from: X` line of CoOpeRace's output, or, in a log
-    without it, the first `Tool name: X Result: true|false` line."""
+# ---------------------------------------------------- CoOpeRace's output
+
+VERDICT_LINE = re.compile(r"CoOpeRace verdict: (true|false|unknown)")
+RESULT_FROM_LINE = re.compile(r"CoOpeRace result from: (.+)")
+BLOCK_START = re.compile(r"---(?!end of )(.+) logs---")
+BLOCK_END = re.compile(r"---end of (.+) logs---")
+STATUS_LINE = re.compile(r"Tool name: (.+?) Status: (.*) Exit code: (.*)")
+RESULT_LINE = re.compile(r"Tool name: (.+?) Result: (\w+)")
+
+
+def cooperace_output(r):
+    """The lines that CoOpeRace printed in the run `r`, without the header
+    BenchExec writes above them in the log (the command line, blank lines and
+    a line of dashes), and without trailing blank lines; None if the log
+    cannot be read."""
     try:
-        text = Path(r["log"]).read_text(errors="replace")
+        lines = Path(r["log"]).read_text(errors="replace").splitlines()
     except OSError:
         return None
-    m = (re.search(r"^CoOpeRace result from: (.+)$", text, re.M)
-         or re.search(r"^Tool name: (.+?) Result: (?:true|false)$", text, re.M))
-    if not m:
-        return None
+    for i, line in enumerate(lines[:10]):
+        if re.fullmatch(r"-{40,}", line):
+            lines = lines[i + 1:]
+            break
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return lines
+
+
+def component_blocks(lines):
+    """The component runs in CoOpeRace's output `lines`, as printComponentRun
+    of src/cooperace.py prints them: `---X logs---`, the component's output,
+    `---end of X logs---`, `Tool name: X Status: S Exit code: E` and, unless
+    CoOpeRace stopped the component, `Tool name: X Result: V`.  Returns the
+    list of blocks in order, each a dict of name, output (list of lines),
+    status, exit_code and result (None where the line is missing), and the
+    list of the places where the output does not have this form."""
+    blocks, problems = [], []
+    i = 0
+    while i < len(lines):
+        start = BLOCK_START.fullmatch(lines[i])
+        if not start:
+            if BLOCK_END.fullmatch(lines[i]):
+                problems.append(f"output line {i + 1}: {lines[i]!r} ends no block")
+            i += 1
+            continue
+        name = start.group(1)
+        j = i + 1
+        while j < len(lines) and not BLOCK_START.fullmatch(lines[j]) and not BLOCK_END.fullmatch(lines[j]):
+            j += 1
+        if j == len(lines) or lines[j] != f"---end of {name} logs---":
+            problems.append(f"output line {i + 1}: ---{name} logs--- has no ---end of {name} logs---")
+            i = j
+            continue
+        block = dict(name=name, output=lines[i + 1:j], status=None, exit_code=None, result=None)
+        k = j + 1
+        status = STATUS_LINE.fullmatch(lines[k]) if k < len(lines) else None
+        if status and status.group(1) == name:
+            block.update(status=status.group(2), exit_code=status.group(3))
+            k += 1
+            result = RESULT_LINE.fullmatch(lines[k]) if k < len(lines) else None
+            if result and result.group(1) == name:
+                block["result"] = result.group(2)
+                k += 1
+        else:
+            problems.append(f"output line {k + 1}: no `Tool name: {name} Status: ...` after its block")
+        blocks.append(block)
+        i = k
+    return blocks, problems
+
+
+def answering_name(lines):
+    """The name, as CoOpeRace prints it, of the component whose verdict
+    CoOpeRace returned: the `CoOpeRace result from: X` line of its output
+    `lines`, or, in an output without it, the first `Tool name: X Result:
+    true|false` line; None if there is neither."""
+    for line in lines:
+        m = RESULT_FROM_LINE.fullmatch(line)
+        if m:
+            return m.group(1)
+    for line in lines:
+        m = RESULT_LINE.fullmatch(line)
+        if m and m.group(2) in ("true", "false"):
+            return m.group(1)
+    return None
+
+
+def answered_by(r):
+    """The component whose verdict CoOpeRace returned in the run `r`, as a key
+    of COMPONENTS (or the name CoOpeRace printed, for a component not in
+    COMPONENTS), from answering_name; None if there is none."""
+    name = answering_name(cooperace_output(r) or [])
     for c, comp in COMPONENTS.items():
-        if comp["name"] == m.group(1):
+        if comp["name"] == name:
             return c
-    return m.group(1)
+    return name
+
+
+def is_graphml(path):
+    try:
+        return ET.parse(path).getroot().tag == "{http://graphml.graphdrawing.org/xmlns}graphml"
+    except (ET.ParseError, OSError):
+        return False
+
+
+def is_yaml_witness(path):
+    try:
+        import yaml  # a BenchExec dependency
+        return isinstance(yaml.safe_load(Path(path).read_text()), list)
+    except Exception:
+        return False
+
+
+# The names CoOpeRace delivers a witness under (witnessFilesToFileRoot of
+# src/cooperace.py), with a test that the file has that name's format.
+DELIVERED_WITNESSES = {"witness.graphml": is_graphml, "witness.yml": is_yaml_witness}
+
+
+def protocol_problems(r, lines):
+    """What in the run `r` of CoOpeRace, whose output is `lines`, departs from
+    the protocol that benchexec.tools.cooperace and this suite rely on (check
+    6); empty if nothing does."""
+    if lines is None:
+        return [f"cannot read the log {r['log']}"]
+    problems = []
+    if r["reason"]:
+        # BenchExec ended the run: there is no final line to check.
+        pass
+    elif not lines or not VERDICT_LINE.fullmatch(lines[-1]):
+        problems.append(f"the last line is {lines[-1] if lines else ''!r}, "
+                        "not `CoOpeRace verdict: true|false|unknown`")
+    else:
+        verdict = VERDICT_LINE.fullmatch(lines[-1]).group(1)
+        from_lines = [line for line in lines if RESULT_FROM_LINE.fullmatch(line)]
+        if verdict == "unknown" and from_lines:
+            problems.append(f"{from_lines[0]!r} with verdict unknown")
+        elif verdict != "unknown" and (len(from_lines) != 1 or lines[-2] != from_lines[0]):
+            problems.append("not exactly one `CoOpeRace result from: X`, right before the verdict line")
+    blocks, structure = component_blocks(lines)
+    problems += structure
+    if any("Error, something went wrong" in line for line in lines):
+        problems.append("`Error, something went wrong` in the output")
+    if r["verdict"] is False:
+        files = sorted(p for p in Path(r["files"]).rglob("*") if p.is_file()) if Path(r["files"]).is_dir() else []
+        names = [p.relative_to(r["files"]).as_posix() for p in files]
+        if len(files) != 1:
+            problems.append(f"{len(files)} witness files in the result files ({', '.join(names) or 'none'}), not 1")
+        elif names[0] not in DELIVERED_WITNESSES:
+            problems.append(f"the witness file is {names[0]}, not one of {', '.join(DELIVERED_WITNESSES)}")
+        elif not DELIVERED_WITNESSES[names[0]](files[0]):
+            problems.append(f"{names[0]} does not have the format its name says")
+    return problems
 
 
 # --------------------------------------------------------------- checks
 
 def check(results, runs, tasks, skipped, fmt):
-    """The five checks; a list of (check, run definition, task, ok, kind, detail)."""
+    """The checks; a list of (check, run definition, task, ok, kind, detail)."""
     out = []
     def add(n, rundef, task, ok, kind, detail):
         out.append((n, rundef, task, ok, kind, detail))
@@ -562,6 +699,15 @@ def check(results, runs, tasks, skipped, fmt):
                 ok = o["verdict"] == a["verdict"]
                 add(3, rundef, t["id"], ok, "differs from the component alone",
                     "" if ok else f"{run['component']} alone: {a['status']}; in CoOpeRace: {o['status']}")
+    # Check 6.
+    for rundef, run in runs.items():
+        if run["kind"] == "alone":
+            continue
+        for t in run["tasks"]:
+            r = results.get((rundef, t["id"]))
+            if r:
+                problems = protocol_problems(r, cooperace_output(r))
+                add(6, rundef, t["id"], not problems, "protocol", "; ".join(problems))
     # Check 5.
     for rundef, run in runs.items():
         if run["kind"] != "production":
@@ -611,7 +757,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
     names = {1: "no wrong verdict", 2: "reference verdicts and witnesses on own tasks",
              3: "CoOpeRace with one component equals the component alone",
              4: "witness of every false is confirmed, produced by the answering component",
-             5: "production configurations give the expected verdict"}
+             5: "production configurations give the expected verdict",
+             6: "every CoOpeRace output follows the protocol"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of a false witness], CPU time; WRONG = verdict differs from the expected one", ""]
     failed = False
