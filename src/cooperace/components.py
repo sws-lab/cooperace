@@ -23,13 +23,13 @@ from .strategy import NO_OUTCOME, Outcome
 @dataclass(frozen=True)
 class WitnessSpec:
     """Which files of a component run are its witness. `directory` is "run" if
-    `options` tell the component to write them into the directory runActor
+    `options` tell the component to write them into the directory run_component
     makes for the run ({dir} in an option stands for it), and "component" if
     the component writes them under its own directory, the working directory
     of its run. `files` are their paths relative to that directory, or None
     for every file there whose name contains "witness" and ends in graphml or
-    yml (Cooperace.witnessFiles). collectWitnessFiles takes only those
-    modified during the run, and witnessFilesToFileRoot delivers a graphml
+    yml (witness_files_under). collect_witness_files takes only those
+    modified during the run, and witness_files_to_file_root delivers a graphml
     file as witness.graphml and a YAML file as witness.yml. A component that
     writes a new witness file, or a new format, needs only a new WitnessSpec
     in its registry entry."""
@@ -96,7 +96,7 @@ REGISTRY = {spec.name: spec for spec in (
     ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
     ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "CPAchecker-4.0-unix"),
     # The tool-info module's name() is "SV-sanitizers", not "sv-sanitizers",
-    # and runActor looks a component's entry up by name(), as the tables this
+    # and run_component looks a component's entry up by name(), as the tables this
     # registry replaced did. A run of sv-sanitizers therefore raises KeyError
     # before the component starts, and is reported with status "ERROR
     # (KeyError: 'SV-sanitizers')" and result unknown.
@@ -110,13 +110,28 @@ REGISTRY = {spec.name: spec for spec in (
 DATA_MODELS = ("ILP32", "LP64")
 DEFAULT_DATA_MODEL = "ILP32"
 
-class Cooperace:
-    # `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
-    # the option was not given, which means DEFAULT_DATA_MODEL (reported on
-    # stderr). Any other value raises ValueError: given to the components as it
-    # is, the Goblint and ULTIMATE tool-info modules raise
-    # UnsupportedFeatureException inside runActor and Dartagnan's ignores it.
-    def __init__(self, file, property_file, data_model):
+# Held while a protocol line or block is printed, so that the output of
+# components running in parallel is not interleaved.
+PRINT_LOCK = threading.Lock()
+
+
+class ComponentRunner:
+    """Runs the components of the steps of a strategy on one task: the
+    StepRunner that strategy.execute is given. It holds the task (`file`,
+    `property_file`, `data_model`), the components it can run (`registry`),
+    the directory that holds their directories (`tools_dir`, tools/ in the
+    working directory) and, between prepare and cleanup, the work directory
+    with one directory per component run (`work_dir`).
+
+    `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
+    the option was not given, which means DEFAULT_DATA_MODEL (reported on
+    stderr). Any other value raises ValueError: given to the components as it
+    is, the Goblint and ULTIMATE tool-info modules raise
+    UnsupportedFeatureException inside run_component and Dartagnan's ignores
+    it. `registry` is copied, so that the unit tests can add stub components
+    to the copy."""
+
+    def __init__(self, file, property_file, data_model, registry=REGISTRY):
         if data_model is None:
             print(f"CoOpeRace: no --arch given, assuming {DEFAULT_DATA_MODEL}", file=sys.stderr)
             data_model = DEFAULT_DATA_MODEL
@@ -126,85 +141,33 @@ class Cooperace:
         self.property_file = os.path.abspath(property_file)
         self.data_model = data_model
 
-        #The components this instance can run, by name: a copy of REGISTRY,
-        #to which the unit tests add stub components
-        self.registry = dict(REGISTRY)
+        #The components this runner can run, by name
+        self.registry = dict(registry)
         #The directory that holds the components' directories
         self.tools_dir = os.path.join(os.getcwd(), "tools")
-        self.print_lock = threading.Lock()
+        self.work_dir = None
 
     def prepare(self):
         """Removes the witness files an earlier run delivered to the working
         directory and makes the work directory, which holds one directory per
-        component run, made in runActor."""
-        self.removeOldWitnessFiles()
+        component run, made in run_component."""
+        remove_old_witness_files()
         self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
 
     def deliver(self, witness_files):
-        """Delivers `witness_files` with witnessFilesToFileRoot."""
-        self.witnessFilesToFileRoot(witness_files)
+        """Delivers `witness_files` with witness_files_to_file_root."""
+        witness_files_to_file_root(witness_files)
 
     def cleanup(self):
         """Removes the work directory and everything in it."""
         shutil.rmtree(self.work_dir, ignore_errors=True)
 
-    def componentMemoryLimit(self, step):
-        """Memory limit in bytes for the config.Step `step`, from its
-        `memory_limit` (the conf's `memoryLimits`), or None.
-
-        `memoryLimits` maps a component name to a number of bytes or to a
-        percentage of the run's memory limit (`"70%"`, see run_memory_limit).
-        A percentage gives None when the run has no memory limit.
-        """
-        value = step.memory_limit
-        if isinstance(value, str) and value.endswith("%"):
-            run_limit = run_memory_limit()
-            if run_limit is None:
-                return None
-            return int(run_limit * float(value[:-1]) / 100)
-        return None if value is None else int(value)
-
-    def componentCpuTimeLimit(self, step):
-        """CPU-time limit in seconds for the config.Step `step`, from its
-        `cpu_time_limit` (the conf's `cpuTimeLimits`), or None."""
-        value = step.cpu_time_limit
-        return None if value is None else int(value)
-
-    def withResourceLimits(self, step, command):
-        """`command`, started with the limits of the config.Step `step`
-        (processes.with_rlimits): RLIMIT_DATA set to its memory limit
-        (componentMemoryLimit) and RLIMIT_CPU to its CPU-time limit
-        (componentCpuTimeLimit). Prints "Memory limit of <component>: <n>
-        bytes (RLIMIT_DATA)" and "CPU-time limit of <component>: <n> s
-        (RLIMIT_CPU)" for the limits it sets. A percentage for which the run
-        has no memory limit applies no limit and prints "Memory limit of
-        <component>: none (no cgroup memory limit found for "<value>")"."""
-        tool_name = step.component
-        memory = self.componentMemoryLimit(step)
-        if memory is not None:
-            message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
-            with self.print_lock:
-                print(message, flush=True)
-        else:
-            value = step.memory_limit
-            if isinstance(value, str) and value.endswith("%"):
-                #A percentage that run_memory_limit could not resolve: no
-                #limit applies, and the run says so
-                with self.print_lock:
-                    print(f"Memory limit of {tool_name}: none "
-                          f"(no cgroup memory limit found for \"{value}\")", flush=True)
-        cpu = self.componentCpuTimeLimit(step)
-        if cpu is not None:
-            with self.print_lock:
-                print(f"CPU-time limit of {tool_name}: {cpu} s (RLIMIT_CPU)", flush=True)
-        return with_rlimits(command, memory, cpu)
-
     def run_step(self, step, group):
-        """Runs the config.Step `step` with runActor in the ComponentGroup
-        `group` and returns the Outcome runActor returns.
+        """Runs the config.Step `step` with run_component in the ComponentGroup
+        `group` and returns the Outcome run_component returns.
 
         An Exception from making the tool-info object (ComponentSpec.tool,
-        which imports its module) or from runActor, from setting the run up
+        which imports its module) or from run_component, from setting the run up
         (for example ToolNotFoundException from the tool-info module's
         `executable`) or from the run, makes this step a step without a
         verdict: the traceback goes to stderr, the component's block is
@@ -217,108 +180,14 @@ class Cooperace:
         try:
             actor = self.registry[step.component].tool()
             name = actor.name()
-            return self.runActor(actor, step, group)
+            return self.run_component(actor, step, group)
         except Exception as error:
             traceback.print_exc()
-            self.printComponentRun(name,
-                                   subprocess.CompletedProcess(None, None, "", ""),
-                                   f"ERROR ({type(error).__name__}: {error})", "unknown")
+            print_component_run(name, subprocess.CompletedProcess(None, None, "", ""),
+                                f"ERROR ({type(error).__name__}: {error})", "unknown")
             return NO_OUTCOME
 
-    def witnessFiles(self, tool_dir):
-        witness_files = []
-        
-        for root, dirs, files in os.walk(tool_dir):
-            for file in files:
-                if 'witness' in file.lower() and (file.endswith("graphml") or file.endswith("yml")):
-                    witness_files.append(os.path.join(root, file))
-
-        return witness_files
-        
-
-    def witnessFilesToFileRoot(self, witness_files):
-        """Copies the witness files of one component run, from
-        collectWitnessFiles, to the working directory under the name of their
-        format: a graphml file as witness.graphml, a YAML file as witness.yml."""
-        for file in witness_files:
-            if file.endswith(".graphml"):
-                name = "witness.graphml"
-            elif file.endswith(".yml") or file.endswith(".yaml"):
-                name = "witness.yml"
-            else:
-                continue
-            shutil.copy2(file, os.path.join(os.getcwd(), name))
-
-    def removeOldWitnessFiles(self):
-        """Removes witness.graphml and witness.yml, the names
-        witnessFilesToFileRoot delivers witnesses under, from the working
-        directory, so that one left there by an earlier run is not delivered
-        with this run's verdict."""
-        for name in ("witness.graphml", "witness.yml"):
-            try:
-                os.remove(os.path.join(os.getcwd(), name))
-            except FileNotFoundError:
-                pass
-
-    def witnessOptions(self, witness, witness_dir):
-        """The `options` of the WitnessSpec `witness`, with {dir} replaced by
-        `witness_dir`."""
-        return [option.replace("{dir}", witness_dir) for option in witness.options]
-
-    def startTime(self, witness_dir):
-        """A time stamp of now, taken from the file system as the modification
-        time of a new file in `witness_dir`, so that it compares exactly with
-        the modification times of the files a component writes afterwards."""
-        marker = os.path.join(witness_dir, ".started")
-        open(marker, "w").close()
-        return os.stat(marker).st_mtime_ns
-
-    def collectWitnessFiles(self, witness, cwd, witness_dir, started):
-        """Returns the witness files of the component run that began at
-        `started`, all in `witness_dir`: the files that the component's
-        WitnessSpec `witness` names, in `witness_dir` or under its own
-        directory `cwd`, that were modified at or after `started`. Those under
-        `cwd` are moved to the same relative path in `witness_dir`. Any other
-        file, one left by an earlier run or shipped with the component
-        (Goblint's smoketests/*witness*.yml), is neither returned nor
-        touched.
-
-        The comparison of modification times assumes that `witness_dir` (where
-        `started` was taken, by startTime) and the directory a component
-        writes to take their modification times from the same clock at the
-        same granularity, which holds on Linux for ext4, tmpfs and overlayfs;
-        on a file system with one-second time stamps, a witness written in the
-        second of `started` would be dropped."""
-        source = witness_dir if witness.directory == "run" else cwd
-        if witness.files is None:
-            candidates = self.witnessFiles(source)
-        else:
-            candidates = [os.path.join(source, file) for file in witness.files]
-
-        collected = []
-        for file in candidates:
-            try:
-                if os.stat(file).st_mtime_ns < started:
-                    continue
-            except OSError:
-                continue
-            if source != witness_dir:
-                destination = os.path.join(witness_dir, os.path.relpath(file, source))
-                os.makedirs(os.path.dirname(destination), exist_ok=True)
-                shutil.move(file, destination)
-                file = destination
-            collected.append(file)
-        return collected
-
-    def confirmVerdict(self, tool_acceptance_criteria, verdict: str, expected_verdict: str):
-        if verdict.__contains__(expected_verdict):
-            if tool_acceptance_criteria == "all" or tool_acceptance_criteria == expected_verdict:
-                return True
-            else:
-                return False
-    
-
-    def runActor(self, actor: BaseTool2, step, group):
+    def run_component(self, actor: BaseTool2, step, group):
         """Runs the component `actor` of the config.Step `step` on the task in
         the ComponentGroup `group`, with the step's limits, and prints its
         block. Returns the Outcome of its verdict, with the witness files it
@@ -344,7 +213,7 @@ class Cooperace:
 
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
-        options = list(spec.options) + self.witnessOptions(spec.witness, witness_dir)
+        options = list(spec.options) + witness_options(spec.witness, witness_dir)
 
         cmdline = actor.cmdline(
             executable,
@@ -353,93 +222,253 @@ class Cooperace:
             BaseTool2.ResourceLimits()
         )
 
-        started = self.startTime(witness_dir)
+        started = start_time(witness_dir)
         tool_result = run_in_session(
-            command=self.withResourceLimits(step, cmdline),
+            command=with_resource_limits(step, cmdline),
             cwd=cwd,
             group=group
             )
         #Also for a stopped component, so that no file it wrote stays in its directory
-        witness_files = self.collectWitnessFiles(spec.witness, cwd, witness_dir, started)
+        witness_files = collect_witness_files(spec.witness, cwd, witness_dir, started)
 
         if group.stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
             #the component was ended or never started, and its result is not used.
-            #This check is also why componentStatus never gets a returncode of
+            #This check is also why component_status never gets a returncode of
             #None: run_in_session returns None only when the group was already
             #stopped, and a group never becomes unstopped.
-            self.printComponentRun(actor.name(), tool_result, "stopped by CoOpeRace", None)
+            print_component_run(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return NO_OUTCOME
 
-        status = self.componentStatus(actor, cmdline, tool_result)
+        status = component_status(actor, cmdline, tool_result)
         verdict = status.lower()
 
-        if self.confirmVerdict(step.accept, verdict, "true"):
+        if confirm_verdict(step.accept, verdict, "true"):
             verdict = "true"
-        elif self.confirmVerdict(step.accept, verdict, "false"):
+        elif confirm_verdict(step.accept, verdict, "false"):
             verdict = "false"
         else:
             verdict = "unknown"
 
-        self.printComponentRun(actor.name(), tool_result, status, verdict)
+        print_component_run(actor.name(), tool_result, status, verdict)
 
         if verdict == "unknown":
             return NO_OUTCOME
         return Outcome(verdict, actor.name(), witness_files)
 
-    def componentStatus(self, actor, cmdline, tool_result):
-        """The status BenchExec would give this run of `actor` (a
-        subprocess.CompletedProcess from run_in_session): `actor.determine_result`
-        on the output and the real exit code, and for an unspecific result
-        (unknown, error or done) the refinement of benchexec.model, which
-        names the signal that ended the component or, for an error, the exit
-        code. A component that crashes is so reported as, for example,
-        "EXCEPTION (SetDomain.Unsupported)" or "ERROR (1)", which
-        confirmVerdict does not accept."""
-        returncode = tool_result.returncode
-        if returncode < 0:
-            exit_code = butil.ProcessExitCode.create(signal=-returncode)
-        else:
-            exit_code = butil.ProcessExitCode.create(value=returncode)
-        run = BaseTool2.Run(
-            cmdline=cmdline,
-            exit_code=exit_code,
-            output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
-            termination_reason=""
-        )
-        status = actor.determine_result(run)
 
-        if status in bresult.RESULT_LIST_OTHER:
-            if exit_code.signal == signal.SIGABRT:
-                status = "ABORTED"
-            elif exit_code.signal == signal.SIGSEGV:
-                status = "SEGMENTATION FAULT"
-            elif exit_code.signal == signal.SIGTERM:
-                status = "KILLED"
-            elif exit_code.signal:
-                status = f"KILLED BY SIGNAL {exit_code.signal}"
-            elif exit_code.value and status != bresult.RESULT_UNKNOWN:
-                status = f"{bresult.RESULT_ERROR} ({exit_code.value})"
-        return status
+def component_memory_limit(step):
+    """Memory limit in bytes for the config.Step `step`, from its
+    `memory_limit` (the conf's `memoryLimits`), or None.
 
-    def printComponentRun(self, name, tool_result, status, verdict):
-        """Prints the output of a component run between "---<name> logs---"
-        and "---end of <name> logs---", then the line "Tool name: <name>
-        Status: <status> Exit code: <exit code>" and, unless `verdict` is None,
-        "Tool name: <name> Result: <verdict>", all at once, so that the
-        output of components running in parallel is not interleaved."""
-        returncode = tool_result.returncode
-        if returncode is None:
-            exit_code = "none, not started"
-        elif returncode < 0:
-            exit_code = f"signal {-returncode}"
+    `memoryLimits` maps a component name to a number of bytes or to a
+    percentage of the run's memory limit (`"70%"`, see run_memory_limit).
+    A percentage gives None when the run has no memory limit.
+    """
+    value = step.memory_limit
+    if isinstance(value, str) and value.endswith("%"):
+        run_limit = run_memory_limit()
+        if run_limit is None:
+            return None
+        return int(run_limit * float(value[:-1]) / 100)
+    return None if value is None else int(value)
+
+
+def component_cpu_time_limit(step):
+    """CPU-time limit in seconds for the config.Step `step`, from its
+    `cpu_time_limit` (the conf's `cpuTimeLimits`), or None."""
+    value = step.cpu_time_limit
+    return None if value is None else int(value)
+
+
+def with_resource_limits(step, command):
+    """`command`, started with the limits of the config.Step `step`
+    (processes.with_rlimits): RLIMIT_DATA set to its memory limit
+    (component_memory_limit) and RLIMIT_CPU to its CPU-time limit
+    (component_cpu_time_limit). Prints "Memory limit of <component>: <n>
+    bytes (RLIMIT_DATA)" and "CPU-time limit of <component>: <n> s
+    (RLIMIT_CPU)" for the limits it sets. A percentage for which the run
+    has no memory limit applies no limit and prints "Memory limit of
+    <component>: none (no cgroup memory limit found for "<value>")"."""
+    tool_name = step.component
+    memory = component_memory_limit(step)
+    if memory is not None:
+        message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
+        with PRINT_LOCK:
+            print(message, flush=True)
+    else:
+        value = step.memory_limit
+        if isinstance(value, str) and value.endswith("%"):
+            #A percentage that run_memory_limit could not resolve: no
+            #limit applies, and the run says so
+            with PRINT_LOCK:
+                print(f"Memory limit of {tool_name}: none "
+                      f"(no cgroup memory limit found for \"{value}\")", flush=True)
+    cpu = component_cpu_time_limit(step)
+    if cpu is not None:
+        with PRINT_LOCK:
+            print(f"CPU-time limit of {tool_name}: {cpu} s (RLIMIT_CPU)", flush=True)
+    return with_rlimits(command, memory, cpu)
+
+
+def component_status(actor, cmdline, tool_result):
+    """The status BenchExec would give this run of `actor` (a
+    subprocess.CompletedProcess from run_in_session): `actor.determine_result`
+    on the output and the real exit code, and for an unspecific result
+    (unknown, error or done) the refinement of benchexec.model, which
+    names the signal that ended the component or, for an error, the exit
+    code. A component that crashes is so reported as, for example,
+    "EXCEPTION (SetDomain.Unsupported)" or "ERROR (1)", which
+    confirm_verdict does not accept."""
+    returncode = tool_result.returncode
+    if returncode < 0:
+        exit_code = butil.ProcessExitCode.create(signal=-returncode)
+    else:
+        exit_code = butil.ProcessExitCode.create(value=returncode)
+    run = BaseTool2.Run(
+        cmdline=cmdline,
+        exit_code=exit_code,
+        output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
+        termination_reason=""
+    )
+    status = actor.determine_result(run)
+
+    if status in bresult.RESULT_LIST_OTHER:
+        if exit_code.signal == signal.SIGABRT:
+            status = "ABORTED"
+        elif exit_code.signal == signal.SIGSEGV:
+            status = "SEGMENTATION FAULT"
+        elif exit_code.signal == signal.SIGTERM:
+            status = "KILLED"
+        elif exit_code.signal:
+            status = f"KILLED BY SIGNAL {exit_code.signal}"
+        elif exit_code.value and status != bresult.RESULT_UNKNOWN:
+            status = f"{bresult.RESULT_ERROR} ({exit_code.value})"
+    return status
+
+
+def confirm_verdict(tool_acceptance_criteria, verdict: str, expected_verdict: str):
+    """Whether `verdict` (a component's status in lower case) is
+    `expected_verdict` ("true" or "false") for an acceptance
+    `tool_acceptance_criteria` ("true", "false" or "all") that accepts it.
+    `verdict` matches if it contains `expected_verdict`, as
+    "false(no-data-race)" contains "false". Returns None, which is false,
+    if it does not."""
+    if verdict.__contains__(expected_verdict):
+        if tool_acceptance_criteria == "all" or tool_acceptance_criteria == expected_verdict:
+            return True
         else:
-            exit_code = str(returncode)
-        lines = [f"---{name} logs---", tool_result.stdout.rstrip("\n"), f"---end of {name} logs---",
-                 f"Tool name: {name} Status: {status} Exit code: {exit_code}"]
-        if verdict is not None:
-            lines.append(f"Tool name: {name} Result: {verdict}")
-        with self.print_lock:
-            print("\n".join(lines), flush=True)
-    
-    
+            return False
+
+
+def print_component_run(name, tool_result, status, verdict):
+    """Prints the output of a component run between "---<name> logs---"
+    and "---end of <name> logs---", then the line "Tool name: <name>
+    Status: <status> Exit code: <exit code>" and, unless `verdict` is None,
+    "Tool name: <name> Result: <verdict>", all at once, so that the
+    output of components running in parallel is not interleaved."""
+    returncode = tool_result.returncode
+    if returncode is None:
+        exit_code = "none, not started"
+    elif returncode < 0:
+        exit_code = f"signal {-returncode}"
+    else:
+        exit_code = str(returncode)
+    lines = [f"---{name} logs---", tool_result.stdout.rstrip("\n"), f"---end of {name} logs---",
+             f"Tool name: {name} Status: {status} Exit code: {exit_code}"]
+    if verdict is not None:
+        lines.append(f"Tool name: {name} Result: {verdict}")
+    with PRINT_LOCK:
+        print("\n".join(lines), flush=True)
+
+
+def witness_options(witness, witness_dir):
+    """The `options` of the WitnessSpec `witness`, with {dir} replaced by
+    `witness_dir`."""
+    return [option.replace("{dir}", witness_dir) for option in witness.options]
+
+
+def start_time(witness_dir):
+    """A time stamp of now, taken from the file system as the modification
+    time of a new file in `witness_dir`, so that it compares exactly with
+    the modification times of the files a component writes afterwards."""
+    marker = os.path.join(witness_dir, ".started")
+    open(marker, "w").close()
+    return os.stat(marker).st_mtime_ns
+
+
+def collect_witness_files(witness, cwd, witness_dir, started):
+    """Returns the witness files of the component run that began at
+    `started`, all in `witness_dir`: the files that the component's
+    WitnessSpec `witness` names, in `witness_dir` or under its own
+    directory `cwd`, that were modified at or after `started`. Those under
+    `cwd` are moved to the same relative path in `witness_dir`. Any other
+    file, one left by an earlier run or shipped with the component
+    (Goblint's smoketests/*witness*.yml), is neither returned nor
+    touched.
+
+    The comparison of modification times assumes that `witness_dir` (where
+    `started` was taken, by start_time) and the directory a component
+    writes to take their modification times from the same clock at the
+    same granularity, which holds on Linux for ext4, tmpfs and overlayfs;
+    on a file system with one-second time stamps, a witness written in the
+    second of `started` would be dropped."""
+    source = witness_dir if witness.directory == "run" else cwd
+    if witness.files is None:
+        candidates = witness_files_under(source)
+    else:
+        candidates = [os.path.join(source, file) for file in witness.files]
+
+    collected = []
+    for file in candidates:
+        try:
+            if os.stat(file).st_mtime_ns < started:
+                continue
+        except OSError:
+            continue
+        if source != witness_dir:
+            destination = os.path.join(witness_dir, os.path.relpath(file, source))
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            shutil.move(file, destination)
+            file = destination
+        collected.append(file)
+    return collected
+
+
+def witness_files_under(tool_dir):
+    """The files under `tool_dir` whose name contains "witness" in any case
+    and ends in graphml or yml."""
+    witness_files = []
+
+    for root, dirs, files in os.walk(tool_dir):
+        for file in files:
+            if 'witness' in file.lower() and (file.endswith("graphml") or file.endswith("yml")):
+                witness_files.append(os.path.join(root, file))
+
+    return witness_files
+
+
+def witness_files_to_file_root(witness_files):
+    """Copies the witness files of one component run, from
+    collect_witness_files, to the working directory under the name of their
+    format: a graphml file as witness.graphml, a YAML file as witness.yml."""
+    for file in witness_files:
+        if file.endswith(".graphml"):
+            name = "witness.graphml"
+        elif file.endswith(".yml") or file.endswith(".yaml"):
+            name = "witness.yml"
+        else:
+            continue
+        shutil.copy2(file, os.path.join(os.getcwd(), name))
+
+
+def remove_old_witness_files():
+    """Removes witness.graphml and witness.yml, the names
+    witness_files_to_file_root delivers witnesses under, from the working
+    directory, so that one left there by an earlier run is not delivered
+    with this run's verdict."""
+    for name in ("witness.graphml", "witness.yml"):
+        try:
+            os.remove(os.path.join(os.getcwd(), name))
+        except FileNotFoundError:
+            pass

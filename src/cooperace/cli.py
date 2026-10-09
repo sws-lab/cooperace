@@ -4,7 +4,7 @@ import os
 import traceback
 
 from . import config, strategy
-from .components import DATA_MODELS, Cooperace
+from .components import DATA_MODELS, ComponentRunner, remove_old_witness_files
 
 
 def main():
@@ -28,16 +28,16 @@ def main():
         with open("conf/svcomp26.json") as file:
             conf = json.load(file)
 
-    cooperace = Cooperace(abs_path, args.prop, args.arch)
+    runner = ComponentRunner(abs_path, args.prop, args.arch)
 
 
-    verdict = run(conf, cooperace)
+    verdict = run(conf, runner)
     print("CoOpeRace verdict: " + verdict)
 
 
 def run(conf, runner, group=None):
     """Loads the conf `conf` (a dict) with config.load against the components
-    of `runner` (a components.Cooperace) and runs it with strategy.execute in
+    of `runner` (a components.ComponentRunner) and runs it with strategy.execute in
     the ComponentGroup `group` (a new one if None). Returns the verdict.
 
     An error of config.load propagates, except config.RunTypeError: for that
@@ -47,7 +47,7 @@ def run(conf, runner, group=None):
     try:
         root = config.load(conf, runner.registry)
     except config.RunTypeError as error:
-        runner.removeOldWitnessFiles()
+        remove_old_witness_files()
         print("Error, something went wrong:", error)
         traceback.print_exc()
         return "unknown"

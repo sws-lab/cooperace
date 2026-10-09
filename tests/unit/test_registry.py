@@ -89,10 +89,10 @@ def test_importing_components_imports_no_tool_info_module():
 
 
 def test_a_tool_info_module_that_cannot_be_imported_is_a_step_without_a_verdict(
-        coop, group, capsys):
-    coop.registry["Broken"] = ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
+        runner, group, capsys):
+    runner.registry["Broken"] = ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
 
-    outcome = coop.run_step(Step("Broken", "all"), group)
+    outcome = runner.run_step(Step("Broken", "all"), group)
 
     assert outcome.verdict == "unknown"
     assert capsys.readouterr().out.splitlines() == [
@@ -106,12 +106,12 @@ def test_a_tool_info_module_that_cannot_be_imported_is_a_step_without_a_verdict(
 
 
 def test_sv_sanitizers_is_reported_as_an_error_because_its_name_differs(
-        coop, group, capsys, monkeypatch):
-    """The tool-info module names the component "SV-sanitizers", and runActor
+        runner, group, capsys, monkeypatch):
+    """The tool-info module names the component "SV-sanitizers", and run_component
     looks the entry up by that name; see the entry in REGISTRY."""
     monkeypatch.chdir(ROOT)
 
-    outcome = coop.run_step(Step("sv-sanitizers", "all"), group)
+    outcome = runner.run_step(Step("sv-sanitizers", "all"), group)
 
     assert outcome.verdict == "unknown"
     lines = capsys.readouterr().out.splitlines()

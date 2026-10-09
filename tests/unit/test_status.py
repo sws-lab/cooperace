@@ -1,9 +1,11 @@
-"""The status of a component run (componentStatus) and which verdicts an
-acceptance accepts (confirmVerdict)."""
+"""The status of a component run (component_status) and which verdicts an
+acceptance accepts (confirm_verdict)."""
 import signal
 import subprocess
 
 import pytest
+
+from src.cooperace import components
 
 
 class StatusActor:
@@ -22,13 +24,13 @@ class StatusActor:
         return self.status
 
 
-def status_of(coop, status, returncode, stdout="output"):
+def status_of(status, returncode, stdout="output"):
     actor = StatusActor(status)
     result = subprocess.CompletedProcess(["fake"], returncode, stdout, "")
-    return coop.componentStatus(actor, ["fake"], result)
+    return components.component_status(actor, ["fake"], result)
 
 
-# What componentStatus returns for the status that determine_result gives and
+# What component_status returns for the status that determine_result gives and
 # the exit code of the component (negative: ended by that signal). A status
 # that is not "unknown", "ERROR" or "done" is kept as it is.
 STATUS_TABLE = [
@@ -60,15 +62,15 @@ STATUS_TABLE = [
 
 
 @pytest.mark.parametrize("status, returncode, expected", STATUS_TABLE)
-def test_componentStatus(coop, status, returncode, expected):
-    assert status_of(coop, status, returncode) == expected
+def test_component_status(status, returncode, expected):
+    assert status_of(status, returncode) == expected
 
 
-def test_componentStatus_gives_determine_result_the_real_exit_code(coop):
+def test_component_status_gives_determine_result_the_real_exit_code():
     actor = StatusActor("unknown")
     result = subprocess.CompletedProcess(["fake", "-x"], 3, "  line 1\nline 2\n\n", "")
 
-    coop.componentStatus(actor, ["fake", "-x"], result)
+    components.component_status(actor, ["fake", "-x"], result)
 
     (run,) = actor.runs
     assert list(run.cmdline) == ["fake", "-x"]
@@ -76,35 +78,35 @@ def test_componentStatus_gives_determine_result_the_real_exit_code(coop):
     assert list(run.output) == ["line 1", "line 2"]
 
 
-def test_componentStatus_gives_determine_result_the_signal_of_an_ended_component(coop):
+def test_component_status_gives_determine_result_the_signal_of_an_ended_component():
     actor = StatusActor("unknown")
     result = subprocess.CompletedProcess(["fake"], -signal.SIGTERM, "", "")
 
-    coop.componentStatus(actor, ["fake"], result)
+    components.component_status(actor, ["fake"], result)
 
     (run,) = actor.runs
     assert (run.exit_code.value, run.exit_code.signal) == (None, signal.SIGTERM)
 
 
-# --- confirmVerdict ---------------------------------------------------------
+# --- confirm_verdict ---------------------------------------------------------
 
 @pytest.mark.parametrize("acceptance, accepts_true, accepts_false", [
     ("all", True, True),
     ("true", True, False),
     ("false", False, True),
 ])
-def test_confirmVerdict_by_acceptance(coop, acceptance, accepts_true, accepts_false):
-    assert bool(coop.confirmVerdict(acceptance, "true", "true")) is accepts_true
-    assert bool(coop.confirmVerdict(acceptance, "false", "false")) is accepts_false
+def test_confirm_verdict_by_acceptance(acceptance, accepts_true, accepts_false):
+    assert bool(components.confirm_verdict(acceptance, "true", "true")) is accepts_true
+    assert bool(components.confirm_verdict(acceptance, "false", "false")) is accepts_false
 
 
-def test_confirmVerdict_does_not_match_the_other_verdict(coop):
-    assert not coop.confirmVerdict("all", "false", "true")
-    assert not coop.confirmVerdict("all", "true", "false")
-    assert not coop.confirmVerdict("all", "unknown", "true")
-    assert not coop.confirmVerdict("all", "unknown", "false")
+def test_confirm_verdict_does_not_match_the_other_verdict():
+    assert not components.confirm_verdict("all", "false", "true")
+    assert not components.confirm_verdict("all", "true", "false")
+    assert not components.confirm_verdict("all", "unknown", "true")
+    assert not components.confirm_verdict("all", "unknown", "false")
 
 
-def test_confirmVerdict_matches_a_verdict_that_contains_the_expected_one(coop):
-    assert coop.confirmVerdict("true", "true(no-data-race)", "true")
-    assert not coop.confirmVerdict("true", "false(no-data-race)", "false")
+def test_confirm_verdict_matches_a_verdict_that_contains_the_expected_one():
+    assert components.confirm_verdict("true", "true(no-data-race)", "true")
+    assert not components.confirm_verdict("true", "false(no-data-race)", "false")

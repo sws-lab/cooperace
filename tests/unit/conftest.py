@@ -25,16 +25,16 @@ try:
 finally:
     os.chdir(_start_directory)
 
-from src.cooperace.components import Cooperace
+from src.cooperace.components import ComponentRunner
 from src.cooperace.processes import ComponentGroup
 
 
 @pytest.fixture
-def make_coop():
-    """Returns a function that makes a Cooperace for a dummy task."""
+def make_runner():
+    """Returns a function that makes a ComponentRunner for a dummy task."""
 
     def make(data_model="ILP32"):
-        return Cooperace("/dev/null", "/dev/null", data_model)
+        return ComponentRunner("/dev/null", "/dev/null", data_model)
 
     return make
 
@@ -48,8 +48,8 @@ def group():
 
 
 @pytest.fixture
-def coop(make_coop):
-    return make_coop()
+def runner(make_runner):
+    return make_runner()
 
 
 @pytest.fixture

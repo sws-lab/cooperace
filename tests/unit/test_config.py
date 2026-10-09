@@ -15,9 +15,9 @@ SHIPPED_CONFS = sorted(
 
 
 @pytest.fixture
-def known(coop):
+def known(runner):
     """The names of the components CoOpeRace can run."""
-    return coop.registry
+    return runner.registry
 
 
 def steps_of(node):

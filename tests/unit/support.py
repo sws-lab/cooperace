@@ -93,9 +93,9 @@ class StubSpec(ComponentSpec):
         return StubTool(self.name, self.script)
 
 
-def register_stub(coop, tool_name, script):
-    """Makes `coop` run the shell script `script` for the component
+def register_stub(runner, tool_name, script):
+    """Makes `runner` run the shell script `script` for the component
     `tool_name`, which the conf can then name. This is the test hook: the
-    Cooperace instance looks components up in its `registry`, a copy of
+    ComponentRunner looks components up in its `registry`, a copy of
     components.REGISTRY, which can be added to after construction."""
-    coop.registry[tool_name] = StubSpec(tool_name, "", str(Path(script).parent), script=str(script))
+    runner.registry[tool_name] = StubSpec(tool_name, "", str(Path(script).parent), script=str(script))

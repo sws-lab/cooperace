@@ -1,7 +1,9 @@
-"""Witness files: the time filter and WitnessSpecs of collectWitnessFiles, the
-delivery of witnessFilesToFileRoot and removeOldWitnessFiles."""
+"""Witness files: the time filter and WitnessSpecs of collect_witness_files, the
+delivery of witness_files_to_file_root and remove_old_witness_files."""
 import os
 import pytest
+
+from src.cooperace import components
 
 from src.cooperace.components import DEFAULT_WITNESS, REGISTRY, WitnessSpec
 
@@ -34,64 +36,63 @@ def run_dirs(tmp_path):
     return component, run
 
 
-# --- startTime --------------------------------------------------------------
+# --- start_time --------------------------------------------------------------
 
-def test_startTime_is_the_modification_time_of_a_new_marker_file(coop, tmp_path):
-    started = coop.startTime(str(tmp_path))
+def test_start_time_is_the_modification_time_of_a_new_marker_file(tmp_path):
+    started = components.start_time(str(tmp_path))
 
     assert started == (tmp_path / ".started").stat().st_mtime_ns
 
 
-def test_startTime_does_not_go_backwards(coop, tmp_path):
-    first = coop.startTime(str(tmp_path))
-    second = coop.startTime(str(tmp_path))
+def test_start_time_does_not_go_backwards(tmp_path):
+    first = components.start_time(str(tmp_path))
+    second = components.start_time(str(tmp_path))
 
     assert second >= first
 
 
-# --- collectWitnessFiles ----------------------------------------------------
+# --- collect_witness_files ----------------------------------------------------
 
-def test_files_written_in_the_run_directory_are_collected(coop, run_dirs):
+def test_files_written_in_the_run_directory_are_collected(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     witness = write(run / "witness.yml", mtime_ns=started + 1)
 
-    collected = coop.collectWitnessFiles(witness_of("Goblint"), str(component), str(run), started)
+    collected = components.collect_witness_files(witness_of("Goblint"), str(component), str(run), started)
 
     assert collected == [str(witness)]
     assert witness.exists()
 
 
-def test_only_files_modified_at_or_after_the_start_are_collected(coop, run_dirs):
+def test_only_files_modified_at_or_after_the_start_are_collected(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     write(run / "witness.graphml", mtime_ns=started - 1)
     write(run / "witness.yml", mtime_ns=started)
 
-    collected = coop.collectWitnessFiles(witness_of("ULTIMATE Automizer"), str(component),
+    collected = components.collect_witness_files(witness_of("ULTIMATE Automizer"), str(component),
                                          str(run), started)
 
     assert collected == [str(run / "witness.yml")]
 
 
-def test_an_old_file_is_left_where_it_is(coop, run_dirs):
+def test_an_old_file_is_left_where_it_is(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     old = write(component / "output/witness.graphml", "old", mtime_ns=LONG_AGO)
 
-    collected = coop.collectWitnessFiles(witness_of("Dartagnan"), str(component), str(run), started)
+    collected = components.collect_witness_files(witness_of("Dartagnan"), str(component), str(run), started)
 
     assert collected == []
     assert old.read_text() == "old"
 
 
-def test_a_file_under_the_component_directory_is_moved_into_the_run_directory(
-        coop, run_dirs):
+def test_a_file_under_the_component_directory_is_moved_into_the_run_directory(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     source = write(component / "output/witness.graphml", "new", mtime_ns=started + 1)
 
-    collected = coop.collectWitnessFiles(witness_of("Dartagnan"), str(component), str(run), started)
+    collected = components.collect_witness_files(witness_of("Dartagnan"), str(component), str(run), started)
 
     destination = run / "output/witness.graphml"
     assert collected == [str(destination)]
@@ -99,41 +100,40 @@ def test_a_file_under_the_component_directory_is_moved_into_the_run_directory(
     assert not source.exists()
 
 
-def test_missing_files_are_ignored(coop, run_dirs):
+def test_missing_files_are_ignored(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
 
     for name in ("Goblint", "Dartagnan", "ULTIMATE Taipan", "Unlisted"):
-        assert coop.collectWitnessFiles(witness_of(name), str(component), str(run), started) == []
+        assert components.collect_witness_files(witness_of(name), str(component), str(run), started) == []
 
 
-def test_a_component_collects_only_the_files_its_entry_names(coop, run_dirs):
+def test_a_component_collects_only_the_files_its_entry_names(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     write(run / "witness.graphml", mtime_ns=started + 1)  # Goblint writes only witness.yml
     wanted = write(run / "witness.yml", mtime_ns=started + 1)
 
-    collected = coop.collectWitnessFiles(witness_of("Goblint"), str(component), str(run), started)
+    collected = components.collect_witness_files(witness_of("Goblint"), str(component), str(run), started)
 
     assert collected == [str(wanted)]
 
 
-def test_ultimate_collects_graphml_and_yaml_witnesses(coop, run_dirs):
+def test_ultimate_collects_graphml_and_yaml_witnesses(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     write(run / "witness.graphml", mtime_ns=started + 1)
     write(run / "witness.yml", mtime_ns=started + 1)
 
-    collected = coop.collectWitnessFiles(witness_of("ULTIMATE GemCutter"), str(component),
+    collected = components.collect_witness_files(witness_of("ULTIMATE GemCutter"), str(component),
                                          str(run), started)
 
     assert collected == [str(run / "witness.graphml"), str(run / "witness.yml")]
 
 
-def test_a_component_without_an_entry_collects_by_name_pattern_under_its_directory(
-        coop, run_dirs):
+def test_a_component_without_an_entry_collects_by_name_pattern_under_its_directory(run_dirs):
     component, run = run_dirs
-    started = coop.startTime(str(run))
+    started = components.start_time(str(run))
     new = started + 1
     wanted = {
         "witness.graphml": write(component / "witness.graphml", mtime_ns=new),
@@ -148,7 +148,7 @@ def test_a_component_without_an_entry_collects_by_name_pattern_under_its_directo
         write(component / "old-witness.yml", mtime_ns=LONG_AGO),
     ]
 
-    collected = coop.collectWitnessFiles(witness_of("Unlisted"), str(component), str(run), started)
+    collected = components.collect_witness_files(witness_of("Unlisted"), str(component), str(run), started)
 
     assert sorted(collected) == sorted(str(run / relative) for relative in wanted)
     for relative, source in wanted.items():
@@ -165,84 +165,80 @@ def test_the_default_witness_spec_and_the_components_with_their_own():
     assert REGISTRY["Dartagnan"].witness.directory == "component"
 
 
-def test_witnessFiles_matches_the_name_pattern(coop, tmp_path):
+def test_witness_files_under_matches_the_name_pattern(tmp_path):
     for relative in ("a-witness.graphml", "b/WITNESS.yml", "c.graphml", "witness.txt",
                      "d/witness.yaml"):
         write(tmp_path / relative)
 
-    found = coop.witnessFiles(str(tmp_path))
+    found = components.witness_files_under(str(tmp_path))
 
     assert sorted(found) == [str(tmp_path / "a-witness.graphml"),
                              str(tmp_path / "b/WITNESS.yml")]
 
 
-# --- witnessOptions ---------------------------------------------------------
+# --- witness_options ---------------------------------------------------------
 
-def test_witnessOptions_put_the_run_directory_into_the_options(coop):
-    assert coop.witnessOptions(witness_of("Goblint"), "/w") == [
+def test_witness_options_put_the_run_directory_into_the_options():
+    assert components.witness_options(witness_of("Goblint"), "/w") == [
         "--set", "witness.yaml.path", "/w/witness.yml"]
-    assert coop.witnessOptions(witness_of("ULTIMATE Taipan"), "/w") == ["--witness-dir", "/w"]
-    assert coop.witnessOptions(witness_of("Dartagnan"), "/w") == []
-    assert coop.witnessOptions(witness_of("Unlisted"), "/w") == []
+    assert components.witness_options(witness_of("ULTIMATE Taipan"), "/w") == ["--witness-dir", "/w"]
+    assert components.witness_options(witness_of("Dartagnan"), "/w") == []
+    assert components.witness_options(witness_of("Unlisted"), "/w") == []
 
 
-# --- witnessFilesToFileRoot and removeOldWitnessFiles -----------------------
+# --- witness_files_to_file_root and remove_old_witness_files -----------------------
 
-def test_witnessFilesToFileRoot_delivers_each_format_under_its_name(
-        coop, tmp_path, monkeypatch):
+def test_witness_files_to_file_root_delivers_each_format_under_its_name(tmp_path, monkeypatch):
     source, destination = tmp_path / "source", tmp_path / "cwd"
     destination.mkdir()
     graphml = write(source / "some-run-witness.graphml", "<graphml/>")
     yaml = write(source / "other-witness.yml", "- entry")
     monkeypatch.chdir(destination)
 
-    coop.witnessFilesToFileRoot([str(graphml), str(yaml)])
+    components.witness_files_to_file_root([str(graphml), str(yaml)])
 
     assert (destination / "witness.graphml").read_text() == "<graphml/>"
     assert (destination / "witness.yml").read_text() == "- entry"
     assert graphml.exists() and yaml.exists()  # copied, not moved
 
 
-def test_witnessFilesToFileRoot_delivers_a_yaml_file_as_witness_yml(
-        coop, tmp_path, monkeypatch):
+def test_witness_files_to_file_root_delivers_a_yaml_file_as_witness_yml(tmp_path, monkeypatch):
     destination = tmp_path / "cwd"
     destination.mkdir()
     yaml = write(tmp_path / "w.yaml", "- entry")
     monkeypatch.chdir(destination)
 
-    coop.witnessFilesToFileRoot([str(yaml)])
+    components.witness_files_to_file_root([str(yaml)])
 
     assert [path.name for path in destination.iterdir()] == ["witness.yml"]
 
 
-def test_witnessFilesToFileRoot_skips_other_files_and_accepts_an_empty_list(
-        coop, tmp_path, monkeypatch):
+def test_witness_files_to_file_root_skips_other_files_and_accepts_an_empty_list(tmp_path, monkeypatch):
     destination = tmp_path / "cwd"
     destination.mkdir()
     other = write(tmp_path / "witness.txt")
     monkeypatch.chdir(destination)
 
-    coop.witnessFilesToFileRoot([str(other)])
-    coop.witnessFilesToFileRoot([])
+    components.witness_files_to_file_root([str(other)])
+    components.witness_files_to_file_root([])
 
     assert list(destination.iterdir()) == []
 
 
-def test_removeOldWitnessFiles_removes_both_delivered_names_only(
-        coop, tmp_path, monkeypatch):
+def test_remove_old_witness_files_removes_both_delivered_names_only(tmp_path, monkeypatch):
     write(tmp_path / "witness.graphml")
     write(tmp_path / "witness.yml")
     keep = write(tmp_path / "other-witness.yml")
     monkeypatch.chdir(tmp_path)
 
-    coop.removeOldWitnessFiles()
+    components.remove_old_witness_files()
 
     assert [path.name for path in tmp_path.iterdir()] == [keep.name]
 
 
-def test_removeOldWitnessFiles_without_files_does_nothing(coop, tmp_path, monkeypatch):
+def test_remove_old_witness_files_without_files_does_nothing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
-    coop.removeOldWitnessFiles()
+    components.remove_old_witness_files()
 
     assert list(tmp_path.iterdir()) == []

@@ -1,5 +1,5 @@
 """cli.run and strategy.execute end to end with stub components: shell scripts
-run through the real runActor, run_in_session and componentStatus, and the
+run through the real run_component, run_in_session and component_status, and the
 stop on a signal in a separate process."""
 import os
 import signal
@@ -29,7 +29,7 @@ def run_dir(tmp_path, monkeypatch):
 
 
 class Run:
-    """A Cooperace `runner` and a conf `conf` for it, run by execute with
+    """A ComponentRunner `runner` and a conf `conf` for it, run by execute with
     cli.run in the ComponentGroup `group`."""
 
     def __init__(self, runner, conf):
@@ -41,17 +41,17 @@ class Run:
         return cli.run(self.conf, self.runner, self.group)
 
 
-def stubbed_coop(make_coop, tmp_path, run_type, **stubs):
+def stubbed_run(make_runner, tmp_path, run_type, **stubs):
     """A Run whose conf runs the stub components in `stubs` (name to
     script body, in the order given, each accepting "all"), registered with
     register_stub. Returns it with the directory of each stub's script."""
     names = {key.replace("_", " "): body for key, body in stubs.items()}
-    coop = Run(make_coop(), {"runType": run_type, "tools": [{name: "all"} for name in names]})
+    run = Run(make_runner(), {"runType": run_type, "tools": [{name: "all"} for name in names]})
     directories = {}
     for name, body in names.items():
         directories[name] = tmp_path / "stubs" / name.replace(" ", "_")
-        register_stub(coop.runner, name, make_script(directories[name], body))
-    return coop, directories
+        register_stub(run.runner, name, make_script(directories[name], body))
+    return run, directories
 
 
 def lines_of(captured):
@@ -59,15 +59,15 @@ def lines_of(captured):
 
 
 def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
-        make_coop, tmp_path, run_dir, capsys):
-    coop, _ = stubbed_coop(
-        make_coop, tmp_path, "sequential",
+        make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(
+        make_runner, tmp_path, "sequential",
         Stub_A='echo "log of A"\necho "STUB-STATUS: unknown"\n',
         Stub_B='echo "log of B"\necho "STUB-STATUS: true"\n',
         Stub_C='echo "never runs"\necho "STUB-STATUS: true"\n',
     )
 
-    verdict = coop.execute()
+    verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
     assert verdict == "true"
@@ -92,15 +92,15 @@ def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
     assert not any("Stub C" in line for line in lines)
 
 
-def test_exit_code_and_signal_appear_in_status_lines(make_coop, tmp_path, run_dir, capsys):
-    coop, _ = stubbed_coop(
-        make_coop, tmp_path, "sequential",
+def test_exit_code_and_signal_appear_in_status_lines(make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(
+        make_runner, tmp_path, "sequential",
         Stub_A='echo "STUB-STATUS: ERROR"\nexit 3\n',
         Stub_B='kill -TERM $$\nsleep 5\n',
         Stub_C='echo "STUB-STATUS: false"\n',
     )
 
-    verdict = coop.execute()
+    verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
     assert verdict == "false"
@@ -112,12 +112,12 @@ def test_exit_code_and_signal_appear_in_status_lines(make_coop, tmp_path, run_di
     assert "Tool name: Stub C Result: false" in lines
 
 
-def test_a_verdict_the_conf_does_not_accept_is_unknown(make_coop, tmp_path, run_dir, capsys):
-    coop, _ = stubbed_coop(make_coop, tmp_path, "sequential",
+def test_a_verdict_the_conf_does_not_accept_is_unknown(make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: false"\n')
-    coop.conf["tools"] = [{"Stub A": "true"}]
+    run.conf["tools"] = [{"Stub A": "true"}]
 
-    verdict = coop.execute()
+    verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
     assert verdict == "unknown"
@@ -126,9 +126,9 @@ def test_a_verdict_the_conf_does_not_accept_is_unknown(make_coop, tmp_path, run_
 
 
 def test_the_witness_of_the_returned_component_is_delivered_to_the_working_directory(
-        make_coop, tmp_path, run_dir):
-    coop, directories = stubbed_coop(
-        make_coop, tmp_path, "sequential",
+        make_runner, tmp_path, run_dir):
+    run, directories = stubbed_run(
+        make_runner, tmp_path, "sequential",
         Stub_A='echo "<graphml/>" > witness.graphml\necho "STUB-STATUS: unknown"\n',
         Stub_B='echo "<graphml new/>" > run-witness.graphml\n'
                'echo "- entry" > run-witness.yml\necho "STUB-STATUS: false"\n',
@@ -140,7 +140,7 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
     # A witness of an earlier CoOpeRace run in the working directory.
     (run_dir / "witness.yml").write_text("from an earlier run")
 
-    verdict = coop.execute()
+    verdict = run.execute()
 
     assert verdict == "false"
     assert (run_dir / "witness.graphml").read_text() == "<graphml new/>\n"
@@ -153,24 +153,24 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
 
 
 def test_a_stale_witness_in_the_working_directory_is_removed_when_there_is_no_verdict(
-        make_coop, tmp_path, run_dir):
-    coop, _ = stubbed_coop(make_coop, tmp_path, "sequential",
+        make_runner, tmp_path, run_dir):
+    run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: unknown"\n')
     (run_dir / "witness.graphml").write_text("from an earlier run")
 
-    assert coop.execute() == "unknown"
+    assert run.execute() == "unknown"
     assert not (run_dir / "witness.graphml").exists()
 
 
 def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
-        make_coop, tmp_path, run_dir, capsys):
-    coop, _ = stubbed_coop(
-        make_coop, tmp_path, "parallel",
+        make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(
+        make_runner, tmp_path, "parallel",
         Stub_Slow='echo "slow started"\nexec sleep 60\n',
         Stub_Fast='sleep 0.5\necho "STUB-STATUS: true"\n',
     )
 
-    verdict = coop.execute()
+    verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
     assert verdict == "true"
@@ -180,21 +180,21 @@ def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
 
 
 def test_the_work_directory_is_removed_and_no_component_is_left(
-        make_coop, tmp_path, run_dir):
-    coop, _ = stubbed_coop(make_coop, tmp_path, "sequential",
+        make_runner, tmp_path, run_dir):
+    run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: true"\n')
 
-    coop.execute()
+    run.execute()
 
-    assert not os.path.exists(coop.runner.work_dir)
-    assert coop.group.processes == set()
+    assert not os.path.exists(run.runner.work_dir)
+    assert run.group.processes == set()
 
 
 def test_an_unknown_run_type_prints_an_error_and_gives_unknown(
-        make_coop, tmp_path, run_dir, capsys):
-    coop = Run(make_coop(), {"runType": "interleaved", "tools": []})
+        make_runner, tmp_path, run_dir, capsys):
+    run = Run(make_runner(), {"runType": "interleaved", "tools": []})
 
-    verdict = coop.execute()
+    verdict = run.execute()
     out = capsys.readouterr().out
 
     assert verdict == "unknown"
@@ -202,12 +202,12 @@ def test_an_unknown_run_type_prints_an_error_and_gives_unknown(
     assert "execution type in conf file is incorrect" in out
 
 
-def test_execute_restores_the_signal_handlers(make_coop, tmp_path, run_dir):
-    coop, _ = stubbed_coop(make_coop, tmp_path, "sequential",
+def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
+    run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: true"\n')
     before = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
 
-    coop.execute()
+    run.execute()
 
     assert {s: signal.getsignal(s) for s in before} == before
 
@@ -225,15 +225,15 @@ DRIVER = textwrap.dedent('''
     os.chdir(root)
     sys.path[:0] = [root, support_dir]
     from src.cooperace import cli
-    from src.cooperace.components import Cooperace
+    from src.cooperace.components import ComponentRunner
     from support import register_stub
 
     os.chdir(run_dir)
     conf = {"runType": "parallel", "tools": [{"Stub A": "all"}, {"Stub B": "all"}]}
-    coop = Cooperace("/dev/null", "/dev/null", "ILP32")
+    run = ComponentRunner("/dev/null", "/dev/null", "ILP32")
     for letter in "AB":
-        register_stub(coop, f"Stub {letter}", Path(stub_dir) / letter / "stub.sh")
-    print("verdict:", cli.run(conf, coop), flush=True)
+        register_stub(run, f"Stub {letter}", Path(stub_dir) / letter / "stub.sh")
+    print("verdict:", cli.run(conf, run), flush=True)
 ''')
 
 # Writes its pid where the test can find it, then replaces the shell by sleep.

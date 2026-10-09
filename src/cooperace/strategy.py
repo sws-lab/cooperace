@@ -3,7 +3,7 @@ accepted verdict.
 
 It knows nothing about components: run_node and its helpers are given the
 function that runs one Step (`run_step`), and execute a StepRunner, which
-components.Cooperace is and the unit tests fake. The ComponentGroup the
+components.ComponentRunner is and the unit tests fake. The ComponentGroup the
 components of a step are started in is passed down the tree as a parameter;
 run_parallel nests a new one for each Parallel.
 """

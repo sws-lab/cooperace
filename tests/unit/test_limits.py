@@ -1,5 +1,5 @@
-"""Per-component resource limits: withResourceLimits, with_rlimits,
-componentMemoryLimit and run_memory_limit."""
+"""Per-component resource limits: with_resource_limits, with_rlimits,
+component_memory_limit and run_memory_limit."""
 import inspect
 import subprocess
 import sys
@@ -23,7 +23,7 @@ PRINT_DATA_LIMIT = [sys.executable, "-c",
 
 
 def run_limited(command, cwd, timeout=30):
-    """Runs `command` (from withResourceLimits) to its end with its output
+    """Runs `command` (from with_resource_limits) to its end with its output
     captured."""
     return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False,
                           timeout=timeout)
@@ -34,43 +34,43 @@ def goblint(memory=None, cpu=None):
     return Step("Goblint", "all", memory_limit=memory, cpu_time_limit=cpu)
 
 
-# --- withResourceLimits -----------------------------------------------------
+# --- with_resource_limits -----------------------------------------------------
 
-def test_no_limits_returns_the_command_unchanged(coop, capsys):
+def test_no_limits_returns_the_command_unchanged(capsys):
     command = ["echo", "hello"]
 
-    assert coop.withResourceLimits(goblint(), command) is command
+    assert components.with_resource_limits(goblint(), command) is command
     assert capsys.readouterr().out == ""
 
 
-def test_cpu_time_limit_ends_a_busy_loop_by_sigxcpu(coop, tmp_path, capsys):
-    command = coop.withResourceLimits(goblint(cpu=1), BUSY_LOOP)
+def test_cpu_time_limit_ends_a_busy_loop_by_sigxcpu(tmp_path, capsys):
+    command = components.with_resource_limits(goblint(cpu=1), BUSY_LOOP)
     result = run_limited(command, tmp_path)
 
     assert result.returncode == -24
     assert "CPU-time limit of Goblint: 1 s (RLIMIT_CPU)" in capsys.readouterr().out
 
 
-def test_cpu_time_limit_does_not_touch_a_command_that_ends_by_itself(coop, tmp_path):
-    command = coop.withResourceLimits(goblint(cpu=5), [sys.executable, "-c", "print('done')"])
+def test_cpu_time_limit_does_not_touch_a_command_that_ends_by_itself(tmp_path):
+    command = components.with_resource_limits(goblint(cpu=5), [sys.executable, "-c", "print('done')"])
     result = run_limited(command, tmp_path)
 
     assert (result.returncode, result.stdout) == (0, "done\n")
 
 
-def test_cpu_time_limit_sets_a_hard_limit_one_second_higher(coop, tmp_path):
+def test_cpu_time_limit_sets_a_hard_limit_one_second_higher(tmp_path):
     code = "import resource; print(resource.getrlimit(resource.RLIMIT_CPU))"
 
-    command = coop.withResourceLimits(goblint(cpu=7), [sys.executable, "-c", code])
+    command = components.with_resource_limits(goblint(cpu=7), [sys.executable, "-c", code])
     result = run_limited(command, tmp_path)
 
     assert result.stdout.strip() == "(7, 8)"
 
 
-def test_memory_limit_in_bytes_sets_rlimit_data(coop, tmp_path, capsys):
+def test_memory_limit_in_bytes_sets_rlimit_data(tmp_path, capsys):
     limit = 512 * MEBIBYTE
 
-    command = coop.withResourceLimits(goblint(memory=limit), PRINT_DATA_LIMIT)
+    command = components.with_resource_limits(goblint(memory=limit), PRINT_DATA_LIMIT)
     result = run_limited(command, tmp_path)
 
     assert result.stdout.strip() == f"({limit}, {limit})"
@@ -78,34 +78,33 @@ def test_memory_limit_in_bytes_sets_rlimit_data(coop, tmp_path, capsys):
             in capsys.readouterr().out)
 
 
-def test_memory_limit_makes_a_larger_allocation_fail(coop, tmp_path):
+def test_memory_limit_makes_a_larger_allocation_fail(tmp_path):
     code = f"bytearray({1024 * MEBIBYTE})"
 
-    command = coop.withResourceLimits(goblint(memory=256 * MEBIBYTE), [sys.executable, "-c", code])
+    command = components.with_resource_limits(goblint(memory=256 * MEBIBYTE), [sys.executable, "-c", code])
     result = run_limited(command, tmp_path)
 
     assert result.returncode == 1
     assert "MemoryError" in result.stderr
 
 
-def test_both_limits_apply_and_the_command_keeps_its_arguments(coop, tmp_path):
+def test_both_limits_apply_and_the_command_keeps_its_arguments(tmp_path):
     code = ("import resource, sys\n"
             "print(resource.getrlimit(resource.RLIMIT_DATA)[0],"
             " resource.getrlimit(resource.RLIMIT_CPU)[0], sys.argv[1:])")
 
-    command = coop.withResourceLimits(goblint(memory=512 * MEBIBYTE, cpu=7),
+    command = components.with_resource_limits(goblint(memory=512 * MEBIBYTE, cpu=7),
                                       [sys.executable, "-c", code, "a b", "c"])
     result = run_limited(command, tmp_path)
 
     assert result.stdout.strip() == f"{512 * MEBIBYTE} 7 ['a b', 'c']"
 
 
-def test_percentage_memory_limit_resolves_against_the_run_limit(coop, tmp_path,
-                                                                monkeypatch, capsys):
+def test_percentage_memory_limit_resolves_against_the_run_limit(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(components, "run_memory_limit", lambda: 1000 * MEBIBYTE)
     expected = 700 * MEBIBYTE
 
-    command = coop.withResourceLimits(goblint(memory="70%"), PRINT_DATA_LIMIT)
+    command = components.with_resource_limits(goblint(memory="70%"), PRINT_DATA_LIMIT)
     result = run_limited(command, tmp_path)
 
     assert result.stdout.strip() == f"({expected}, {expected})"
@@ -134,7 +133,7 @@ def test_with_rlimits_runs_the_command_in_place_of_the_wrapper(tmp_path):
     assert int(output) == process.pid
 
 
-# --- componentMemoryLimit and componentCpuTimeLimit -------------------------
+# --- component_memory_limit and component_cpu_time_limit -------------------------
 
 @pytest.mark.parametrize("value, run_limit, expected", [
     ("70%", 1000, 700),
@@ -145,20 +144,20 @@ def test_with_rlimits_runs_the_command_in_place_of_the_wrapper(tmp_path):
     ("123456", 999, 123456),
     (None, 1000, None),
 ])
-def test_componentMemoryLimit(coop, monkeypatch, value, run_limit, expected):
+def test_component_memory_limit(monkeypatch, value, run_limit, expected):
     monkeypatch.setattr(components, "run_memory_limit", lambda: run_limit)
 
-    assert coop.componentMemoryLimit(goblint(memory=value)) == expected
+    assert components.component_memory_limit(goblint(memory=value)) == expected
 
 
-def test_componentMemoryLimit_is_none_without_the_key(coop):
-    assert coop.componentMemoryLimit(Step("Goblint", "all")) is None
+def test_component_memory_limit_is_none_without_the_key():
+    assert components.component_memory_limit(Step("Goblint", "all")) is None
 
 
-def test_componentCpuTimeLimit(coop):
-    assert coop.componentCpuTimeLimit(goblint(cpu=30)) == 30
-    assert coop.componentCpuTimeLimit(goblint(memory=1000)) is None
-    assert coop.componentCpuTimeLimit(Step("Goblint", "all")) is None
+def test_component_cpu_time_limit():
+    assert components.component_cpu_time_limit(goblint(cpu=30)) == 30
+    assert components.component_cpu_time_limit(goblint(memory=1000)) is None
+    assert components.component_cpu_time_limit(Step("Goblint", "all")) is None
 
 
 # --- run_memory_limit -------------------------------------------------------
