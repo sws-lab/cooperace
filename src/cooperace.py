@@ -653,7 +653,14 @@ class Cooperace:
         `cwd` are moved to the same relative path in `witness_dir`. Any other
         file, one left by an earlier run or shipped with the component
         (Goblint's smoketests/*witness*.yml), is neither returned nor
-        touched."""
+        touched.
+
+        The comparison of modification times assumes that `witness_dir` (where
+        `started` was taken, by startTime) and the directory a component
+        writes to take their modification times from the same clock at the
+        same granularity, which holds on Linux for ext4, tmpfs and overlayfs;
+        on a file system with one-second time stamps, a witness written in the
+        second of `started` would be dropped."""
         spec = self.witnessSpec(actor)
         source = witness_dir if spec["directory"] == "run" else cwd
         if spec["files"] is None:
@@ -735,7 +742,10 @@ class Cooperace:
 
         if self.currentGroup().stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
-            #the component was ended or never started, and its result is not used
+            #the component was ended or never started, and its result is not used.
+            #This check is also why componentStatus never gets a returncode of
+            #None: actorResult returns None only when the group was already
+            #stopped, and a group never becomes unstopped.
             self.printComponentRun(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return "unknown"
 
