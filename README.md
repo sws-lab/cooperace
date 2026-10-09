@@ -63,6 +63,8 @@ package (`pip install requests`).
    python scripts/sv-comp/upload-zenodo.py --record-id <draft-or-record-id>
    ```
    Pass `--sandbox` if you want to test against `https://sandbox.zenodo.org` or
-   override the archive path with `--file`. The helper streams the 200 MB
-   archive in chunks and prints upload progress so you can keep an eye on
-   Zenodo's slow ingestion.
+   override the archive path with `--file`. The helper sends the archive with one `PUT` to the
+   draft's `links.bucket` URL, streamed from disk, and prints the bytes sent so you can keep an eye
+   on Zenodo's slow ingestion. Afterwards it compares the MD5 of the local file with the checksum
+   Zenodo reports and exits 1 on a mismatch, in which case the file in the draft is not the one
+   you built and must be uploaded again before the record is published.

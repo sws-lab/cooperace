@@ -6,6 +6,12 @@ record and will automatically follow the "latest_draft" link if you point it at
 an already published deposition, so you can upload to the most recent draft
 version.  Existing files with the same name are replaced.
 
+The archive is sent with one PUT request to the draft's files-API bucket
+(links.bucket), streamed from disk, so the progress display counts the bytes
+handed to the connection.  Afterwards the MD5 of the local file is compared
+with the checksum Zenodo reports for the uploaded file; on a mismatch the
+script prints both and exits 1.
+
 Usage example:
     python scripts/sv-comp/upload-zenodo.py --record-id 123456
 
@@ -17,11 +23,14 @@ provided explicitly via --record-id.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import IO, Any, Dict, Optional
+from typing import IO, Any
+from urllib.parse import quote
 
 try:
     import requests
@@ -78,7 +87,7 @@ def zenodo_session(token: str) -> requests.Session:
     return session
 
 
-def fetch_json(session: requests.Session, url: str) -> Dict[str, Any]:
+def fetch_json(session: requests.Session, url: str) -> dict[str, Any]:
     response = session.get(url, timeout=60)
     if response.status_code >= 400:
         raise ZenodoError(
@@ -89,7 +98,7 @@ def fetch_json(session: requests.Session, url: str) -> Dict[str, Any]:
 
 def ensure_draft(
     session: requests.Session, base_url: str, record_id: int
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     deposition_url = f"{base_url}/deposit/depositions/{record_id}"
     deposition = fetch_json(session, deposition_url)
     if deposition.get("state") == "draft":
@@ -111,7 +120,7 @@ def ensure_draft(
 
 
 def delete_existing(
-    session: requests.Session, base_url: str, draft: Dict[str, Any], filename: str
+    session: requests.Session, base_url: str, draft: dict[str, Any], filename: str
 ) -> None:
     files = draft.get("files", []) or []
     for entry in files:
@@ -129,13 +138,18 @@ def delete_existing(
 
 
 class ProgressFile:
-    """Wrap a file handle to emit upload progress while streaming bytes."""
+    """Wrap a file handle to emit upload progress while streaming bytes.
+
+    `requests` sends such an object as the body of a request: it takes the
+    Content-Length from __len__ and reads the body in blocks as it writes them
+    to the connection, so `_read` is the number of bytes handed to the
+    connection, at most one block ahead of the bytes sent."""
 
     def __init__(
         self,
         fh: IO[bytes],
         total_bytes: int,
-        report_every: Optional[int] = None,
+        report_every: int | None = None,
         label: str = "Upload",
     ) -> None:
         self._fh = fh
@@ -156,6 +170,13 @@ class ProgressFile:
             self._read += len(chunk)
             self._maybe_report()
         return chunk
+
+    def __len__(self) -> int:
+        return self._total
+
+    def __iter__(self) -> Iterator[bytes]:
+        while chunk := self.read(64 * 1024):
+            yield chunk
 
     def tell(self) -> int:  # pragma: no cover - passthrough helper
         return self._fh.tell()
@@ -182,28 +203,74 @@ class ProgressFile:
         return getattr(self._fh, name)
 
 
+def md5_of(path: Path) -> str:
+    """The MD5 of the file `path`, as lower-case hex."""
+    digest = hashlib.md5()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def normalize_checksum(checksum: str | None) -> str:
+    """The hex digest in a checksum that Zenodo reports, with or without an
+    "md5:" prefix; "" if there is none."""
+    return (checksum or "").removeprefix("md5:").strip().lower()
+
+
 def upload_file(
     session: requests.Session,
-    base_url: str,
-    draft_id: int,
+    draft: dict[str, Any],
     file_path: Path,
-) -> Dict[str, Any]:
-    target_url = f"{base_url}/deposit/depositions/{draft_id}/files"
+) -> dict[str, Any]:
+    """PUT `file_path` to the bucket of the deposition `draft` (its
+    links.bucket), streaming it, and return Zenodo's JSON for the file."""
+    bucket = draft.get("links", {}).get("bucket")
+    if not bucket:
+        raise ZenodoError("The draft has no links.bucket to upload to.")
+    target_url = f"{bucket}/{quote(file_path.name)}"
     file_size = file_path.stat().st_size
     print(
-        f"Uploading {file_path.name} ({file_size:,} bytes) to record {draft_id}...",
+        f"Uploading {file_path.name} ({file_size:,} bytes) to record {draft['id']}...",
         flush=True,
     )
     with file_path.open("rb") as fh:
         progress = ProgressFile(fh, file_size, label=file_path.name)
-        files = {"file": (file_path.name, progress, "application/zip")}
-        data = {"name": file_path.name}
-        response = session.post(target_url, data=data, files=files, timeout=300)
+        response = session.put(
+            target_url,
+            data=progress,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=(60, 900),
+        )
     if response.status_code >= 400:
         raise ZenodoError(
-            f"POST {target_url} failed with {response.status_code}: {response.text}"
+            f"PUT {target_url} failed with {response.status_code}: {response.text}"
         )
     return response.json()
+
+
+def reported_checksum(
+    session: requests.Session,
+    base_url: str,
+    draft_id: int,
+    uploaded: dict[str, Any],
+    filename: str,
+) -> str:
+    """The MD5 that Zenodo reports for the uploaded file: the checksum in the
+    reply to the PUT or, if the reply has none, the one in the draft's file
+    list."""
+    checksum = normalize_checksum(uploaded.get("checksum"))
+    if checksum:
+        return checksum
+    listing = session.get(f"{base_url}/deposit/depositions/{draft_id}/files", timeout=60)
+    if listing.status_code >= 400:
+        raise ZenodoError(
+            f"GET files of record {draft_id} failed with {listing.status_code}: {listing.text}"
+        )
+    for entry in listing.json():
+        if entry.get("filename") == filename:
+            return normalize_checksum(entry.get("checksum"))
+    return ""
 
 
 def main() -> None:
@@ -223,14 +290,25 @@ def main() -> None:
     try:
         draft = ensure_draft(session, base_url, int(args.record_id))
         delete_existing(session, base_url, draft, archive_path.name)
-        uploaded = upload_file(session, base_url, draft["id"], archive_path)
-    except ZenodoError as err:
+        uploaded = upload_file(session, draft, archive_path)
+        remote_md5 = reported_checksum(session, base_url, draft["id"], uploaded, archive_path.name)
+    except (ZenodoError, requests.RequestException) as err:
         print(f"Error: {err}", file=sys.stderr)
         sys.exit(1)
 
-    file_id = uploaded.get("id")
-    checksum = uploaded.get("checksum")
-    size = uploaded.get("filesize")
+    local_md5 = md5_of(archive_path)
+    if remote_md5 != local_md5:
+        print(
+            f"Error: checksum mismatch for {archive_path.name}: local md5 {local_md5}, "
+            f"Zenodo reports {remote_md5 or 'none'}. The file in the draft is not the local file; "
+            "upload it again before publishing.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    file_id = uploaded.get("id") or uploaded.get("key")
+    checksum = f"md5:{remote_md5} (matches the local file)"
+    size = uploaded.get("filesize") or uploaded.get("size")
     print(
         "Upload complete!",
         f"record_id={draft['id']}",
