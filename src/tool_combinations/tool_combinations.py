@@ -1,9 +1,18 @@
+import bz2
 import os
 import csv
 import xml.etree.ElementTree as ET
 import argparse
 
 from itertools import combinations
+
+def read_result_xml(path):
+    """Returns the text of a BenchExec result file, plain (.xml) or compressed
+    as SV-COMP publishes it (.xml.bz2)."""
+    opener = bz2.open if path.endswith(".bz2") else open
+    with opener(path, 'rb') as file:
+        return file.read().decode('utf-8-sig')
+
 
 class ToolData:
     def __init__(self, name, score, results):
@@ -49,8 +58,7 @@ class ToolData:
 
     @staticmethod
     def tool_results_per_task(path, result_type="validated"):
-        with open(path, 'rb') as file:
-            data = file.read().decode('utf-8-sig')
+        data = read_result_xml(path)
 
         tree = ET.ElementTree(ET.fromstring(data))
         root = tree.getroot()
@@ -98,8 +106,7 @@ class ToolData:
 
 
     def tool_score(self, path, result_type="validated"):
-        with open(path, 'rb') as file:
-            data = file.read().decode('utf-8-sig')
+        data = read_result_xml(path)
 
         tree = ET.ElementTree(ET.fromstring(data))
         root = tree.getroot()
@@ -136,7 +143,7 @@ def parse_xml_data(result_type, results_folder):
     tools = {}
 
     for file_name in os.listdir(dir):
-        if os.path.isfile(os.path.join(dir, file_name)) and file_name.endswith(".xml"):
+        if os.path.isfile(os.path.join(dir, file_name)) and file_name.endswith((".xml", ".xml.bz2")):
             path = os.path.join(dir, file_name)
             tool_name = file_name.split(".")[0]
             tools[tool_name] = ToolData.from_xml_file(tool_name, path, result_type)
