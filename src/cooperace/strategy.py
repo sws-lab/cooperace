@@ -10,9 +10,10 @@ import traceback
 from .processes import ComponentGroup
 
 
-# What runSequential, runParallel and runActorThread return: the verdict
-# ("true", "false" or "unknown"), the name of the component that gave it (None
-# for "unknown") and that component's witness files from this run.
+# What runSequential, runParallel, runActorThread, runOne and runActor return:
+# the verdict ("true", "false" or "unknown"), the name of the component that
+# gave it (None for "unknown") and that component's witness files from this
+# run.
 Outcome = namedtuple("Outcome", "verdict component witness_files")
 NO_OUTCOME = Outcome("unknown", None, [])
 

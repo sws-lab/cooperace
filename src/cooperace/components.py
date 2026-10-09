@@ -117,8 +117,6 @@ class Cooperace(Strategy):
 
         #Components started outside any runParallel; execute stops it on return
         self.root_group = ComponentGroup()
-        #Per thread: `witness_files`, set by runActor for runOne
-        self.local = threading.local()
         self.print_lock = threading.Lock()
 
     def componentMemoryLimit(self, tool_name):
@@ -288,8 +286,7 @@ class Cooperace(Strategy):
         
     def runOne(self, actor, group):
         """Runs `actor` with runActor in the ComponentGroup `group` and returns
-        its Outcome. runActor sets `witness_files` of the current thread for
-        an accepted verdict.
+        the Outcome runActor returns.
 
         An Exception from runActor, from setting the run up (for example
         ToolNotFoundException from the tool-info module's `executable`) or
@@ -298,18 +295,14 @@ class Cooperace(Strategy):
         (<exception class>: <message>)" and result "unknown", and NO_OUTCOME
         is returned, so that the next step of a sequence runs. StopSignal is
         a BaseException and propagates."""
-        self.local.witness_files = []
         try:
-            verdict = self.runActor(actor, group)
+            return self.runActor(actor, group)
         except Exception as error:
             traceback.print_exc()
             self.printComponentRun(actor.name(),
                                    subprocess.CompletedProcess(None, None, "", ""),
                                    f"ERROR ({type(error).__name__}: {error})", "unknown")
             return NO_OUTCOME
-        if verdict == "true" or verdict == "false":
-            return Outcome(verdict, actor.name(), self.local.witness_files)
-        return NO_OUTCOME
 
     def witnessFiles(self, tool_dir):
         witness_files = []
@@ -411,6 +404,10 @@ class Cooperace(Strategy):
     
 
     def runActor(self, actor: BaseTool2, group):
+        """Runs the component `actor` on the task in the ComponentGroup `group`
+        and prints its block. Returns the Outcome of its verdict, with the
+        witness files it wrote during this run, if the conf accepts the
+        verdict and `group` was not stopped, and NO_OUTCOME otherwise."""
         tool_location = os.path.join(os.getcwd(), "tools")
         tool_location = os.path.join(tool_location, self.tool_locations[actor.name()])
 
@@ -465,23 +462,23 @@ class Cooperace(Strategy):
             #None: actorResult returns None only when the group was already
             #stopped, and a group never becomes unstopped.
             self.printComponentRun(actor.name(), tool_result, "stopped by CoOpeRace", None)
-            return "unknown"
+            return NO_OUTCOME
 
         status = self.componentStatus(actor, cmdline, tool_result)
         verdict = status.lower()
 
         if self.confirmVerdict(actor.name(), verdict, "true"):
-            self.local.witness_files = witness_files
             verdict = "true"
         elif self.confirmVerdict(actor.name(), verdict, "false"):
-            self.local.witness_files = witness_files
             verdict = "false"
         else:
             verdict = "unknown"
 
         self.printComponentRun(actor.name(), tool_result, status, verdict)
 
-        return verdict
+        if verdict == "unknown":
+            return NO_OUTCOME
+        return Outcome(verdict, actor.name(), witness_files)
 
     def componentStatus(self, actor, cmdline, tool_result):
         """The status BenchExec would give this run of `actor` (a

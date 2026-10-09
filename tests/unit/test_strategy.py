@@ -34,8 +34,8 @@ def conf(run_type, *items):
 
 class Script:
     """Replaces coop.runActor with a fake that, for the component named by
-    letter, sleeps `seconds` in a child process and then reports `verdict`
-    (with `witness_files` for an accepted one), as runActor does. `started`
+    letter, sleeps `seconds` in a child process and then returns the Outcome
+    of `verdict` (with `witness_files` for an accepted one), as runActor does. `started`
     holds, in the order their children ended, the letters whose child was
     started; `returncodes` the exit status of each child."""
 
@@ -53,15 +53,15 @@ class Script:
         letter, seconds, verdict, *witness = self.components[actor.name()]
         result = self.coop.actorResult(["sleep", str(seconds)], str(self.tmp_path), group)
         if result.returncode is None:
-            return "unknown"
+            return NO_OUTCOME
         with self.lock:
             self.started.append(letter)
             self.returncodes[letter] = result.returncode
         if group.stopped:
-            return "unknown"
+            return NO_OUTCOME
         if verdict in ("true", "false"):
-            self.coop.local.witness_files = witness[0] if witness else []
-        return verdict
+            return Outcome(verdict, actor.name(), witness[0] if witness else [])
+        return NO_OUTCOME
 
 
 def run(coop):

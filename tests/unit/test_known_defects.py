@@ -20,8 +20,7 @@ def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop
     def runActor(actor, group):
         if actor.name() == "Goblint":
             raise RuntimeError("Could not find executable")
-        coop.local.witness_files = []
-        return "true"
+        return Outcome("true", actor.name(), [])
 
     coop.runActor = runActor
     _, tools = coop.parseConf()
@@ -102,8 +101,7 @@ def test_D1_a_failing_branch_of_a_parallel_node_does_not_stop_its_sibling(make_c
     def runActor(actor, group):
         if actor.name() == "Goblint":
             raise RuntimeError("Could not find executable")
-        coop.local.witness_files = []
-        return "false"
+        return Outcome("false", actor.name(), [])
 
     coop.runActor = runActor
     _, tools = coop.parseConf()
