@@ -2,27 +2,27 @@
 #Run in root directory
 
 shopt -s extglob
-set -e
+set -euo pipefail
 
 THIS_DIR=$(pwd)
 
+SIZES=(3)  # sizes of the combinations to test; a list of values is allowed.
 
-for i in 3; do #number represents the size of combinations to test, can also be a list of values.
+for i in "${SIZES[@]}"; do
     RESULTS_DIR=$THIS_DIR/results/results16GB_$i
 
     PARALLEL=2  # The limiting factor is RAM (32 on the server);
 
     # read-only and overlay dirs for Value too large for defined data type workaround
-    BENCHEXEC="benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath $RESULTS_DIR --numOfThreads $PARALLEL"
+    BENCHEXEC=(benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath "$RESULTS_DIR" --numOfThreads "$PARALLEL")
 
+    rm -rf "$RESULTS_DIR"  #for now, we want to start fresh
+    mkdir -p "$RESULTS_DIR"
 
-    rm -rf $RESULTS_DIR  #for now, we want to start fresh
-    mkdir $RESULTS_DIR || true
-
-    ./scripts/combination_n.sh "$i" "$BENCHEXEC"
+    ./scripts/combination_n.sh "$i" "${BENCHEXEC[@]}"
 
     COOPERACE_WITNESS_DIR=$(echo cooperace.*.files)
-    echo "Cooperace witness directory:" $COOPERACE_WITNESS_DIR
+    echo "Cooperace witness directory:" "$COOPERACE_WITNESS_DIR"
 
     echo "Generate table with merged results"
     cd "$RESULTS_DIR"
@@ -32,5 +32,5 @@ for i in 3; do #number represents the size of combinations to test, can also be 
     # Decompress all tool outputs for table HTML links
     unzip -o '*.logfiles.zip' -d "results_$i/"
 
-    cd $THIS_DIR
+    cd "$THIS_DIR"
 done

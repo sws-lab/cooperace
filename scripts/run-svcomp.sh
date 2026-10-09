@@ -2,9 +2,9 @@
 #Run in root directory
 
 shopt -s extglob
-set -e
+set -euo pipefail
 
-THIS_DIR=`pwd`
+THIS_DIR=$(pwd)
 
 RESULTS_DIR=$THIS_DIR/results
 
@@ -14,40 +14,39 @@ GOBLINT_DIR=$THIS_DIR/tools/goblint
 PARALLEL=6  # The limiting factor is RAM (32 on the server); 6 * 4Gb is okay for experiments
 
 # read-only and overlay dirs for Value too large for defined data type workaround
-BENCHEXEC="benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath $RESULTS_DIR --numOfThreads $PARALLEL"
+BENCHEXEC=(benchexec --read-only-dir / --overlay-dir . --overlay-dir /home --outputpath "$RESULTS_DIR" --numOfThreads "$PARALLEL")
 
-
-rm -rf $RESULTS_DIR  #for now, we want to start fresh
-mkdir $RESULTS_DIR || true
+rm -rf "$RESULTS_DIR"  #for now, we want to start fresh
+mkdir -p "$RESULTS_DIR"
 
 # echo "Running Dartagnan"
-# cd $DARTAGNAN_DIR
-# $BENCHEXEC $THIS_DIR/tests/bench-defs/dartagnan.xml
+# cd "$DARTAGNAN_DIR"
+# "${BENCHEXEC[@]}" "$THIS_DIR/tests/bench-defs/dartagnan.xml"
 
 echo "Running Goblint"
-cd $GOBLINT_DIR
-$BENCHEXEC $THIS_DIR/tests/bench-defs/goblint.xml
+cd "$GOBLINT_DIR"
+"${BENCHEXEC[@]}" "$THIS_DIR/tests/bench-defs/goblint.xml"
 
 echo "Running Cooperace (tool-info module benchexec.tools.cooperace)"
-cd $THIS_DIR
-$BENCHEXEC $THIS_DIR/tests/bench-defs/cooperace.xml
+cd "$THIS_DIR"
+"${BENCHEXEC[@]}" "$THIS_DIR/tests/bench-defs/cooperace.xml"
 
-cd $RESULTS_DIR
-COOPERACE_WITNESS_DIR=`echo cooperace.*.files`
-echo "Cooperace witness directory:" $COOPERACE_WITNESS_DIR
+cd "$RESULTS_DIR"
+COOPERACE_WITNESS_DIR=$(echo cooperace.*.files)
+echo "Cooperace witness directory:" "$COOPERACE_WITNESS_DIR"
 
-cd $RESULTS_DIR
-sed -e "s|WITNESS_DIR|$RESULTS_DIR/$COOPERACE_WITNESS_DIR|" $THIS_DIR/tests/bench-defs/dartagnan-validate-cooperace.xml > dartagnan-validate-cooperace.xml
+cd "$RESULTS_DIR"
+sed -e "s|WITNESS_DIR|$RESULTS_DIR/$COOPERACE_WITNESS_DIR|" "$THIS_DIR/tests/bench-defs/dartagnan-validate-cooperace.xml" > dartagnan-validate-cooperace.xml
 
 echo "Running Dartagnan Validator"
-cd $DARTAGNAN_DIR
-$BENCHEXEC $RESULTS_DIR/dartagnan-validate-cooperace.xml
+cd "$DARTAGNAN_DIR"
+"${BENCHEXEC[@]}" "$RESULTS_DIR/dartagnan-validate-cooperace.xml"
 
 # TODO: adjust_results_verifiers
 
 # Generate table with merged results
-cd $RESULTS_DIR
-cp $THIS_DIR/tests/table-generator.xml table-generator.xml
+cd "$RESULTS_DIR"
+cp "$THIS_DIR/tests/table-generator.xml" table-generator.xml
 table-generator -x table-generator.xml
 
 # Decompress all tool outputs for table HTML links

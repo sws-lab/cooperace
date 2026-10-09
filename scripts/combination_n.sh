@@ -1,21 +1,22 @@
 #!/bin/bash
+# Usage: combination_n.sh N BENCHEXEC_COMMAND [ARGUMENT...]
+# Runs the five combinations of size N with the given BenchExec command line.
+# Run in the root directory.
+
+set -euo pipefail
+
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 N BENCHEXEC_COMMAND [ARGUMENT...]" >&2
+    exit 2
+fi
 
 THIS_DIR=$(pwd)
 
-BENCHEXEC=$2
+N=$1
+shift
+BENCHEXEC=("$@")
 
-echo "Running Cooperace combination $1-1"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations${1}_16GB/combination_1.xml
-
-echo "Running Cooperace combination $1-2"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations${1}_16GB/combination_2.xml
-
-echo "Running Cooperace combination $1-3"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations${1}_16GB/combination_3.xml
-
-echo "Running Cooperace combination $1-4"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations${1}_16GB/combination_4.xml
-
-echo "Running Cooperace combination $1-5"
-$BENCHEXEC $THIS_DIR/tests/bench-defs/combinations${1}_16GB/combination_5.xml
-
+for k in 1 2 3 4 5; do
+    echo "Running Cooperace combination $N-$k"
+    "${BENCHEXEC[@]}" "$THIS_DIR/tests/bench-defs/combinations${N}_16GB/combination_$k.xml"
+done
