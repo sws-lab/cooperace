@@ -29,6 +29,9 @@ of these checks (see README.md):
      is printed with the configured value whenever that component started
   8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends a level of Goblint's
      portfolio and a later stage gives the expected verdict
+  9  when a component of a parallel stage gives the returned verdict, every
+     other component of that stage is stopped or answered unknown; no
+     component runs twice
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
 `validate` and `check` take the runs and tasks recorded in DIR/meta.json by
@@ -685,6 +688,49 @@ def goblint_cpu_limit_problems(r, t, lines):
     return problems
 
 
+def parallel_siblings(config, name):
+    """The other components of the parallel stage of the configuration
+    `config` that holds the component `name` directly, as Cooperace.parseConf
+    reads it: the list `tools` runs as `runType` says, and each list nested
+    in it the other way.  Empty if `name` is in a sequential list."""
+    def walk(node, parallel):
+        for element in node:
+            if isinstance(element, list):
+                found = walk(element, not parallel)
+                if found is not None:
+                    return found
+            elif name in element:
+                if not parallel:
+                    return []
+                return [n for e in node if isinstance(e, dict) for n in e if n != name]
+        return None
+    return walk(config.get("tools", []), config.get("runType") == "parallel") or []
+
+
+def parallel_stop_problems(run, lines):
+    """What in CoOpeRace's output `lines` shows that the components of a
+    parallel stage were not stopped when one of them gave the returned
+    verdict (check 9): every other component of that stage must have
+    `Status: stopped by CoOpeRace` or `Result: unknown`; and no component's
+    block may appear twice."""
+    if lines is None:
+        return []
+    blocks, _ = component_blocks(lines)
+    names = [b["name"] for b in blocks]
+    problems = [f"{n} has {names.count(n)} blocks" for n in sorted(set(names)) if names.count(n) > 1]
+    answered = answering_name(lines)
+    if answered:
+        by_name = {b["name"]: b for b in blocks}
+        for sibling in parallel_siblings(run.get("config") or {}, answered):
+            b = by_name.get(sibling)
+            if b is None:
+                problems.append(f"{sibling}, beside {answered}, has no block")
+            elif b["status"] != "stopped by CoOpeRace" and b["result"] != "unknown":
+                problems.append(f"{sibling}, beside {answered}, has status {b['status']} "
+                                f"and result {b['result']}")
+    return problems
+
+
 def protocol_problems(r, lines):
     """What in the run `r` of CoOpeRace, whose output is `lines`, departs from
     the protocol that benchexec.tools.cooperace and this suite rely on (check
@@ -809,6 +855,15 @@ def check(results, runs, tasks, skipped, fmt):
             if r:
                 problems = goblint_cpu_limit_problems(r, t, cooperace_output(r))
                 add(8, rundef, t["id"], not problems, "Goblint's CPU-time limit", "; ".join(problems))
+    # Check 9.
+    for rundef, run in runs.items():
+        if run["kind"] == "alone":
+            continue
+        for t in run["tasks"]:
+            r = results.get((rundef, t["id"]))
+            if r:
+                problems = parallel_stop_problems(run, cooperace_output(r))
+                add(9, rundef, t["id"], not problems, "parallel stop", "; ".join(problems))
     # Check 5.
     for rundef, run in runs.items():
         if run["kind"] not in ("production", "suite"):
@@ -861,7 +916,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
              7: "CoOpeRace prints the configured component limits",
-             8: "Goblint's CPU-time limit ends a level and a later stage answers"}
+             8: "Goblint's CPU-time limit ends a level and a later stage answers",
+             9: "a parallel stage stops its other components once one answers"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of a false witness], CPU time; WRONG = verdict differs from the expected one", ""]
     failed = False
