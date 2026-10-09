@@ -54,13 +54,10 @@ def test_D2_a_branch_ending_with_systemexit_does_not_hang_runParallel(make_coop)
     assert result["outcome"] == NO_OUTCOME
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "D4: a percentage memory limit with no cgroup limit found gives no limit "
-    "and prints nothing, so the run looks like one without the key"))
 def test_D4_a_percentage_limit_without_a_cgroup_limit_says_that_no_limit_applies(
         make_coop, monkeypatch, capsys):
     """Expected: withResourceLimits prints a line starting with
-    "Memory limit of Goblint:" that says no limit was applied; the command is
+    "Memory limit of Goblint: none" naming the percentage; the command is
     still returned unchanged."""
     monkeypatch.setattr(cooperace, "run_memory_limit", lambda: None)
     coop = make_coop({"runType": "sequential", "tools": [],
@@ -69,7 +66,7 @@ def test_D4_a_percentage_limit_without_a_cgroup_limit_says_that_no_limit_applies
 
     assert coop.withResourceLimits("Goblint", command) is command
     lines = capsys.readouterr().out.splitlines()
-    assert any(line.startswith("Memory limit of Goblint:") for line in lines)
+    assert lines == ['Memory limit of Goblint: none (no cgroup memory limit found for "70%")']
 
 
 def test_D1_a_failing_step_prints_its_block_with_an_error_status(make_coop, capsys):

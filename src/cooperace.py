@@ -299,9 +299,12 @@ class Cooperace:
     def withResourceLimits(self, tool_name, command):
         """`command`, started with the component's limits from the conf.
 
-        RLIMIT_DATA is set to the memory limit (componentMemoryLimit). It
-        bounds the private writable memory (heap, anonymous mmap) of each
-        process of the component; the component's processes inherit it. A JVM
+        RLIMIT_DATA is set to the memory limit (componentMemoryLimit). A
+        percentage for which the run has no memory limit applies no limit and
+        prints "Memory limit of <name>: none (no cgroup memory limit found for
+        "<value>")". RLIMIT_DATA bounds the private writable memory (heap,
+        anonymous mmap) of each process of the component; the component's
+        processes inherit it. A JVM
         that reaches it fails to commit memory and exits, so the component
         ends without a verdict and its memory is free for the components still
         running. RLIMIT_AS is not used: a JVM reserves its whole `-Xmx` as
@@ -330,6 +333,14 @@ class Cooperace:
             message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
             with self.print_lock:
                 print(message, flush=True)
+        else:
+            value = self.conf.get("memoryLimits", {}).get(tool_name)
+            if isinstance(value, str) and value.endswith("%"):
+                #A percentage that run_memory_limit could not resolve: no
+                #limit applies, and the run says so
+                with self.print_lock:
+                    print(f"Memory limit of {tool_name}: none "
+                          f"(no cgroup memory limit found for \"{value}\")", flush=True)
         cpu = self.componentCpuTimeLimit(tool_name)
         if cpu is not None:
             limits.append(f"RLIMIT_CPU={cpu}:{cpu + 1}")
