@@ -28,6 +28,12 @@ CoOpeRace can be started from any working directory: it finds its `lib/`, `conf/
    ```
    The smoketest output is streamed to your terminal, and the build returns non-zero if the check fails.
 
+   The archive is built from the commit `HEAD` (`scripts/svcomp-dist.sh`), which must have no uncommitted
+   changes to tracked files; `ALLOW_DIRTY=1` builds a development archive from the working tree instead,
+   and such an archive must never be submitted. Set `FMTOOLS_VERSION` to the version name that the fm-tools
+   entry will list, as in `FMTOOLS_VERSION=svcomp27 make svcomp`. The archive's file `VERSION` holds that
+   name and `git describe --always --dirty`, and `./cooperace --version` prints them.
+
 2. After `make svcomp`, the Docker image `cooperace-smoketest` is available. Launch an interactive shell with:
    ```bash
    docker run --rm -it --platform linux/amd64 cooperace-smoketest /bin/bash

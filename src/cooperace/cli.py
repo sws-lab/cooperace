@@ -25,8 +25,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import traceback
+from pathlib import Path
 from typing import NoReturn
 
 from . import TOOL_DIR, config, strategy
@@ -85,6 +87,29 @@ def read_conf(path: str) -> dict:
         raise SetupError(f"cannot read the conf {path}: {error}") from error
 
 
+def version_string(root: Path) -> str:
+    """The version that `--version` prints after "CoOpeRace ": the first line
+    of the file VERSION in `root`, the directory of the launcher, which
+    scripts/svcomp-dist.sh writes into an archive; else the output of `git
+    describe --always --dirty` if `root` is itself a git checkout; else
+    "unknown". It reads `root`, not the working directory."""
+    try:
+        lines = (root / "VERSION").read_text().splitlines()
+        if lines and lines[0].strip():
+            return lines[0].strip()
+    except OSError:
+        pass
+    if (root / ".git").exists():
+        try:
+            described = subprocess.run(["git", "-C", str(root), "describe", "--always", "--dirty"],
+                                       capture_output=True, text=True, timeout=10)
+            if described.returncode == 0 and described.stdout.strip():
+                return described.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return "unknown"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
 
@@ -94,7 +119,7 @@ def main() -> None:
                         help='property file; only the no-data-race property is supported')
     parser.add_argument('--conf', required=False,
                         help='conf file (default: conf/svcomp26.json of the tool directory)')
-    parser.add_argument('--version', action='version', version='CoOpeRace 0.2')
+    parser.add_argument('--version', action='version', version='CoOpeRace ' + version_string(Path(TOOL_DIR)))
     parser.add_argument('filepath')
 
     args = parser.parse_args()
