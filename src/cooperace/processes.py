@@ -147,8 +147,10 @@ def run_memory_limit(cgroup_file: str = "/proc/self/cgroup",
     return min(limits) if limits else None
 
 
-def run_in_session(command: list[str], cwd: str, group: ComponentGroup) -> subprocess.CompletedProcess:
-    """Runs `command` in `cwd` as the leader of a new session, so that the
+def run_in_session(command: list[str], cwd: str, group: ComponentGroup,
+                   env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Runs `command` in `cwd`, with the environment `env` (None: this
+    process's environment), as the leader of a new session, so that the
     component and every process it starts form one process group, which
     ComponentGroup.stop can end, and records it in the ComponentGroup
     `group` while it runs. Returns a subprocess.CompletedProcess whose
@@ -169,6 +171,7 @@ def run_in_session(command: list[str], cwd: str, group: ComponentGroup) -> subpr
         return subprocess.CompletedProcess(command, None, "", "")
     process = subprocess.Popen(command,
                     cwd=cwd,
+                    env=env,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

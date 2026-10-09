@@ -1,7 +1,7 @@
 """The components CoOpeRace runs (REGISTRY) and how one is run: its command
-line from its BenchExec tool-info module, its limits, its status and
-verdict, its witness files, and the block of protocol lines it prints
-(print_component_run). ComponentRunner is the strategy.StepRunner the
+line, working directory and environment from its BenchExec tool-info module
+(ComponentRunner.command), its limits, its status and verdict, its witness
+files, and the block of protocol lines it prints (print_component_run). ComponentRunner is the strategy.StepRunner the
 strategy runs steps with. The only module of the package that imports
 BenchExec.
 
@@ -42,6 +42,7 @@ import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from benchexec import model as bmodel
 from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2, ToolNotFoundException
@@ -191,6 +192,39 @@ def installed_doi(tool_location: str) -> str | None:
         return None
 
 
+@dataclass(frozen=True)
+class ComponentCommand:
+    """How a component run is started: the command line `cmdline`, the
+    working directory `cwd`, and the environment `env`, or None for the
+    environment of CoOpeRace itself."""
+
+    cmdline: list[str]
+    cwd: str
+    env: dict[str, str] | None
+
+
+def run_environment(environments: Mapping[str, Mapping[str, str]]) -> dict[str, str] | None:
+    """The environment of a component run, given `environments`, the result of
+    its tool-info module's `environment(executable)`, built as BenchExec's
+    RunExecutor._setup_environment builds it: with "keepEnv", only the
+    variables it names are kept from CoOpeRace's environment, else all are;
+    "newEnv" sets variables and "additionalEnv" appends to them. Returns None,
+    CoOpeRace's own environment, for an empty `environments`, which is what
+    BaseTool2.environment returns and what every module of REGISTRY returns
+    in BenchExec 3.31. What RunExecutor sets for every run (HOME, TMPDIR and
+    the like) is not set here: CoOpeRace's own run already has them."""
+    if not any(environments.values()) and environments.get("keepEnv") is None:
+        return None
+    if environments.get("keepEnv") is not None:
+        env = {key: os.environ[key] for key in environments["keepEnv"] if key in os.environ}
+    else:
+        env = dict(os.environ)
+    env.update(environments.get("newEnv", {}))
+    for key, value in environments.get("additionalEnv", {}).items():
+        env[key] = os.environ.get(key, "") + value
+    return env
+
+
 # The values of a task's `data_model` option (and of `--arch`) that the
 # components' BenchExec tool-info modules understand. SV-COMP task definitions
 # without a `data_model` are ILP32 programs, so that is what `--arch` defaults to.
@@ -317,6 +351,42 @@ class ComponentRunner:
                                 f"ERROR ({type(error).__name__}: {error})", "unknown")
             return NO_OUTCOME
 
+    def command(self, actor: BaseTool2, spec: ComponentSpec, witness_dir: str) -> ComponentCommand:
+        """The ComponentCommand that starts the component `actor`, the
+        tool-info object of the registry entry `spec`, on the task, with the
+        witness directory `witness_dir` of its run, as BenchExec would start it
+        from the component's directory under `tools_dir`, its tool directory:
+
+        - the command line is benchexec.model.cmdline_for_run's, given the
+          executable that `actor.executable` finds in the tool directory,
+          the options of the component's ComponentVersion followed by those
+          of its WitnessSpec, the task file, the property file, the task
+          options data_model and language, and an empty ResourceLimits (the
+          tool-info module for CoOpeRace passes CoOpeRace no limits).
+          cmdline_for_run makes a relative path relative to the working
+          directory, and expands environment variables and ~ in every
+          argument; the executable, the task and the property file are
+          absolute paths here, so they are passed as they are;
+        - the working directory is `actor.working_directory(executable)`,
+          relative to the tool directory, as BenchExec's is relative to the
+          directory it runs in, which SV-COMP makes the tool's directory. The
+          default, os.curdir, which every module of REGISTRY keeps in
+          BenchExec 3.31, so gives the tool directory;
+        - the environment is run_environment of `actor.environment(executable)`.
+
+        Raises what `actor.executable` raises, ToolNotFoundException if the
+        executable is not there, and KeyError if `versions` has no entry for
+        the component."""
+        version = self.versions[spec.directory]
+        tool_location = os.path.join(self.tools_dir, spec.directory)
+        executable = actor.executable(BaseTool2.ToolLocator(tool_directory=tool_location))
+        options = list(version.options) + witness_options(spec.witness, witness_dir)
+        cmdline = bmodel.cmdline_for_run(
+            actor, executable, options, [self.file], None, self.property_file,
+            {"data_model": self.data_model, "language": "C"}, BaseTool2.ResourceLimits())
+        cwd = os.path.normpath(os.path.join(tool_location, actor.working_directory(executable)))
+        return ComponentCommand(cmdline, cwd, run_environment(actor.environment(executable)))
+
     def run_component(self, actor: BaseTool2, step: Step, group: ComponentGroup) -> Outcome:
         """Runs the component `actor` of the config.Step `step` on the task in
         the ComponentGroup `group`, with the step's limits, and prints its
@@ -327,44 +397,24 @@ class ComponentRunner:
         The component's entry in the registry is looked up by the conf's name
         of the component, `step.component`, which config.load has checked is
         in the registry, and its options in `versions`, which
-        installation_problems has checked hold it; the case of `actor.name()` (BenchExec's sv-sanitizers
-        module names itself "SV-sanitizers") does not matter. The block is
-        printed under `actor.name()`."""
+        installation_problems has checked hold it; the case of `actor.name()`
+        (BenchExec's sv-sanitizers module names itself "SV-sanitizers") does
+        not matter. It is started as `command` says. The block is printed
+        under `actor.name()`."""
         spec = self.registry[step.component]
-        version = self.versions[spec.directory]
-        tool_location = os.path.join(self.tools_dir, spec.directory)
-
-        tool_locator = BaseTool2.ToolLocator(tool_directory=tool_location)
-        executable = actor.executable(tool_locator)
-
-        cwd = os.path.dirname(executable)
-
-        task = BaseTool2.Task.with_files(
-            input_files=[self.file],
-            property_file=self.property_file,
-            options={"data_model": self.data_model,
-                     "language": "C"},
-        )
-
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
-        options = list(version.options) + witness_options(spec.witness, witness_dir)
-
-        cmdline = actor.cmdline(
-            executable,
-            options,
-            task,
-            BaseTool2.ResourceLimits()
-        )
+        command = self.command(actor, spec, witness_dir)
 
         started = start_time(witness_dir)
         tool_result = run_in_session(
-            command=with_resource_limits(step, cmdline),
-            cwd=cwd,
-            group=group
+            command=with_resource_limits(step, command.cmdline),
+            cwd=command.cwd,
+            group=group,
+            env=command.env,
             )
         #Also for a stopped component, so that no file it wrote stays in its directory
-        witness_files = collect_witness_files(spec.witness, cwd, witness_dir, started)
+        witness_files = collect_witness_files(spec.witness, command.cwd, witness_dir, started)
 
         if group.stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
@@ -375,7 +425,7 @@ class ComponentRunner:
             print_component_run(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return NO_OUTCOME
 
-        status = component_status(actor, cmdline, tool_result)
+        status = component_status(actor, command.cmdline, tool_result)
 
         if confirm_verdict(step.accept, status, "true"):
             verdict = "true"

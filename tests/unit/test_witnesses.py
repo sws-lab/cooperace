@@ -27,7 +27,7 @@ def write(path, text="witness", mtime_ns=None):
 
 @pytest.fixture
 def run_dirs(tmp_path):
-    """The directory of a component (its executable's directory, the working
+    """The directory of a component (its tool directory, the working
     directory of its run) and the directory made for the run."""
     component = tmp_path / "component"
     run = tmp_path / "run"

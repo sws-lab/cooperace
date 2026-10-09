@@ -75,8 +75,8 @@ class StubTool(BaseTool2):
 
 def make_script(directory, body):
     """Writes the executable shell script `directory`/stub.sh with `body` as
-    its commands and returns its path. CoOpeRace runs a component with the
-    directory of its executable as the working directory."""
+    its commands and returns its path. register_stub makes `directory` the
+    stub's tool directory, which CoOpeRace runs it in."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "stub.sh"
