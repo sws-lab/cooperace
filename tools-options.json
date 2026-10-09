@@ -1,0 +1,68 @@
+{
+  "goblint": {
+    "doi": "10.5281/zenodo.17642247",
+    "version": "svcomp26",
+    "options": [
+      "--portfolio-conf",
+      "conf/svcomp26/seq.txt"
+    ]
+  },
+  "dartagnan": {
+    "doi": "10.5281/zenodo.17723884",
+    "version": "svcomp26",
+    "options": []
+  },
+  "uautomizer": {
+    "doi": "10.5281/zenodo.17735224",
+    "version": "svcomp26",
+    "options": [
+      "--full-output"
+    ]
+  },
+  "deagle": {
+    "doi": "10.5281/zenodo.17636587",
+    "version": "svcomp26",
+    "options": []
+  },
+  "ugemcutter": {
+    "doi": "10.5281/zenodo.17735380",
+    "version": "svcomp26",
+    "options": [
+      "--full-output"
+    ]
+  },
+  "utaipan": {
+    "doi": "10.5281/zenodo.17735313",
+    "version": "svcomp26",
+    "options": [
+      "--full-output"
+    ]
+  },
+  "nacpa": {
+    "doi": "10.5281/zenodo.17734971",
+    "version": "2.1.1",
+    "options": []
+  },
+  "cpachecker": {
+    "doi": "10.5281/zenodo.17777566",
+    "version": "4.2.2",
+    "options": [
+      "--svcomp26",
+      "--heap",
+      "10000M",
+      "--benchmark",
+      "--timelimit",
+      "900 s"
+    ]
+  },
+  "sv-sanitizers": {
+    "doi": "10.5281/zenodo.17400380",
+    "version": "svcomp26",
+    "options": []
+  },
+  "racerf": {
+    "doi": "10.5281/zenodo.17589798",
+    "version": "svcomp26",
+    "options": []
+  }
+}

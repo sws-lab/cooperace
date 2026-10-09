@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from . import TOOL_DIR, config, strategy
-from .components import DATA_MODELS, ComponentRunner
+from .components import DATA_MODELS, ComponentRunner, OptionsFileError
 from .processes import ComponentGroup
 
 #The only property CoOpeRace checks: the content of sv-benchmarks' no-data-race.prp
@@ -131,7 +131,10 @@ def main() -> None:
         if not os.path.isfile(abs_path):
             raise SetupError(f"the task {args.filepath} is not a file")
         conf = read_conf(args.conf or os.path.join(TOOL_DIR, "conf", "svcomp26.json"))
-        runner = ComponentRunner(abs_path, args.prop, args.arch)
+        try:
+            runner = ComponentRunner(abs_path, args.prop, args.arch)
+        except OptionsFileError as error:
+            raise SetupError(str(error)) from error
         verdict = run(conf, runner)
     except SetupError as error:
         error_exit(*error.problems)
@@ -145,19 +148,20 @@ def main() -> None:
 
 def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None) -> str:
     """Loads the conf `conf` (a dict) with config.load against the components
-    of `runner` (a components.ComponentRunner), checks that the executable of
-    each of its components is there (ComponentRunner.missing_executables),
-    and runs it with strategy.execute in the ComponentGroup `group` (a new
+    of `runner` (a components.ComponentRunner), checks that each of its
+    components is installed in the version whose options `runner` has
+    (ComponentRunner.installation_problems), and runs it with strategy.execute in the ComponentGroup `group` (a new
     one if None). Returns the verdict.
 
     Raises SetupError, before any component starts, for a conf that
-    config.load refuses and for components that are not installed. An
+    config.load refuses and for components that are not installed or not
+    in that version. An
     Exception of strategy.execute propagates."""
     try:
         root = config.load(conf, runner.registry)
     except config.ConfError as error:
         raise SetupError(str(error)) from error
-    problems = runner.missing_executables(config.component_names(root))
+    problems = runner.installation_problems(config.component_names(root))
     if problems:
         raise SetupError(*problems)
     return strategy.execute(root, runner, group)

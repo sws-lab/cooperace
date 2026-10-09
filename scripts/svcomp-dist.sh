@@ -5,11 +5,12 @@
 #   FMTOOLS_VERSION=svcomp27 scripts/svcomp-dist.sh
 #
 # The archive holds the tracked files cooperace, src/, conf/, lib/, LICENSE,
-# README.md and tools.txt, the smoke-test script and the two files it runs on,
-# exactly as committed, and the components that tools.txt names, copied from
-# tools/<name>. The components of tools-pool.txt are not packed. The file VERSION in it holds the fm-tools version name
-# (FMTOOLS_VERSION, or the first argument) and `git describe --always
-# --dirty`, which `cooperace --version` prints.
+# README.md, tools.txt and tools-options.json, the smoke-test script and the
+# two files it runs on, exactly as committed, and the components that
+# tools.txt names, copied from tools/<name> with their record .doi. The
+# components of tools-pool.txt are not packed. The file VERSION in it holds
+# the fm-tools version name (FMTOOLS_VERSION, or the first argument) and
+# `git describe --always --dirty`, which `cooperace --version` prints.
 #
 # The script refuses to run while tracked files have uncommitted changes.
 # ALLOW_DIRTY=1 overrides that for development: the archive is then made from
@@ -40,14 +41,15 @@ DESCRIBE="$(git describe --always --dirty)"
 rm -rf "${DIST}"
 mkdir -p "${DIST}/tools"
 
-git archive "${TREE}" cooperace src conf lib LICENSE README.md tools.txt \
+git archive "${TREE}" cooperace src conf lib LICENSE README.md tools.txt tools-options.json \
   tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i \
   | tar -x -C "${DIST}"
 git show "${TREE}:scripts/sv-comp/smoketest.sh" > "${DIST}/smoketest.sh"
 chmod +x "${DIST}/smoketest.sh"
 
 # tools.txt, the lock file of the components, has one "<name>: <doi>" line per
-# component. tools/ must hold exactly those DOIs, as download-tools.py records.
+# component. tools/ must hold exactly those DOIs, as download-tools.py records,
+# and tools-options.json the options of those DOIs.
 python3 scripts/download-tools.py --check
 while IFS=: read -r name _; do
   name="${name//[[:space:]]/}"

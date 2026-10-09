@@ -3,12 +3,13 @@ stderr and no "CoOpeRace verdict:" line (a defect of the command line, the
 property, the conf, the installation, or an exception of CoOpeRace's own), and
 what does not (a component that crashes)."""
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from support import make_script, register_stub
+from support import STUB_DOI, make_script, register_stub
 
 from src.cooperace import cli, components
 from src.cooperace.components import ComponentRunner
@@ -173,6 +174,7 @@ def test_a_conf_that_load_refuses_ends_cooperace_without_a_verdict(run_main, tmp
 def test_components_that_are_not_installed_are_refused_one_line_each_before_any_starts(
         run_main, tmp_path, monkeypatch):
     monkeypatch.setattr(components, "TOOL_DIR", str(tmp_path))
+    shutil.copy(ROOT / components.OPTIONS_FILE, tmp_path)
     conf = {"runType": "sequential", "tools": [{"Goblint": "true"}, [{"Dartagnan": "all"}]]}
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
@@ -209,11 +211,26 @@ def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_p
     assert "Tool name: Stub A Status: ERROR (3) Exit code: 3" in capsys.readouterr().out
 
 
-def test_missing_executables_names_each_missing_component_on_one_line(tmp_path):
+@pytest.mark.parametrize("content", [None, "{", '{"goblint": {"doi": "10.5281/zenodo.1"}}', "[]"])
+def test_an_options_file_that_is_missing_or_malformed_is_refused_before_any_component_starts(
+        run_main, tmp_path, monkeypatch, content):
+    monkeypatch.setattr(components, "TOOL_DIR", str(tmp_path))
+    if content is not None:
+        (tmp_path / components.OPTIONS_FILE).write_text(content)
+
+    status, out, err = run_main("--prop", str(DATA_RACE))
+
+    assert (status, out) == (1, "")
+    (line,) = error_lines(err)
+    assert line.startswith("CoOpeRace: error: ")
+    assert str(tmp_path / components.OPTIONS_FILE) in line
+
+
+def test_installation_problems_names_each_missing_component_on_one_line(tmp_path):
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32")
     runner.tools_dir = str(tmp_path)
 
-    problems = runner.missing_executables(["Goblint", "Dartagnan"])
+    problems = runner.installation_problems(["Goblint", "Dartagnan"])
 
     assert len(problems) == 2
     assert all("\n" not in problem for problem in problems)
@@ -221,18 +238,47 @@ def test_missing_executables_names_each_missing_component_on_one_line(tmp_path):
     assert str(tmp_path / "goblint") in problems[0]
 
 
-def test_missing_executables_is_empty_for_components_that_are_found(make_runner, tmp_path):
+def test_installation_problems_is_empty_for_components_that_are_found_in_their_version(make_runner, tmp_path):
     runner = make_runner()
     register_stub(runner, "Stub A", make_script(tmp_path / "stub", "exit 0\n"))
 
-    assert runner.missing_executables(["Stub A"]) == []
+    assert runner.installation_problems(["Stub A"]) == []
 
 
-def test_missing_executables_leaves_other_errors_to_the_step(make_runner):
+@pytest.mark.parametrize("record, found", [(None, "an unrecorded DOI (no .doi)"),
+                                           ("10.5281/zenodo.99", "10.5281/zenodo.99")])
+def test_installation_problems_names_a_component_installed_from_another_doi(make_runner, tmp_path, record, found):
+    runner = make_runner()
+    script = make_script(tmp_path / "stub", "exit 0\n")
+    register_stub(runner, "Stub A", script)
+    if record is None:
+        (script.parent / components.DOI_RECORD).unlink()
+    else:
+        (script.parent / components.DOI_RECORD).write_text(record + "\n")
+
+    (problem,) = runner.installation_problems(["Stub A"])
+
+    assert problem == (f"component 'Stub A': {script.parent} is installed from {found}, but "
+                       f"{components.OPTIONS_FILE} holds the options of {STUB_DOI}; run scripts/download-tools.py")
+
+
+def test_installation_problems_names_a_component_without_options(make_runner, tmp_path):
+    runner = make_runner()
+    script = make_script(tmp_path / "stub", "exit 0\n")
+    register_stub(runner, "Stub A", script)
+    del runner.versions[str(script.parent)]
+
+    (problem,) = runner.installation_problems(["Stub A"])
+
+    assert problem == (f"component 'Stub A': {components.OPTIONS_FILE} has no options for {script.parent}; "
+                       "run scripts/download-tools.py")
+
+
+def test_installation_problems_leaves_other_errors_to_the_step(make_runner):
     runner = make_runner()
     runner.registry["Broken"] = components.ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
 
-    assert runner.missing_executables(["Broken"]) == []
+    assert runner.installation_problems(["Broken"]) == []
 
 
 # --- an exception of CoOpeRace's own -------------------------------------------

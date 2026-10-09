@@ -13,12 +13,24 @@ of <name>: ..." and "CPU-time limit of <name>: ..." before a component with
 a limit starts. strategy.execute adds "CoOpeRace result from: <name>" and
 "CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <verdict>".
 A component that cannot be run or crashes is reported in its block and is a
-step without a verdict (run_step). A component that is not installed is
-found out before any component starts (ComponentRunner.missing_executables),
-and cli ends CoOpeRace for it with an error on stderr and no verdict line."""
+step without a verdict (run_step). A component that is not installed, or
+whose installed version is not the one whose options tools-options.json
+holds, is found out before any component starts
+(ComponentRunner.installation_problems), and cli ends CoOpeRace for it with
+an error on stderr and no verdict line.
+
+What a component is run with comes from two places. REGISTRY, here, holds
+what is CoOpeRace's own: the component's name in the conf, its tool-info
+module, its fm-tools name (its directory under tools/) and its WitnessSpec.
+tools-options.json in TOOL_DIR holds what comes from the component's fm-tools
+entry: the DOI it is installed from and the `benchexec_toolinfo_options` of
+that version, which scripts/download-tools.py writes when it installs the
+components of tools.txt and tools-pool.txt (read_component_versions). The
+options are read from that file, never from fm-tools while CoOpeRace runs."""
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import shutil
 import signal
@@ -71,13 +83,14 @@ class ComponentSpec:
     """A component CoOpeRace can run. `name` is its name in the conf, `module`
     the name of its BenchExec tool-info module, imported when the component is
     first run, `directory` its name in fm-tools, which is its directory under
-    tools/ (where download-tools.py unpacks it), `options` the options it is run with, before
-    those of `witness`, the WitnessSpec of its witness files."""
+    tools/ (where download-tools.py unpacks it) and its key in
+    tools-options.json, and `witness` the WitnessSpec of its witness files.
+    The options it is run with are those of its ComponentVersion, before
+    those of `witness`."""
 
     name: str
     module: str
     directory: str
-    options: tuple[str, ...] = ()
     witness: WitnessSpec = DEFAULT_WITNESS
 
     def tool(self) -> BaseTool2:
@@ -90,16 +103,13 @@ class ComponentSpec:
 # The components CoOpeRace can run, by their name in the conf. A new
 # component needs an entry here and a line in tools.txt (the components of
 # the SV-COMP archive) or tools-pool.txt (the others), from which
-# download-tools.py installs it into tools/<directory>.
+# download-tools.py writes its options into tools-options.json.
 REGISTRY = {spec.name: spec for spec in (
-    # The options of Goblint's own SV-COMP entry (benchexec_toolinfo_options
-    # of version svcomp26 in its fm-tools file goblint.yml). The portfolio
-    # path is relative to Goblint's directory, the working directory of its
-    # run. Goblint prints "SV-COMP result: ..." only when run through this
-    # portfolio. Keep in step with the Goblint version in tools.txt.
+    # Goblint prints "SV-COMP result: ..." only when run through the portfolio
+    # its fm-tools options name (--portfolio-conf conf/svcomp26/seq.txt, a path
+    # relative to Goblint's directory, the working directory of its run).
     #Witness: witness.yaml.path; the svcomp26 configuration writes no graphml witness
     ComponentSpec("Goblint", "benchexec.tools.goblint", "goblint",
-                  options=("--portfolio-conf", "conf/svcomp26/seq.txt"),
                   witness=WitnessSpec("run", ("--set", "witness.yaml.path", "{dir}/witness.yml"),
                                       ("witness.yml",))),
     ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle"),
@@ -108,16 +118,78 @@ REGISTRY = {spec.name: spec for spec in (
     ComponentSpec("Dartagnan", "benchexec.tools.dartagnan", "dartagnan",
                   witness=WitnessSpec("component", (), ("output/witness.graphml",))),
     ComponentSpec("ULTIMATE Automizer", "benchexec.tools.ultimateautomizer", "uautomizer",
-                  options=("--full-output",), witness=_ULTIMATE_WITNESS),
+                  witness=_ULTIMATE_WITNESS),
     ComponentSpec("ULTIMATE GemCutter", "benchexec.tools.ultimategemcutter", "ugemcutter",
-                  options=("--full-output",), witness=_ULTIMATE_WITNESS),
+                  witness=_ULTIMATE_WITNESS),
     ComponentSpec("ULTIMATE Taipan", "benchexec.tools.ultimatetaipan", "utaipan",
-                  options=("--full-output",), witness=_ULTIMATE_WITNESS),
+                  witness=_ULTIMATE_WITNESS),
     ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
     ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "cpachecker"),
     ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers"),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
 )}
+
+# The file in TOOL_DIR that holds the ComponentVersion of every component of
+# tools.txt and tools-pool.txt, written by scripts/download-tools.py.
+OPTIONS_FILE = "tools-options.json"
+
+# The file in a component's directory that records the DOI it was installed
+# from, written by scripts/download-tools.py after the installation.
+DOI_RECORD = ".doi"
+
+
+@dataclass(frozen=True)
+class ComponentVersion:
+    """The version of a component that tools-options.json records: `doi`, the
+    DOI of the archive it is installed from, `version`, the name of the
+    version of its fm-tools entry with that DOI, and `options`, the
+    `benchexec_toolinfo_options` of that version, which the component is run
+    with."""
+
+    doi: str
+    version: str
+    options: tuple[str, ...]
+
+
+class OptionsFileError(Exception):
+    """Raised by read_component_versions for a tools-options.json that cannot
+    be read or does not have the format download-tools.py writes; its message
+    names the file and the problem."""
+
+
+def read_component_versions(path: str) -> dict[str, ComponentVersion]:
+    """The ComponentVersion of each component of the options file `path`, by
+    its fm-tools name (a ComponentSpec's `directory`). The file is a JSON
+    object with one object per component, holding "doi" and "version" (strings)
+    and "options" (a list of strings); further keys are ignored. Raises
+    OptionsFileError for a file that cannot be read or has another format."""
+    try:
+        with open(path) as file:
+            data = json.load(file)
+    except (OSError, ValueError) as error:
+        raise OptionsFileError(f"cannot read the options of the components {path}: {error}") from error
+    if not isinstance(data, dict):
+        raise OptionsFileError(f"{path}: expected a JSON object, not {type(data).__name__}")
+    versions = {}
+    for name, record in data.items():
+        if not (isinstance(record, dict) and isinstance(record.get("doi"), str)
+                and isinstance(record.get("version"), str) and isinstance(record.get("options"), list)
+                and all(isinstance(option, str) for option in record["options"])):
+            raise OptionsFileError(f"{path}: the entry of {name} is not an object with a \"doi\", "
+                                   f"a \"version\" and a list of strings \"options\": {record!r}")
+        versions[name] = ComponentVersion(record["doi"], record["version"], tuple(record["options"]))
+    return versions
+
+
+def installed_doi(tool_location: str) -> str | None:
+    """The DOI recorded in the component directory `tool_location` (its
+    DOI_RECORD), or None if there is no record."""
+    try:
+        with open(os.path.join(tool_location, DOI_RECORD)) as file:
+            return file.read().strip() or None
+    except OSError:
+        return None
+
 
 # The values of a task's `data_model` option (and of `--arch`) that the
 # components' BenchExec tool-info modules understand. SV-COMP task definitions
@@ -134,9 +206,10 @@ class ComponentRunner:
     """Runs the components of the steps of a strategy on one task: the
     StepRunner that strategy.execute is given. It holds the task (`file`,
     `property_file`, `data_model`), the components it can run (`registry`),
-    the directory that holds their directories (`tools_dir`, tools/ in
-    TOOL_DIR, wherever the working directory is) and, between prepare and cleanup, the work directory
-    with one directory per component run (`work_dir`).
+    their versions and options (`versions`, by fm-tools name), the directory
+    that holds their directories (`tools_dir`, tools/ in TOOL_DIR, wherever
+    the working directory is) and, between prepare and cleanup, the work
+    directory with one directory per component run (`work_dir`).
 
     `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
     the option was not given, which means DEFAULT_DATA_MODEL (reported on
@@ -144,10 +217,12 @@ class ComponentRunner:
     is, the Goblint and ULTIMATE tool-info modules raise
     UnsupportedFeatureException inside run_component and Dartagnan's ignores
     it. `registry` is copied, so that the unit tests can add stub components
-    to the copy."""
+    to the copy. `versions` is copied too; None reads them from OPTIONS_FILE in
+    TOOL_DIR (read_component_versions, which raises OptionsFileError)."""
 
     def __init__(self, file: str, property_file: str, data_model: str | None,
-                 registry: Mapping[str, ComponentSpec] = REGISTRY):
+                 registry: Mapping[str, ComponentSpec] = REGISTRY,
+                 versions: Mapping[str, ComponentVersion] | None = None):
         if data_model is None:
             print(f"CoOpeRace: no --arch given, assuming {DEFAULT_DATA_MODEL}", file=sys.stderr)
             data_model = DEFAULT_DATA_MODEL
@@ -159,29 +234,47 @@ class ComponentRunner:
 
         #The components this runner can run, by name
         self.registry = dict(registry)
+        #The installed version and the options of each component, by fm-tools name
+        if versions is None:
+            versions = read_component_versions(os.path.join(TOOL_DIR, OPTIONS_FILE))
+        self.versions = dict(versions)
         #The directory that holds the components' directories
         self.tools_dir = os.path.join(TOOL_DIR, "tools")
         self.work_dir = None
 
-    def missing_executables(self, names: list[str]) -> list[str]:
+    def installation_problems(self, names: list[str]) -> list[str]:
         """One message for each component of `names` (conf names, keys of
-        `registry`) whose tool-info module's `executable` raises
-        ToolNotFoundException for the component's directory under `tools_dir`:
-        the component's name and the exception's message on one line. Empty
-        if every component can be found. Starts no component. Any other exception from
+        `registry`) that cannot be run as installed, each on one line naming
+        the component: its tool-info module's `executable` raises
+        ToolNotFoundException for the component's directory under `tools_dir`;
+        or `versions` has no ComponentVersion for it; or the DOI recorded in
+        its directory (installed_doi) is not that ComponentVersion's, so that
+        its options might be those of another version. Empty if every
+        component can be run. Starts no component. Any other exception from
         making the tool-info object or finding the executable is not
         reported here: run_step reports it as an error of that step."""
         problems = []
         for name in names:
             spec = self.registry[name]
+            tool_location = os.path.join(self.tools_dir, spec.directory)
             try:
-                locator = BaseTool2.ToolLocator(tool_directory=os.path.join(self.tools_dir, spec.directory))
-                spec.tool().executable(locator)
+                spec.tool().executable(BaseTool2.ToolLocator(tool_directory=tool_location))
             except ToolNotFoundException as error:
                 problems.append(f"component {name!r}: {' '.join(str(error).split())}")
+                continue
             except Exception:
                 #Reported with its traceback when run_step makes the tool-info object
-                pass
+                continue
+            version = self.versions.get(spec.directory)
+            if version is None:
+                problems.append(f"component {name!r}: {OPTIONS_FILE} has no options for {spec.directory}; "
+                                "run scripts/download-tools.py")
+                continue
+            recorded = installed_doi(tool_location)
+            if recorded != version.doi:
+                problems.append(f"component {name!r}: {tool_location} is installed from "
+                                f"{recorded or 'an unrecorded DOI (no ' + DOI_RECORD + ')'}, but {OPTIONS_FILE} "
+                                f"holds the options of {version.doi}; run scripts/download-tools.py")
         return problems
 
     def prepare(self) -> None:
@@ -233,10 +326,12 @@ class ComponentRunner:
 
         The component's entry in the registry is looked up by the conf's name
         of the component, `step.component`, which config.load has checked is
-        in the registry; the case of `actor.name()` (BenchExec's sv-sanitizers
+        in the registry, and its options in `versions`, which
+        installation_problems has checked hold it; the case of `actor.name()` (BenchExec's sv-sanitizers
         module names itself "SV-sanitizers") does not matter. The block is
         printed under `actor.name()`."""
         spec = self.registry[step.component]
+        version = self.versions[spec.directory]
         tool_location = os.path.join(self.tools_dir, spec.directory)
 
         tool_locator = BaseTool2.ToolLocator(tool_directory=tool_location)
@@ -253,7 +348,7 @@ class ComponentRunner:
 
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
-        options = list(spec.options) + witness_options(spec.witness, witness_dir)
+        options = list(version.options) + witness_options(spec.witness, witness_dir)
 
         cmdline = actor.cmdline(
             executable,

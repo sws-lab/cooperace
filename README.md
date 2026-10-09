@@ -7,7 +7,12 @@ and Zenodo DOI per line. `tools.txt` is the lock file of the components of the S
 `tools/<name>/.doi`, and `make svcomp` packs the components it names.
 [`tools-pool.txt`](tools-pool.txt) is the lock file of the further components CoOpeRace can run, which
 are not in the archive; `scripts/download-tools.py --pool` installs them too.
-`scripts/download-tools.py --check` says whether `tools/` matches `tools.txt`.
+The options each component is run with are the `benchexec_toolinfo_options` of its version in fm-tools,
+which `scripts/download-tools.py` writes into the tracked [`tools-options.json`](tools-options.json)
+(`--options-only --fm-tools-dir DIR` writes it from a checkout of fm-tools without downloading anything).
+CoOpeRace reads the options from that file and refuses to run a component whose `tools/<name>/.doi` is not
+the DOI recorded there. `scripts/download-tools.py --check` says whether `tools/` and `tools-options.json`
+match the lock files.
 
 The goal of the CoOpeRace project is to identify the ultimate state-of-the-art in race freedom verification,
 attempt better ways of communicating intermediate results between tools, and 

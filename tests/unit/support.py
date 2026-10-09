@@ -9,10 +9,13 @@ from pathlib import Path
 from benchexec import result as bresult
 from benchexec.tools.template import BaseTool2
 
-from src.cooperace.components import ComponentSpec
+from src.cooperace.components import DOI_RECORD, ComponentSpec, ComponentVersion
 
 # Upper bound in seconds for every wait on a process or a file.
 WAIT_SECONDS = 15
+
+# The DOI a stub component is installed from, as register_stub records it.
+STUB_DOI = "10.5281/zenodo.0"
 
 
 def wait_until(predicate, timeout=WAIT_SECONDS, interval=0.05):
@@ -95,12 +98,17 @@ class StubSpec(ComponentSpec):
         return StubTool(self.tool_name or self.name, self.script)
 
 
-def register_stub(runner, tool_name, script, name_of_tool=None):
+def register_stub(runner, tool_name, script, name_of_tool=None, options=()):
     """Makes `runner` run the shell script `script` for the component
-    `tool_name`, which the conf can then name. This is the test hook: the
-    ComponentRunner looks components up in its `registry`, a copy of
-    components.REGISTRY, which can be added to after construction.
+    `tool_name`, which the conf can then name, with the options `options`.
+    This is the test hook: the ComponentRunner looks components up in its
+    `registry`, a copy of components.REGISTRY, and their options in its
+    `versions`, which can be added to after construction. The stub is
+    installed as download-tools.py installs a component: the script's
+    directory records STUB_DOI, and `versions` gets that DOI for it.
     `name_of_tool` is what the tool-info object's name() returns, if that
     is not `tool_name`."""
-    runner.registry[tool_name] = StubSpec(tool_name, "", str(Path(script).parent), script=str(script),
-                                          tool_name=name_of_tool)
+    directory = str(Path(script).parent)
+    (Path(directory) / DOI_RECORD).write_text(STUB_DOI + "\n")
+    runner.registry[tool_name] = StubSpec(tool_name, "", directory, script=str(script), tool_name=name_of_tool)
+    runner.versions[directory] = ComponentVersion(STUB_DOI, "stub", tuple(options))
