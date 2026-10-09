@@ -16,8 +16,12 @@ from src.cooperace.components import ComponentRunner
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_RACE = ROOT / "tests" / "properties" / "no-data-race.prp"
-OTHER_PROPERTIES = sorted(path for path in (ROOT / "tests" / "properties").glob("*.prp")
-                          if path.name != "no-data-race.prp")
+# The properties of C.Concurrency that the default conf, conf/svcomp26.json,
+# has no strategy for, and the property files of sv-benchmarks that hold no
+# property of C.Concurrency
+NO_STRATEGY = ["unreach-call", "no-overflow", "valid-memsafety"]
+UNKNOWN_PROPERTIES = sorted(path for path in (ROOT / "tests" / "properties").glob("*.prp")
+                            if path.stem not in [*NO_STRATEGY, "no-data-race"])
 FORMULA = "CHECK( init(main()), LTL(G ! data-race) )"
 
 
@@ -44,11 +48,12 @@ def run_main(tmp_path, monkeypatch, capsys):
 
 @pytest.fixture
 def no_run(monkeypatch):
-    """Replaces cli.run by a function that records its calls and returns "false"."""
+    """Replaces cli.run by a function that records the conf and the
+    property_name of the runner of each call, and returns "false"."""
     calls = []
 
     def fake_run(conf, runner, group=None):
-        calls.append(conf)
+        calls.append((conf, runner.property_name))
         return "false"
 
     monkeypatch.setattr(cli, "run", fake_run)
@@ -98,10 +103,22 @@ def test_a_data_race_run_prints_the_verdict_line_last_and_exits_normally(run_mai
 
 # --- the property --------------------------------------------------------------
 
-@pytest.mark.parametrize("path", OTHER_PROPERTIES, ids=lambda path: path.name)
-def test_a_property_other_than_no_data_race_is_refused_and_no_component_starts(
+@pytest.mark.parametrize("name", NO_STRATEGY)
+def test_a_property_the_default_conf_has_no_strategy_for_is_refused_and_no_component_starts(
+        run_main, no_run, name):
+    status, out, err = run_main("--prop", str(ROOT / "tests" / "properties" / f"{name}.prp"))
+
+    assert (status, out) == (1, "")
+    #Not even the line on the missing --arch: the runner is not made
+    assert err.splitlines() == [f"CoOpeRace: error: unsupported property {name}: "
+                                "the conf has no strategy for it"]
+    assert no_run == []
+
+
+@pytest.mark.parametrize("path", UNKNOWN_PROPERTIES, ids=lambda path: path.name)
+def test_a_property_file_of_no_known_property_is_refused_and_no_component_starts(
         run_main, no_run, path):
-    assert_refused(run_main("--prop", str(path)), "unsupported property")
+    assert_refused(run_main("--prop", str(path)), f"unsupported property in {path}: its formulas are not")
     assert no_run == []
 
 
@@ -113,8 +130,8 @@ def test_the_property_is_recognized_by_its_content_and_not_by_its_name(run_main,
     refused = run_main("--prop", "no-data-race.prp")
 
     assert accepted[0] == 0
-    assert_refused(refused, "unsupported property")
-    assert len(no_run) == 1
+    assert_refused(refused, "unsupported property unreach-call: the conf has no strategy for it")
+    assert [name for _, name in no_run] == ["no-data-race"]
 
 
 @pytest.mark.parametrize("text", [
@@ -124,10 +141,11 @@ def test_the_property_is_recognized_by_its_content_and_not_by_its_name(run_main,
     "LTL(G ! data-race)",
     "CHECK( init(main()), LTL(G ! data-races) )",
 ], ids=["empty", "two-formulas", "trailing-text", "no-check", "different-atom"])
-def test_a_property_file_that_is_not_the_data_race_formula_is_refused(run_main, no_run, tmp_path, text):
+def test_a_property_file_that_is_not_a_known_formula_is_refused(run_main, no_run, tmp_path, text):
     (tmp_path / "p.prp").write_text(text)
 
-    assert_refused(run_main("--prop", "p.prp"), "unsupported property")
+    assert_refused(run_main("--prop", "p.prp"), "unsupported property in p.prp: its formulas are not those of "
+                                                "unreach-call, no-overflow, valid-memsafety, no-data-race")
     assert no_run == []
 
 
@@ -136,10 +154,26 @@ def test_a_property_file_that_cannot_be_read_is_refused(run_main, no_run):
     assert no_run == []
 
 
-def test_is_data_race_property_ignores_white_space_only():
-    assert cli.is_data_race_property(FORMULA)
-    assert cli.is_data_race_property("CHECK(init(main()),LTL(G!data-race))")
-    assert not cli.is_data_race_property("CHECK( init(main()), LTL(G data-race) )")
+@pytest.mark.parametrize("name", [*NO_STRATEGY, "no-data-race"])
+def test_a_conf_with_a_strategy_for_the_property_runs_it(run_main, no_run, tmp_path, name):
+    strategy = {"runType": "sequential", "tools": [{"Goblint": "all"}]}
+    conf = {"properties": {name: strategy}}
+    (tmp_path / "conf.json").write_text(json.dumps(conf))
+
+    status, out, _ = run_main("--prop", str(ROOT / "tests" / "properties" / f"{name}.prp"), "--conf", "conf.json")
+
+    assert status == 0
+    assert out.splitlines()[-1] == "CoOpeRace verdict: false"
+    assert no_run == [(conf, name)]
+
+
+def test_a_conf_of_properties_refuses_a_property_it_has_no_strategy_for(run_main, no_run, tmp_path):
+    conf = {"properties": {"unreach-call": {"runType": "sequential", "tools": [{"Goblint": "all"}]}}}
+    (tmp_path / "conf.json").write_text(json.dumps(conf))
+
+    assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "conf.json"),
+                   "unsupported property no-data-race: the conf has no strategy for it")
+    assert no_run == []
 
 
 # --- the conf ------------------------------------------------------------------
@@ -162,11 +196,28 @@ def test_a_conf_that_does_not_exist_or_is_not_json_is_refused(run_main, no_run, 
     ({"runType": "parallel", "tools": [{"Goblint": "all"}], "memoryLimits": {"Dartagnan": "70%"}},
      "memoryLimits has a limit for 'Dartagnan'"),
     ({"runType": "parallel", "tools": [{"Goblint": "all"}, {"Goblint": "all"}]}, "named more than once"),
-], ids=["unknown-component", "acceptance", "run-type", "no-run-type", "cpu-limit-key", "memory-limit-key", "twice"])
+    ({"properties": {"no-data-race": {"runType": "sequential", "tools": []}}, "runType": "sequential"},
+     "a conf with 'properties' has no other key, but this one has 'runType'"),
+    ({"properties": {"data-race": {"runType": "sequential", "tools": []}}},
+     "the conf's properties has a strategy for 'data-race'"),
+    ({"properties": {"unreach-call": {"runType": "sequential", "tools": [{"Goblnt": "all"}]}}},
+     "in the strategy for unreach-call: component 'Goblnt'"),
+], ids=["unknown-component", "acceptance", "run-type", "no-run-type", "cpu-limit-key", "memory-limit-key", "twice",
+        "properties-and-strategy", "unknown-property", "other-property"])
 def test_a_conf_that_load_refuses_ends_cooperace_without_a_verdict(run_main, tmp_path, conf, message):
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
     assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "conf.json"), message)
+
+
+def test_a_refused_conf_gives_one_line_on_stderr_and_nothing_else(run_main, tmp_path):
+    (tmp_path / "conf.json").write_text(json.dumps({"runType": "sequential", "tools": [{"Goblnt": "all"}]}))
+
+    status, out, err = run_main("--prop", str(DATA_RACE), "--conf", "conf.json")
+
+    assert (status, out) == (1, "")
+    assert err.splitlines() == ["CoOpeRace: error: component 'Goblnt' in the conf's tools is not a component "
+                                "CoOpeRace can run"]
 
 
 # --- the installation ----------------------------------------------------------
@@ -199,6 +250,72 @@ def test_nothing_starts_when_a_later_component_is_not_installed(make_runner, gro
 
     assert not marker.exists()
     assert runner.work_dir is None
+
+
+def test_run_runs_the_strategy_for_the_property_of_the_runner_and_no_other(tmp_path, capsys):
+    marker = tmp_path / "started"
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name="valid-memsafety")
+    register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
+    register_stub(runner, "Stub B", make_script(tmp_path / "b", 'echo "STUB-STATUS: true"\n'))
+    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Stub A": "all"}]},
+                           "valid-memsafety": {"runType": "sequential", "tools": [{"Stub B": "all"}]}}}
+
+    verdict = cli.run(conf, runner)
+
+    assert verdict == "true"
+    assert "CoOpeRace result from: Stub B" in capsys.readouterr().out
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("name", NO_STRATEGY)
+def test_run_refuses_a_conf_that_is_one_strategy_for_another_property(make_runner, tmp_path, name):
+    marker = tmp_path / "started"
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=name)
+    register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
+
+    with pytest.raises(cli.SetupError, match=f"unsupported property {name}: the conf has no strategy for it"):
+        cli.run({"runType": "sequential", "tools": [{"Stub A": "all"}]}, runner)
+
+    assert not marker.exists()
+    assert runner.work_dir is None
+
+
+def test_a_component_that_is_not_installed_refuses_the_conf_also_in_another_propertys_strategy(
+        make_runner, tmp_path):
+    marker = tmp_path / "started"
+    runner = make_runner()
+    runner.tools_dir = str(tmp_path / "no-tools")
+    register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
+    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Stub A": "all"}]},
+                           "unreach-call": {"runType": "sequential", "tools": [{"Goblint": "all"}]},
+                           "no-overflow": {"runType": "parallel", "tools": [{"Goblint": "all"}]}}}
+
+    with pytest.raises(cli.SetupError) as refusal:
+        cli.run(conf, runner)
+
+    assert len(refusal.value.problems) == 1
+    assert refusal.value.problems[0].startswith("component 'Goblint'")
+    assert not marker.exists()
+
+
+def test_a_component_installed_from_another_doi_refuses_the_conf_also_in_another_propertys_strategy(
+        make_runner, tmp_path):
+    marker = tmp_path / "started"
+    runner = make_runner()
+    register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
+    script = make_script(tmp_path / "b", 'echo "STUB-STATUS: true"\n')
+    register_stub(runner, "Stub B", script)
+    (script.parent / components.DOI_RECORD).write_text("10.5281/zenodo.99\n")
+    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Stub A": "all"}]},
+                           "valid-memsafety": {"runType": "sequential", "tools": [{"Stub B": "all"}]}}}
+
+    with pytest.raises(cli.SetupError) as refusal:
+        cli.run(conf, runner)
+
+    assert refusal.value.problems == (
+        f"component 'Stub B': {script.parent} is installed from 10.5281/zenodo.99, but "
+        f"{components.OPTIONS_FILE} holds the options of {STUB_DOI}; run scripts/download-tools.py",)
+    assert not marker.exists()
 
 
 def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_path, capsys):
@@ -274,6 +391,12 @@ def test_installation_problems_names_a_component_without_options(make_runner, tm
                        "run scripts/download-tools.py")
 
 
+def test_a_runner_takes_only_a_known_property_and_no_data_race_by_default():
+    assert ComponentRunner("/dev/null", "/dev/null", "ILP32").property_name == "no-data-race"
+    with pytest.raises(ValueError, match="unknown property 'termination'"):
+        ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name="termination")
+
+
 def test_installation_problems_leaves_other_errors_to_the_step(make_runner):
     runner = make_runner()
     runner.registry["Broken"] = components.ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
@@ -314,13 +437,25 @@ def test_the_launcher_without_prop_exits_with_status_2(tmp_path):
     assert "CoOpeRace verdict" not in result.stdout
 
 
-def test_the_launcher_refuses_another_property_with_status_1_and_no_verdict_line(tmp_path):
+def test_the_launcher_refuses_a_property_without_a_strategy_with_status_1_and_no_verdict_line(tmp_path):
     (tmp_path / "foo.c").touch()
 
     result = launch(tmp_path, "--prop", str(ROOT / "tests/properties/unreach-call.prp"), "foo.c")
 
     assert result.returncode == 1
     assert result.stdout == ""
-    assert error_lines(result.stderr) == [
-        f"CoOpeRace: error: unsupported property in {ROOT / 'tests/properties/unreach-call.prp'}: "
-        f"CoOpeRace checks only {FORMULA}"]
+    assert result.stderr.splitlines() == [
+        "CoOpeRace: error: unsupported property unreach-call: the conf has no strategy for it"]
+
+
+def test_the_launcher_refuses_an_unknown_property_with_status_1_and_no_verdict_line(tmp_path):
+    (tmp_path / "foo.c").touch()
+    path = ROOT / "tests/properties/termination.prp"
+
+    result = launch(tmp_path, "--prop", str(path), "foo.c")
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.splitlines() == [
+        f"CoOpeRace: error: unsupported property in {path}: its formulas are not those of "
+        "unreach-call, no-overflow, valid-memsafety, no-data-race"]

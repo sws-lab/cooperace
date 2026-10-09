@@ -1,6 +1,8 @@
-"""Loading a conf: config.load, the tree it builds and the confs it refuses."""
+"""Loading a conf: config.load_strategies and config.load, the trees they build
+and the confs they refuse."""
 import dataclasses
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,13 @@ def test_every_shipped_conf_loads(path, known):
     expected = Sequence if conf["runType"] == "sequential" else Parallel
     assert isinstance(root, expected)
     assert steps_of(root)
+
+
+@pytest.mark.parametrize("path", SHIPPED_CONFS, ids=lambda path: path.relative_to(ROOT).as_posix())
+def test_every_shipped_conf_is_the_strategy_for_no_data_race_only(path, known):
+    conf = json.loads(path.read_text())
+
+    assert config.load_strategies(conf, known) == {"no-data-race": config.load(conf, known)}
 
 
 def test_svcomp26_loads_to_its_tree(known):
@@ -225,3 +234,67 @@ def test_component_names_lists_the_components_in_the_order_of_the_conf(known):
             "tools": [{"Goblint": "all"}, [{"Deagle": "all"}, [{"Dartagnan": "all", "nacpa": "true"}]]]}
 
     assert config.component_names(config.load(conf, known)) == ["Goblint", "Deagle", "Dartagnan", "nacpa"]
+
+
+# --- a strategy per property ---------------------------------------------------
+
+SEQUENTIAL_GOBLINT = {"runType": "sequential", "tools": [{"Goblint": "all"}]}
+
+
+def test_load_strategies_loads_the_strategy_of_each_property(known):
+    conf = {"properties": {
+        "valid-memsafety": {"runType": "parallel", "tools": [{"Goblint": "true"}, {"Dartagnan": "all"}],
+                            "memoryLimits": {"Dartagnan": "70%"}},
+        "no-data-race": {"runType": "sequential", "tools": [{"Goblint": "true"}, [{"Dartagnan": "all"}]],
+                         "cpuTimeLimits": {"Goblint": 30}},
+    }}
+
+    assert config.load_strategies(conf, known) == {
+        "valid-memsafety": Parallel((Step("Goblint", "true"), Step("Dartagnan", "all", "70%"))),
+        "no-data-race": Sequence((Step("Goblint", "true", None, 30), Parallel((Step("Dartagnan", "all"),)))),
+    }
+
+
+def test_load_strategies_accepts_every_property_and_no_property(known):
+    names = ["unreach-call", "no-overflow", "valid-memsafety", "no-data-race"]
+
+    assert list(config.load_strategies({"properties": {name: SEQUENTIAL_GOBLINT for name in names}}, known)) == names
+    assert config.load_strategies({"properties": {}}, known) == {}
+
+
+def test_a_component_may_be_in_the_strategies_of_several_properties(known):
+    conf = {"properties": {"unreach-call": SEQUENTIAL_GOBLINT, "no-overflow": SEQUENTIAL_GOBLINT}}
+
+    assert set(config.load_strategies(conf, known)) == {"unreach-call", "no-overflow"}
+
+
+@pytest.mark.parametrize("conf, message", [
+    ([], "the conf must be a JSON object"),
+    ({"properties": [SEQUENTIAL_GOBLINT]}, "the conf's properties must be an object"),
+    ({"properties": {"no-data-race": SEQUENTIAL_GOBLINT}, **SEQUENTIAL_GOBLINT},
+     "a conf with 'properties' has no other key, but this one has 'runType', 'tools'"),
+    ({"properties": {"data-race": SEQUENTIAL_GOBLINT}},
+     "the conf's properties has a strategy for 'data-race', expected one of unreach-call, no-overflow, "
+     "valid-memsafety, no-data-race"),
+    ({"properties": {"no-data-race.prp": SEQUENTIAL_GOBLINT}}, "strategy for 'no-data-race.prp'"),
+    ({"properties": {"no-overflow": {"runType": "sequential"}}},
+     "in the strategy for no-overflow: the conf has no 'tools'"),
+    ({"properties": {"no-overflow": SEQUENTIAL_GOBLINT, "unreach-call": {"tools": [], "runType": "x"}}},
+     "in the strategy for unreach-call: runType is 'x'"),
+    ({"properties": {"no-overflow": [SEQUENTIAL_GOBLINT]}},
+     "in the strategy for no-overflow: the conf must be a JSON object"),
+], ids=["array", "properties-array", "properties-and-strategy", "unknown-property", "file-name",
+        "strategy-without-tools", "second-strategy", "strategy-array"])
+def test_load_strategies_refuses(known, conf, message):
+    with pytest.raises(config.ConfError, match=re.escape(message)):
+        config.load_strategies(conf, known)
+
+
+@pytest.mark.parametrize("limits", ["memoryLimits", "cpuTimeLimits"])
+def test_a_limit_applies_only_inside_the_strategy_that_names_it(known, limits):
+    conf = {"properties": {"unreach-call": SEQUENTIAL_GOBLINT,
+                           "no-overflow": {"runType": "sequential", "tools": [{"Dartagnan": "all"}],
+                                           limits: {"Goblint": 30}}}}
+
+    with pytest.raises(config.ConfError, match=f"in the strategy for no-overflow: {limits} has a limit for 'Goblint'"):
+        config.load_strategies(conf, known)

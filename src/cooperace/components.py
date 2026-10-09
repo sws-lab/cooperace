@@ -50,6 +50,7 @@ from benchexec.tools.template import BaseTool2, ToolNotFoundException
 from . import TOOL_DIR
 from .config import Step
 from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
+from .properties import FORMULAS, NO_DATA_RACE
 from .strategy import NO_OUTCOME, Outcome
 
 
@@ -239,24 +240,32 @@ PRINT_LOCK = threading.Lock()
 class ComponentRunner:
     """Runs the components of the steps of a strategy on one task: the
     StepRunner that strategy.execute is given. It holds the task (`file`,
-    `property_file`, `data_model`), the components it can run (`registry`),
-    their versions and options (`versions`, by fm-tools name), the directory
-    that holds their directories (`tools_dir`, tools/ in TOOL_DIR, wherever
-    the working directory is) and, between prepare and cleanup, the work
-    directory with one directory per component run (`work_dir`).
+    `property_file`, `data_model`, and `property_name`, the name of the
+    property in `property_file`, a key of properties.FORMULAS, which cli
+    recognizes; no-data-race if not given), the components it can run
+    (`registry`), their versions and options (`versions`, by fm-tools name),
+    the directory that holds their directories (`tools_dir`, tools/ in
+    TOOL_DIR, wherever the working directory is) and, between prepare and
+    cleanup, the work directory with one directory per component run
+    (`work_dir`).
 
     `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
     the option was not given, which means DEFAULT_DATA_MODEL (reported on
     stderr). Any other value raises ValueError: given to the components as it
     is, the Goblint and ULTIMATE tool-info modules raise
     UnsupportedFeatureException inside run_component and Dartagnan's ignores
-    it. `registry` is copied, so that the unit tests can add stub components
-    to the copy. `versions` is copied too; None reads them from OPTIONS_FILE in
-    TOOL_DIR (read_component_versions, which raises OptionsFileError)."""
+    it. A `property_name` that is not a key of properties.FORMULAS raises
+    ValueError. `registry` is copied, so that the unit tests can add stub
+    components to the copy. `versions` is copied too; None reads them from
+    OPTIONS_FILE in TOOL_DIR (read_component_versions, which raises
+    OptionsFileError)."""
 
     def __init__(self, file: str, property_file: str, data_model: str | None,
                  registry: Mapping[str, ComponentSpec] = REGISTRY,
-                 versions: Mapping[str, ComponentVersion] | None = None):
+                 versions: Mapping[str, ComponentVersion] | None = None,
+                 property_name: str = NO_DATA_RACE):
+        if property_name not in FORMULAS:
+            raise ValueError(f"unknown property {property_name!r}, expected one of {', '.join(FORMULAS)}")
         if data_model is None:
             print(f"CoOpeRace: no --arch given, assuming {DEFAULT_DATA_MODEL}", file=sys.stderr)
             data_model = DEFAULT_DATA_MODEL
@@ -264,6 +273,7 @@ class ComponentRunner:
             raise ValueError(f"unsupported data model {data_model!r}, expected one of {', '.join(DATA_MODELS)}")
         self.file = file
         self.property_file = os.path.abspath(property_file)
+        self.property_name = property_name
         self.data_model = data_model
 
         #The components this runner can run, by name
