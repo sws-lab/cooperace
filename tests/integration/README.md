@@ -1,6 +1,6 @@
 # Integration suite for the components of CoOpeRace
 
-A regression check that takes about 8 minutes on 2 cores, not the hours of a run over the whole no-data-race category. For each component CoOpeRace integrates (Goblint, Dartagnan, ULTIMATE Automizer) it asks whether the component, run inside CoOpeRace, gives the verdict it gives alone and delivers a witness that an SV-COMP 2026 validator confirms.
+A regression check that takes about 6 minutes on 2 cores (on `goblint`, 16 cores, BenchExec 3.35), not the hours of a run over the whole no-data-race category. For each component CoOpeRace integrates (Goblint, Dartagnan, ULTIMATE Automizer) it asks whether the component, run inside CoOpeRace, gives the verdict it gives alone and delivers a witness that an SV-COMP 2026 validator confirms.
 
 ```sh
 python3 scripts/download-tools.py            # tools/, once
