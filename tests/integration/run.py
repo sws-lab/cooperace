@@ -24,6 +24,8 @@ of five checks (see README.md):
   5  each production configuration gives the expected verdict on every task
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
+`validate` and `check` take the runs and tasks recorded in DIR/meta.json by
+`run`, and ignore the options that choose them.
 
     run.py [run] [--out DIR] [--cooperace-dir DIR] [--validators DIR]
                  [--config conf/x.json ...] [--components goblint,dartagnan,...]
@@ -130,23 +132,43 @@ WITNESS_FORMATS = {
 }
 VALIDATION_LIMITS = dict(timelimit="90 s", hardtimelimit="120 s", cores="2")
 
+# The data model of an SV-COMP task whose .yml names none.
+DEFAULT_DATA_MODEL = "ILP32"
+
+
+class CouldNotRun(Exception):
+    """The suite could not run: bad input, a missing tool, a failed BenchExec
+    call.  main prints the message on stderr and exits with status 2."""
+
 
 # ------------------------------------------------------------------ tasks
 
 def load_tasks(selectors):
-    """The tasks of manifest.json, with the expected verdict and data model read
-    from each task's own .yml."""
+    """The tasks of manifest.json whose name contains one of `selectors` (all
+    if there are none), with the expected verdict and the data model read from
+    each task's own .yml; a .yml without `data_model` means DEFAULT_DATA_MODEL.
+    Raises CouldNotRun for a missing .yml, a .yml without an expected verdict
+    for no-data-race.prp, or two tasks with the same file name."""
     manifest = json.loads((HERE / "manifest.json").read_text())
     tasks = []
     for entry in manifest["tasks"]:
         yml = TASKS / (entry["name"] + ".yml")
-        text = yml.read_text()
-        expected = re.search(r"no-data-race\.prp\s+expected_verdict:\s*(\w+)", text).group(1)
-        data_model = re.search(r"data_model:\s*(\w+)", text).group(1)
-        tasks.append(dict(entry, yml=yml, expected=expected == "true",
-                          data_model=data_model, id=Path(entry["name"]).name))
+        try:
+            text = yml.read_text()
+        except OSError as e:
+            raise CouldNotRun(f"missing task {yml}: {e.strerror}")
+        expected = re.search(r"no-data-race\.prp\s+expected_verdict:\s*(true|false)\b", text)
+        if not expected:
+            raise CouldNotRun(f"{yml} has no expected verdict for no-data-race.prp")
+        data_model = re.search(r"^\s*data_model:\s*(\w+)", text, re.M)
+        tasks.append(dict(entry, yml=yml, expected=expected.group(1) == "true",
+                          data_model=data_model.group(1) if data_model else DEFAULT_DATA_MODEL,
+                          id=Path(entry["name"]).name))
     ids = [t["id"] for t in tasks]
-    assert len(ids) == len(set(ids)), "task names must be unique: BenchExec's ${taskdef_name}"
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        # BenchExec names a task's logs and result files by ${taskdef_name}.
+        raise CouldNotRun("task file names must be unique: " + ", ".join(duplicates))
     if selectors:
         tasks = [t for t in tasks if any(s in t["name"] for s in selectors)]
     return manifest, tasks
@@ -163,9 +185,12 @@ def verdict_of(status):
 
 # ------------------------------------------------------------ BenchExec
 
-def write_definition(path, tool, rundefs, limits, tasks_of, extra_options=(), bench_options=()):
-    """A BenchExec benchmark definition.  `rundefs` is {name: [(option, value)]},
-    `tasks_of[name]` the tasks of that run definition."""
+def write_definition(path, tool, rundefs, limits, tasks_of, bench_options=(), required_files=None):
+    """Writes a BenchExec benchmark definition to `path`.  `rundefs` is {name:
+    [(option, value)]}, `tasks_of[name]` the tasks of that run definition,
+    `bench_options` the options of every run definition, and
+    `required_files[name]` the patterns of that run definition's
+    <requiredfiles>."""
     lines = ['<?xml version="1.0"?>',
              '<!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 2.3//EN"'
              ' "https://www.sosy-lab.org/benchexec/benchmark-2.3.dtd">',
@@ -176,6 +201,8 @@ def write_definition(path, tool, rundefs, limits, tasks_of, extra_options=(), be
     lines += [option_xml(o, v, "  ") for o, v in bench_options]
     for name, options in rundefs.items():
         lines.append(f"  <rundefinition name={quoteattr(name)}>")
+        lines += [f"    <requiredfiles>{escape(str(f))}</requiredfiles>"
+                  for f in (required_files or {}).get(name, ())]
         lines += [option_xml(o, v, "    ") for o, v in options]
         lines.append('    <tasks name="t">')
         for t in tasks_of[name]:
@@ -231,7 +258,7 @@ def run_benchexec(definition, workdir, tool_directory, out_dir, name, args):
         proc = subprocess.run(cmd, cwd=workdir, env=benchexec_environment(),
                               stdout=log, stderr=subprocess.STDOUT)
     if proc.returncode != 0:
-        sys.exit(f"benchexec exited with {proc.returncode}; see {out_dir}/{name}.stdout.txt")
+        raise CouldNotRun(f"benchexec exited with {proc.returncode}; see {out_dir}/{name}.stdout.txt")
 
 
 def read_results(out_dir):
@@ -295,13 +322,50 @@ def plan(args):
     for path in configs:
         path = Path(path).resolve()
         name = path.stem
-        missing = [n for n in conf_components(json.loads(path.read_text()))
+        try:
+            conf = json.loads(path.read_text())
+        except (OSError, ValueError) as e:
+            raise CouldNotRun(f"cannot read the configuration {path}: {e}")
+        missing = [n for n in conf_components(conf)
                    if not (cdir / "tools" / TOOL_DIRS.get(n, n)).is_dir()]
         if missing:
             skipped[name] = "not run: " + ", ".join(sorted(set(missing))) + " not installed under tools/"
         else:
             runs[name] = dict(kind="production", conf=path, tasks=tasks)
     return manifest, tasks, runs, skipped, cdir
+
+
+def plan_from_meta(meta):
+    """The tasks and run definitions that `run` recorded in meta.json, for
+    `validate` and `check`, in the form `plan` returns them."""
+    _, all_tasks = load_tasks(None)
+    by_id = {t["id"]: t for t in all_tasks}
+    cdir = Path(meta["cooperace_dir"])
+    runs = {}
+    for name, r in meta["runs"].items():
+        unknown = [i for i in r["tasks"] if i not in by_id]
+        if unknown:
+            print(f"run.py: ignoring the results of {name} on {', '.join(unknown)}, "
+                  "which manifest.json no longer lists", file=sys.stderr)
+        run = dict(kind=r["kind"], tasks=[by_id[i] for i in r["tasks"] if i in by_id])
+        if r["kind"] in ("alone", "only"):
+            # Run definitions alone-<component>, only-<component> (plan).
+            run["component"] = r.get("component", name.split("-", 1)[1])
+        if r["kind"] in ("only", "production"):
+            default = (HERE / "conf" / f"{name}.json" if r["kind"] == "only"
+                       else cdir / "conf" / f"{name}.json")
+            run["conf"] = Path(r.get("conf", default))
+        runs[name] = run
+    ids = {t["id"] for r in runs.values() for t in r["tasks"]}
+    tasks = [t for t in all_tasks if t["id"] in ids]
+    return tasks, runs, meta.get("skipped", {}), cdir
+
+
+def git_describe(cdir):
+    """`git describe --always --dirty` of the checkout `cdir`, or None."""
+    git = subprocess.run(["git", "-C", str(cdir), "describe", "--always", "--dirty"],
+                         capture_output=True, text=True)
+    return git.stdout.strip() if git.returncode == 0 else None
 
 
 def machine_description(cdir):
@@ -319,6 +383,7 @@ def machine_description(cdir):
                 benchexec=subprocess.run(["benchexec", "--version"], capture_output=True,
                                          text=True).stdout.strip(),
                 cooperace_commit=git.stdout.strip() if git.returncode == 0 else None,
+                cooperace_describe=git_describe(cdir),
                 tools=tools.read_text().splitlines() if tools.exists() else [])
 
 
@@ -380,8 +445,8 @@ def validate(args, results, tasks, out):
     (out / "defs").mkdir(parents=True, exist_ok=True)
     todo = {}
     for (rundef, task), r in results.items():
-        t = by_id[task]
-        if r.get("witness") and not t["expected"] and t["validator"]:
+        t = by_id.get(task)
+        if t and r.get("witness") and not t["expected"] and t["validator"]:
             todo.setdefault(t["validator"], {}).setdefault(rundef, []).append(t)
     limits = dict(VALIDATION_LIMITS, memlimit=args.memlimit)
     validators = Path(args.validators).resolve()
@@ -389,18 +454,16 @@ def validate(args, results, tasks, out):
         spec = args.fmt["validators"][v]
         tool_dir = validators / spec["dir"]
         if not tool_dir.is_dir():
-            sys.exit(f"validator {v} not found in {validators}; run scripts/download-validators.py")
+            raise CouldNotRun(f"validator {v} not found in {validators}; run scripts/download-validators.py")
         definition = out / "defs" / f"validate-{v}.xml"
         witness = out / "witnesses" / "${rundefinition_name}" / "${taskdef_name}" / args.fmt["file"]
+        # The witness is also a required file, as in the competition's definitions,
+        # so that it is visible in the container wherever it lies.
         write_definition(
             definition, spec["module"],
             {rd: [(spec["witness_option"], str(witness))] for rd in per_rundef},
-            limits, per_rundef, bench_options=option_pairs(spec["options"]))
-        # The witness is also a required file, as in the competition's definitions,
-        # so that it is visible in the container wherever it lies.
-        text = definition.read_text().replace(
-            "    <option name=", f"    <requiredfiles>{escape(str(witness))}</requiredfiles>\n    <option name=", len(per_rundef))
-        definition.write_text(text)
+            limits, per_rundef, bench_options=option_pairs(spec["options"]),
+            required_files={rd: [witness] for rd in per_rundef})
         run_benchexec(definition, tool_dir, tool_dir, vdir, f"validate-{v}", args)
         for (rundef, task), r in read_results(vdir).items():
             if (rundef, task) in results and (results[(rundef, task)].get("validator") in (None, v)):
@@ -446,8 +509,11 @@ def check(results, runs, tasks, skipped, fmt):
     out = []
     def add(n, rundef, task, ok, kind, detail):
         out.append((n, rundef, task, ok, kind, detail))
+    by_id = {t["id"]: t for t in tasks}
     for (rundef, task), r in sorted(results.items()):
-        t = next(t for t in tasks if t["id"] == task)
+        if rundef not in runs or task not in by_id:
+            continue  # a result of an earlier run in the same directory
+        t = by_id[task]
         run = runs[rundef]
         if r["verdict"] is not None and r["verdict"] != t["expected"]:
             add(1, rundef, task, False, "wrong verdict",
@@ -570,12 +636,6 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
     return 1 if failed else 0
 
 
-def load_for_check(out):
-    """Rebuild the results of a previous run from `out` for `check`."""
-    meta = json.loads((out / "meta.json").read_text())
-    return meta
-
-
 # ------------------------------------------------------------------ main
 
 def main():
@@ -602,26 +662,44 @@ def main():
     args = ap.parse_args()
     args.fmt = WITNESS_FORMATS[args.witness_format]
 
-    out = Path(args.out).resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    manifest, tasks, runs, skipped, cdir = plan(args)
-    if not runs:
-        sys.exit("nothing to run: no component under tools/")
-    for t in tasks:
-        if not t["yml"].exists():
-            sys.exit(f"missing task {t['yml']}")
+    try:
+        sys.exit(suite(args))
+    except CouldNotRun as e:
+        print(f"run.py: {e}", file=sys.stderr)
+        sys.exit(2)
 
+
+def suite(args):
+    """Runs the command of `args`; returns the exit status of `report`."""
+    out = Path(args.out).resolve()
     if args.command == "run":
+        out.mkdir(parents=True, exist_ok=True)
+        manifest, tasks, runs, skipped, cdir = plan(args)
+        if not runs:
+            raise CouldNotRun("nothing to run: no component under tools/")
         meta = dict(machine=machine_description(cdir), cooperace_dir=str(cdir),
                     limits=dict(cores=args.cores, memlimit=args.memlimit,
                                 cputime_s=args.timelimit, parallel=args.parallel,
                                 allowed_cores=args.allowed_cores),
                     sv_benchmarks=manifest["sv_benchmarks"],
-                    runs={n: dict(kind=r["kind"], tasks=[t["id"] for t in r["tasks"]]) for n, r in runs.items()},
+                    runs={n: dict({k: str(r[k]) for k in ("component", "conf") if k in r},
+                                  kind=r["kind"], tasks=[t["id"] for t in r["tasks"]])
+                          for n, r in runs.items()},
                     skipped=skipped)
         (out / "meta.json").write_text(json.dumps(meta, indent=1) + "\n")
         verify(args, runs, cdir, out)
-    results = read_results(out / "verify")
+    else:
+        try:
+            meta = json.loads((out / "meta.json").read_text())
+        except OSError as e:
+            raise CouldNotRun(f"cannot read {out / 'meta.json'}, which `run` writes: {e.strerror}")
+        except ValueError as e:
+            raise CouldNotRun(f"{out / 'meta.json'} is not JSON: {e}")
+        tasks, runs, skipped, cdir = plan_from_meta(meta)
+    # Only the runs of this plan; out/verify may hold results of an earlier run.
+    ids = {t["id"] for t in tasks}
+    results = {(rundef, task): r for (rundef, task), r in read_results(out / "verify").items()
+               if rundef in runs and task in ids}
     collect_witnesses(results, args.fmt, out)
     if args.command in ("run", "validate") and not args.no_validation:
         validate(args, results, tasks, out)
@@ -633,9 +711,8 @@ def main():
                     status=r["status"], cpu=r["cpu"],
                     verdict="confirmed" if r["verdict"] is False else
                             "rejected" if r["verdict"] is True else "unknown")
-    meta = json.loads((out / "meta.json").read_text()) if (out / "meta.json").exists() else None
     checks = check(results, runs, tasks, skipped, args.fmt)
-    sys.exit(report(checks, results, runs, tasks, skipped, out, meta))
+    return report(checks, results, runs, tasks, skipped, out, meta)
 
 
 if __name__ == "__main__":

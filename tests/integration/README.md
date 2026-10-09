@@ -8,7 +8,7 @@ python3 scripts/download-validators.py       # validators/, once
 python3 tests/integration/run.py             # or: make integration
 ```
 
-The exit status is 0 when every check passes, 1 when one fails, 2 when the suite could not run. The table and the failed checks go to standard output and to `tests/integration/out/table.txt`; `out/results.json` has every run (status, CPU time, memory, witness, validation) and the failed and passed checks.
+The exit status is 0 when every check passes, 1 when one fails, 2 when the suite could not run (a missing task, tool or validator, an unreadable configuration, a failed `benchexec` call), with the reason on standard error. The table and the failed checks go to standard output and to `tests/integration/out/table.txt`; `out/results.json` has every run (status, CPU time, memory, witness, validation) and the failed and passed checks.
 
 Requirements: Linux with BenchExec (`benchexec` on the path, cgroups as BenchExec needs them; tested with BenchExec 3.35), Python 3 with `yaml` (a BenchExec dependency), and a `tools/` directory made by `scripts/download-tools.py`. Every verifier, validator and `./cooperace` run goes through `benchexec`; nothing is started outside it. Set `TMPDIR=/tmp` if `TMPDIR` points to a directory BenchExec overlays (BenchExec's container then refuses to start).
 
@@ -75,9 +75,9 @@ A production configuration that starts with Goblint spends Goblint's time on eve
 
 ## Output directory
 
-`out/` (git-ignored) holds `meta.json` (machine, BenchExec version, commit of the checkout, `tools.txt`, limits), `defs/` (the generated BenchExec definitions), `verify/` and `validate/` (BenchExec's results, logs and result files), `witnesses/<run definition>/<task>.yml/witness.graphml` (the witnesses that were validated), `table.txt` and `results.json`. BenchExec writes the environment of the process that starts it into every result XML. `run.py` therefore starts BenchExec without any environment variable whose name contains `TOKEN`, `SECRET`, `PASSWORD` or `KEY`, in any case (and with `TMPDIR=/tmp`); other variables are still recorded, so look through a result XML before sharing it.
+`out/` (git-ignored) holds `meta.json` (machine, BenchExec version, commit of the checkout and its `git describe --always --dirty`, `tools.txt`, limits, and the run definitions with their tasks), `defs/` (the generated BenchExec definitions), `verify/` and `validate/` (BenchExec's results, logs and result files), `witnesses/<run definition>/<task>.yml/witness.graphml` (the witnesses that were validated), `table.txt` and `results.json`. BenchExec writes the environment of the process that starts it into every result XML. `run.py` therefore starts BenchExec without any environment variable whose name contains `TOKEN`, `SECRET`, `PASSWORD` or `KEY`, in any case (and with `TMPDIR=/tmp`); other variables are still recorded, so look through a result XML before sharing it.
 
-`run.py validate --out DIR` validates and checks the verification runs already in DIR; `run.py check --out DIR` only rebuilds the table and the checks, which is how a change to a check is tried without rerunning anything.
+`run.py validate --out DIR` validates and checks the verification runs already in DIR; `run.py check --out DIR` only rebuilds the table and the checks, which is how a change to a check is tried without rerunning anything. Both take the run definitions and tasks from `DIR/meta.json`, not from the options that choose them, and ignore results in DIR of run definitions or tasks that `meta.json` does not list.
 
 ## Known limits of the suite
 
