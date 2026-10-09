@@ -40,14 +40,15 @@ DESCRIBE="$(git describe --always --dirty)"
 rm -rf "${DIST}"
 mkdir -p "${DIST}/tools"
 
-git archive "${TREE}" cooperace src conf lib LICENSE README.md \
+git archive "${TREE}" cooperace src conf lib LICENSE README.md tools.txt \
   tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i \
   | tar -x -C "${DIST}"
 git show "${TREE}:scripts/sv-comp/smoketest.sh" > "${DIST}/smoketest.sh"
 chmod +x "${DIST}/smoketest.sh"
 
-# tools.txt has one "<name>: <doi>" line per component.
-cp tools.txt "${DIST}/tools.txt"
+# tools.txt, the lock file of the components, has one "<name>: <doi>" line per
+# component. tools/ must hold exactly those DOIs, as download-tools.py records.
+python3 scripts/download-tools.py --check
 while IFS=: read -r name _; do
   name="${name//[[:space:]]/}"
   case "${name}" in ''|'#'*) continue ;; esac
@@ -56,7 +57,7 @@ while IFS=: read -r name _; do
     exit 1
   fi
   cp -a "tools/${name}" "${DIST}/tools/${name}"
-done < tools.txt
+done < "${DIST}/tools.txt"
 
 echo "${FMTOOLS_VERSION} ${DESCRIBE}" > "${DIST}/VERSION"
 find "${DIST}" -name '.DS_Store' -delete

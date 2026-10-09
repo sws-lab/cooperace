@@ -8,9 +8,6 @@ results
 /src/tool_combinations/results*
 .DS_Store
 
-#Made .txt files
-tools.txt
-
 #Made witness files
 witness.*
 error-witness.*

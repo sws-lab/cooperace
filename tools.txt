@@ -1,0 +1,3 @@
+goblint: 10.5281/zenodo.17642247
+dartagnan: 10.5281/zenodo.17723884
+uautomizer: 10.5281/zenodo.17735224

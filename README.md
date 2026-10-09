@@ -1,10 +1,11 @@
 # CoOpeRace: Cooperative Data Race Freedom Verification
 
 CoOpeRace is a cooperative verification tool. 
-It is a metaverfier that currently includes the following tools:
-* Goblint: https://doi.org/10.5281/zenodo.17642247
-* Dartagnan: https://doi.org/10.5281/zenodo.17660739
-* UAutomizer: https://doi.org/10.5281/zenodo.17699780
+It is a meta-verifier that runs the components named in [`tools.txt`](tools.txt), one fm-tools entry
+and Zenodo DOI per line. `tools.txt` is the lock file of the components: `scripts/download-tools.py` installs
+exactly those archives into `tools/` and records each DOI in `tools/<name>/.doi`
+(`scripts/download-tools.py --check` says whether `tools/` matches `tools.txt`), and `make svcomp` packs
+the components it names.
 
 The goal of the CoOpeRace project is to identify the ultimate state-of-the-art in race freedom verification,
 attempt better ways of communicating intermediate results between tools, and 
