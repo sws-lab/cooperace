@@ -1,4 +1,7 @@
-"""Process control: stopProcessGroups, processExited and ComponentGroup."""
+"""Process control: stopProcessGroups, processExited, ComponentGroup and
+run_in_session."""
+import sys
+import threading
 import time
 
 from support import group_members, wait_until
@@ -7,6 +10,7 @@ from src.cooperace.processes import (
     STOP_GRACE_SECONDS,
     ComponentGroup,
     processExited,
+    run_in_session,
     stopProcessGroups,
 )
 
@@ -189,3 +193,60 @@ def test_stop_ends_processes_in_subgroups(spawn):
     parent.stop()
 
     assert wait_until(lambda: group_members(leader.pid) == [])
+
+
+# --- run_in_session ---------------------------------------------------------
+
+def test_run_in_session_returns_the_output_and_exit_code(tmp_path):
+    group = ComponentGroup()
+    command = ["sh", "-c", "pwd; echo out; echo err >&2; exit 3"]
+
+    result = run_in_session(command, str(tmp_path), group)
+
+    assert result.args == command
+    assert result.returncode == 3
+    assert result.stdout == f"{tmp_path}\nout\nerr\n"
+    assert result.stderr == ""
+    assert group.processes == set()
+
+
+def test_run_in_session_gives_a_negative_returncode_for_a_signal(tmp_path):
+    result = run_in_session(["sh", "-c", "kill -TERM $$"], str(tmp_path), ComponentGroup())
+
+    assert result.returncode == -15
+
+
+def test_run_in_session_starts_the_command_as_a_session_leader(tmp_path):
+    code = "import os; print(os.getsid(0) == os.getpid(), os.getpgid(0) == os.getpid())"
+
+    result = run_in_session([sys.executable, "-c", code], str(tmp_path), ComponentGroup())
+
+    assert result.stdout == "True True\n"
+
+
+def test_run_in_session_starts_nothing_in_a_stopped_group(tmp_path):
+    group = ComponentGroup()
+    group.stop()
+    marker = tmp_path / "started"
+
+    result = run_in_session(["touch", str(marker)], str(tmp_path), group)
+
+    assert result.returncode is None
+    assert (result.stdout, result.stderr) == ("", "")
+    assert not marker.exists()
+
+
+def test_run_in_session_records_the_process_while_it_runs_and_stop_ends_it(tmp_path):
+    group = ComponentGroup()
+    results = []
+    thread = threading.Thread(
+        target=lambda: results.append(run_in_session(["sleep", "30"], str(tmp_path), group)))
+    thread.start()
+    assert wait_until(lambda: len(group.processes) == 1)
+
+    group.stop()
+    thread.join(10)
+
+    assert not thread.is_alive()
+    assert results[0].returncode == -15
+    assert group.processes == set()

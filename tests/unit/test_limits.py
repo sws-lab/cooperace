@@ -1,5 +1,5 @@
-"""Per-component resource limits: withResourceLimits, componentMemoryLimit and
-run_memory_limit."""
+"""Per-component resource limits: withResourceLimits, with_rlimits,
+componentMemoryLimit and run_memory_limit."""
 import inspect
 import subprocess
 import sys
@@ -8,7 +8,7 @@ import pytest
 
 from src.cooperace import components
 from src.cooperace.config import Step
-from src.cooperace.processes import run_memory_limit
+from src.cooperace.processes import run_memory_limit, with_rlimits
 
 MEBIBYTE = 2**20
 
@@ -111,6 +111,27 @@ def test_percentage_memory_limit_resolves_against_the_run_limit(coop, tmp_path,
     assert result.stdout.strip() == f"({expected}, {expected})"
     assert (f"Memory limit of Goblint: {expected} bytes (RLIMIT_DATA)"
             in capsys.readouterr().out)
+
+
+# --- with_rlimits ----------------------------------------------------------
+
+def test_with_rlimits_without_limits_returns_the_command():
+    command = ["echo", "hello"]
+
+    assert with_rlimits(command) is command
+    assert with_rlimits(command, None, None) is command
+
+
+def test_with_rlimits_runs_the_command_in_place_of_the_wrapper(tmp_path):
+    """The wrapper execs the command, so the command keeps the wrapper's
+    process: the session and the process group that run_in_session made."""
+    code = "import os; print(os.getpid())"
+    command = with_rlimits([sys.executable, "-c", code], cpu=10)
+
+    process = subprocess.Popen(command, cwd=tmp_path, stdout=subprocess.PIPE, text=True)
+    output, _ = process.communicate(timeout=30)
+
+    assert int(output) == process.pid
 
 
 # --- componentMemoryLimit and componentCpuTimeLimit -------------------------

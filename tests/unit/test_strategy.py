@@ -7,6 +7,7 @@ import time
 import pytest
 
 from src.cooperace import config
+from src.cooperace.processes import run_in_session
 from src.cooperace.strategy import NO_OUTCOME, Outcome
 
 # Letters for the components, so that a conf reads as a tree. All are names
@@ -52,7 +53,7 @@ class Script:
 
     def runActor(self, actor, step, group):
         letter, seconds, verdict, *witness = self.components[actor.name()]
-        result = self.coop.actorResult(["sleep", str(seconds)], str(self.tmp_path), group)
+        result = run_in_session(["sleep", str(seconds)], str(self.tmp_path), group)
         if result.returncode is None:
             return NO_OUTCOME
         with self.lock:

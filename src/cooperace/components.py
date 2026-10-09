@@ -15,7 +15,7 @@ from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 
-from .processes import ComponentGroup, run_memory_limit, stopProcessGroups
+from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
 from .strategy import NO_OUTCOME, Outcome, Strategy
 
 
@@ -160,40 +160,17 @@ class Cooperace(Strategy):
         return None if value is None else int(value)
 
     def withResourceLimits(self, step, command):
-        """`command`, started with the limits of the config.Step `step`.
-
-        RLIMIT_DATA is set to the memory limit (componentMemoryLimit). A
-        percentage for which the run has no memory limit applies no limit and
-        prints "Memory limit of <component>: none (no cgroup memory limit found for
-        "<value>")". RLIMIT_DATA bounds the private writable memory (heap,
-        anonymous mmap) of each process of the component; the component's
-        processes inherit it. A JVM
-        that reaches it fails to commit memory and exits, so the component
-        ends without a verdict and its memory is free for the components still
-        running. RLIMIT_AS is not used: a JVM reserves its whole `-Xmx` as
-        address space at start and fails to start under it.
-
-        RLIMIT_CPU is set to the CPU-time limit (componentCpuTimeLimit), with
-        the hard limit one second higher: the kernel sends SIGXCPU to a process
-        that has used the limit and SIGKILL one second later. It counts the
-        CPU time of each process on its own, not of the component's processes
-        together. Goblint's portfolio runner (goblint_runner.py) runs one
-        goblint process per level; when the limit ends one, the runner gives
-        up the remaining levels and exits without a verdict. Goblint's stage
-        so uses the CPU time of the levels that end by themselves plus at most
-        the limit.
-
-        The limits are set by a small Python process that then execs the
-        component, because `preexec_fn` is unsafe with the threads of
-        `runParallel`. The exec keeps the process, so the component is still
-        the leader of the session actorResult starts, and stopProcessGroups
-        still ends it with every process it starts.
-        """
-        limits = []
+        """`command`, started with the limits of the config.Step `step`
+        (processes.with_rlimits): RLIMIT_DATA set to its memory limit
+        (componentMemoryLimit) and RLIMIT_CPU to its CPU-time limit
+        (componentCpuTimeLimit). Prints "Memory limit of <component>: <n>
+        bytes (RLIMIT_DATA)" and "CPU-time limit of <component>: <n> s
+        (RLIMIT_CPU)" for the limits it sets. A percentage for which the run
+        has no memory limit applies no limit and prints "Memory limit of
+        <component>: none (no cgroup memory limit found for "<value>")"."""
         tool_name = step.component
         memory = self.componentMemoryLimit(step)
         if memory is not None:
-            limits.append(f"RLIMIT_DATA={memory}:{memory}")
             message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
             with self.print_lock:
                 print(message, flush=True)
@@ -207,53 +184,10 @@ class Cooperace(Strategy):
                           f"(no cgroup memory limit found for \"{value}\")", flush=True)
         cpu = self.componentCpuTimeLimit(step)
         if cpu is not None:
-            limits.append(f"RLIMIT_CPU={cpu}:{cpu + 1}")
             with self.print_lock:
                 print(f"CPU-time limit of {tool_name}: {cpu} s (RLIMIT_CPU)", flush=True)
-        if not limits:
-            return command
-        setter = ("import os, resource, sys\n"
-                  "for limit in sys.argv[1].split(','):\n"
-                  "    name, value = limit.split('=')\n"
-                  "    soft, hard = value.split(':')\n"
-                  "    resource.setrlimit(getattr(resource, name), (int(soft), int(hard)))\n"
-                  "os.execvp(sys.argv[2], sys.argv[2:])")
-        return [sys.executable, "-c", setter, ",".join(limits)] + command
+        return with_rlimits(command, memory, cpu)
 
-    def actorResult(self, command, cwd, group):
-        """Runs `command` in `cwd` as the leader of a new session, so that the
-        component and every process it starts form one process group, which
-        ComponentGroup.stop can end, and records it in the ComponentGroup
-        `group` while it runs. Returns a subprocess.CompletedProcess whose
-        `stdout` is the component's standard output and standard error in one,
-        as BenchExec captures them, and whose `stderr` is empty; `returncode`
-        is negative if the component was ended by a signal, and None if the
-        group was stopped before it could start."""
-        if group.stopped:
-            return subprocess.CompletedProcess(command, None, "", "")
-        process = subprocess.Popen(command,
-                        cwd=cwd,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        errors="replace",
-                        start_new_session=True
-                        )
-        try:
-            if not group.add(process):
-                stopProcessGroups([process])
-            output, _ = process.communicate()
-        except BaseException:
-            #StopSignal while this thread (the main thread) waits
-            stopProcessGroups([process])
-            process.wait()
-            raise
-        finally:
-            group.remove(process)
-        return subprocess.CompletedProcess(command, process.returncode, output, "")
-
-        
     def runOne(self, step, group):
         """Runs the config.Step `step` with runActor in the ComponentGroup
         `group` and returns the Outcome runActor returns.
@@ -409,7 +343,7 @@ class Cooperace(Strategy):
         )
 
         started = self.startTime(witness_dir)
-        tool_result = self.actorResult(
+        tool_result = run_in_session(
             command=self.withResourceLimits(step, cmdline),
             cwd=cwd,
             group=group
@@ -421,7 +355,7 @@ class Cooperace(Strategy):
             #Another component's verdict was returned, or CoOpeRace is stopping:
             #the component was ended or never started, and its result is not used.
             #This check is also why componentStatus never gets a returncode of
-            #None: actorResult returns None only when the group was already
+            #None: run_in_session returns None only when the group was already
             #stopped, and a group never becomes unstopped.
             self.printComponentRun(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return NO_OUTCOME
@@ -444,7 +378,7 @@ class Cooperace(Strategy):
 
     def componentStatus(self, actor, cmdline, tool_result):
         """The status BenchExec would give this run of `actor` (a
-        subprocess.CompletedProcess from actorResult): `actor.determine_result`
+        subprocess.CompletedProcess from run_in_session): `actor.determine_result`
         on the output and the real exit code, and for an unspecific result
         (unknown, error or done) the refinement of benchexec.model, which
         names the signal that ended the component or, for an error, the exit

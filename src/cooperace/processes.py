@@ -1,5 +1,7 @@
 import os
 import signal
+import subprocess
+import sys
 import threading
 import time
 
@@ -12,7 +14,7 @@ STOP_GRACE_SECONDS = 1.0
 def processExited(pid):
     """Whether process `pid` has exited, that is, is gone or a zombie, read
     from /proc. A zombie counts as exited because the thread waiting for it in
-    actorResult may not have reaped it yet."""
+    run_in_session may not have reaped it yet."""
     try:
         with open(f"/proc/{pid}/stat") as stat_file:
             stat = stat_file.read()
@@ -22,14 +24,14 @@ def processExited(pid):
 
 
 def stopProcessGroups(processes):
-    """Ends each of `processes`, which actorResult started as leaders of new
+    """Ends each of `processes`, which run_in_session started as leaders of new
     sessions, together with every other process of its process group: SIGTERM
     to each group, up to STOP_GRACE_SECONDS for the leaders to exit, then
     SIGKILL to each group. The SIGKILL also ends descendants that are still
     running after their leader has exited, such as the JVMs that
     Dartagnan-SVCOMP.sh and Ultimate.py start. A descendant that starts a
     session of its own is not reached. Does not reap the leaders; the threads
-    waiting in actorResult do."""
+    waiting in run_in_session do."""
     def signalGroup(process, signum):
         try:
             os.killpg(process.pid, signum)
@@ -49,7 +51,7 @@ class ComponentGroup:
     """The component processes started under one runParallel call, and the
     groups of the runParallel calls nested in it. Cooperace.root_group holds
     the components started outside any runParallel. Once stop() is called,
-    actorResult starts no further component in the group or its subgroups."""
+    run_in_session starts no further component in the group or its subgroups."""
 
     def __init__(self, parent=None):
         self.lock = threading.Lock()
@@ -134,3 +136,91 @@ def run_memory_limit(cgroup_file="/proc/self/cgroup", cgroup_root="/sys/fs/cgrou
             if value.isdigit() and int(value) < 2**60:  # "max" and v1's 2**63-4096 mean no limit
                 limits.append(int(value))
     return min(limits) if limits else None
+
+
+def run_in_session(command, cwd, group):
+    """Runs `command` in `cwd` as the leader of a new session, so that the
+    component and every process it starts form one process group, which
+    ComponentGroup.stop can end, and records it in the ComponentGroup
+    `group` while it runs. Returns a subprocess.CompletedProcess whose
+    `stdout` is the component's standard output and standard error in one,
+    as BenchExec captures them, and whose `stderr` is empty; `returncode`
+    is negative if the component was ended by a signal, and None if the
+    group was stopped before it could start.
+
+    `group` can be stopped by another thread at any time. If it is stopped
+    after the check of `group.stopped` and before `group.add`, the add is
+    refused (ComponentGroup.markStopped sets `stopped` under the group's lock
+    before any process is signalled, and add checks it under the same lock),
+    and the process is stopped here. A process that add records is in the
+    list markStopped returns. Either way no component keeps running in a
+    stopped group. If this thread (the main thread) is interrupted while it
+    waits, by StopSignal, it stops and reaps the process and re-raises."""
+    if group.stopped:
+        return subprocess.CompletedProcess(command, None, "", "")
+    process = subprocess.Popen(command,
+                    cwd=cwd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    errors="replace",
+                    start_new_session=True
+                    )
+    try:
+        if not group.add(process):
+            stopProcessGroups([process])
+        output, _ = process.communicate()
+    except BaseException:
+        #StopSignal while this thread (the main thread) waits
+        stopProcessGroups([process])
+        process.wait()
+        raise
+    finally:
+        group.remove(process)
+    return subprocess.CompletedProcess(command, process.returncode, output, "")
+
+
+
+
+def with_rlimits(command, memory=None, cpu=None):
+    """`command`, started with RLIMIT_DATA set to `memory` bytes and
+    RLIMIT_CPU to `cpu` seconds, where a limit that is None is not set;
+    `command` itself if both are None.
+
+    RLIMIT_DATA bounds the private writable memory (heap, anonymous mmap) of
+    each process of the component; the component's processes inherit it. A
+    JVM that reaches it fails to commit memory and exits, so the component
+    ends without a verdict and its memory is free for the components still
+    running. RLIMIT_AS is not used: a JVM reserves its whole `-Xmx` as
+    address space at start and fails to start under it.
+
+    RLIMIT_CPU is set with the hard limit one second higher: the kernel sends
+    SIGXCPU to a process that has used the limit and SIGKILL one second
+    later. It counts the CPU time of each process on its own, not of the
+    component's processes together. Goblint's portfolio runner
+    (goblint_runner.py) runs one goblint process per level; when the limit
+    ends one, the runner gives up the remaining levels and exits without a
+    verdict. Goblint's stage so uses the CPU time of the levels that end by
+    themselves plus at most the limit.
+
+    The limits are set by a small Python process that then execs the
+    component, because `preexec_fn` is unsafe with the threads of
+    the strategy's parallel steps. The exec keeps the process, so the
+    component is still the leader of the session run_in_session starts, and
+    stopProcessGroups still ends it with every process it starts.
+    """
+    limits = []
+    if memory is not None:
+        limits.append(f"RLIMIT_DATA={memory}:{memory}")
+    if cpu is not None:
+        limits.append(f"RLIMIT_CPU={cpu}:{cpu + 1}")
+    if not limits:
+        return command
+    setter = ("import os, resource, sys\n"
+              "for limit in sys.argv[1].split(','):\n"
+              "    name, value = limit.split('=')\n"
+              "    soft, hard = value.split(':')\n"
+              "    resource.setrlimit(getattr(resource, name), (int(soft), int(hard)))\n"
+              "os.execvp(sys.argv[2], sys.argv[2:])")
+    return [sys.executable, "-c", setter, ",".join(limits)] + command
