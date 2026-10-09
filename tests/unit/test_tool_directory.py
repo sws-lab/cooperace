@@ -118,9 +118,10 @@ def test_the_bundled_benchexec_is_the_one_imported_from_any_directory(tmp_path):
     result = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True,
                             text=True, timeout=60, check=True)
 
+    (wheel,) = (ROOT / "lib").glob("benchexec-*.whl")
     version, path = result.stdout.split()
-    assert version == "3.31"
-    assert path.startswith(str(ROOT / "lib" / "benchexec-3.31"))
+    assert wheel.name == f"benchexec-{version}-py3-none-any.whl"
+    assert path.startswith(str(wheel))
 
 
 def test_the_launcher_started_elsewhere_finds_the_package(tmp_path):

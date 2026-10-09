@@ -389,8 +389,9 @@ def component_status(actor: BaseTool2, cmdline: list[str],
 #are a component's verdict "true" or "false" on the no-data-race property. Any
 #other status, among them a violation of another property such as
 #"false(unreach-call)", is no verdict. BenchExec's RESULT_FALSE_PROP, plain
-#"false", is what Dartagnan's tool-info module (BenchExec 3.31) returns for a
-#FAIL without a line that names the data race.
+#"false", is what Dartagnan's tool-info module (benchexec/tools/dartagnan.py,
+#the same in BenchExec 3.31 to 3.35) returns for a FAIL without a line that
+#names the data race.
 ACCEPTED_STATUSES = {
     "true": (bresult.RESULT_TRUE_PROP,),
     "false": (bresult.RESULT_FALSE_DATARACE, bresult.RESULT_FALSE_PROP),
