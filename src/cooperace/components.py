@@ -499,7 +499,9 @@ def component_status(actor: BaseTool2, cmdline: list[str],
                      tool_result: subprocess.CompletedProcess) -> str:
     """The status BenchExec would give this run of `actor` (a
     subprocess.CompletedProcess from run_in_session): `actor.determine_result`
-    on the output and the real exit code, and for an unspecific result
+    on a Run as benchexec.model.Run.set_result makes it, with the output's
+    lines as output_lines splits them, the real exit code and no termination
+    reason (None: CoOpeRace's limits are not BenchExec's), and for an unspecific result
     (unknown, error or done) the refinement of benchexec.model, which
     names the signal that ended the component or, for an error, the exit
     code. A component that crashes is so reported as, for example,
@@ -513,8 +515,8 @@ def component_status(actor: BaseTool2, cmdline: list[str],
     run = BaseTool2.Run(
         cmdline=cmdline,
         exit_code=exit_code,
-        output=BaseTool2.RunOutput(tool_result.stdout.strip().split("\n")),
-        termination_reason=""
+        output=BaseTool2.RunOutput(output_lines(tool_result.stdout)),
+        termination_reason=None
     )
     status = actor.determine_result(run)
 
@@ -530,6 +532,19 @@ def component_status(actor: BaseTool2, cmdline: list[str],
         elif exit_code.value and status != bresult.RESULT_UNKNOWN:
             status = f"{bresult.RESULT_ERROR} ({exit_code.value})"
     return status
+
+
+def output_lines(output: str) -> list[str]:
+    r"""The lines of a component's output `output`, each with its line
+    separator, as benchexec.model.Run.set_result reads them from the run's log
+    with readlines() for the RunOutput it gives the tool-info module: split
+    after each "\n" only, and a last line without one kept as it is. Leading
+    and trailing blank lines are kept. RunOutput gives a module each line
+    without its separator. run_in_session reads the output in text mode,
+    which turns "\r\n" and "\r" into "\n", as BenchExec's reading of the log
+    does."""
+    lines = output.split("\n")
+    return [line + "\n" for line in lines[:-1]] + ([lines[-1]] if lines[-1] else [])
 
 
 #The statuses of a component, as BenchExec's tool-info modules return them, that

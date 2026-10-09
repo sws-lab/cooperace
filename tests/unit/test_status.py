@@ -75,7 +75,31 @@ def test_component_status_gives_determine_result_the_real_exit_code():
     (run,) = actor.runs
     assert list(run.cmdline) == ["fake", "-x"]
     assert (run.exit_code.value, run.exit_code.signal) == (3, None)
-    assert list(run.output) == ["line 1", "line 2"]
+    assert run.termination_reason is None
+
+
+@pytest.mark.parametrize("stdout, lines", [
+    ("  line 1\nline 2\n\n", ["  line 1\n", "line 2\n", "\n"]),
+    ("\nlast line without a separator", ["\n", "last line without a separator"]),
+    ("", []),
+])
+def test_component_status_gives_determine_result_the_lines_with_their_separators(stdout, lines):
+    """As benchexec.model.Run.set_result does with readlines(): RunOutput keeps
+    the separators, its text is the whole output, and its lines are read
+    without them, leading and trailing blank lines included."""
+    actor = StatusActor("unknown")
+
+    components.component_status(actor, ["fake"], subprocess.CompletedProcess(["fake"], 0, stdout, ""))
+
+    (run,) = actor.runs
+    assert run.output.text == stdout
+    assert list(run.output) == [line.rstrip("\n") for line in lines]
+    assert len(run.output) == len(lines)
+
+
+def test_output_lines_splits_after_each_newline_only():
+    assert components.output_lines("a\x0cb\x1ec\u2028d\n") == ["a\x0cb\x1ec\u2028d\n"]
+    assert components.output_lines("a\nb") == ["a\n", "b"]
 
 
 def test_component_status_gives_determine_result_the_signal_of_an_ended_component():
