@@ -139,3 +139,35 @@ def test_confirmVerdict_matches_a_verdict_that_contains_the_expected_one(make_co
 
     assert coop.confirmVerdict("Goblint", "true(no-data-race)", "true")
     assert not coop.confirmVerdict("Goblint", "false(no-data-race)", "false")
+
+
+# --- parseConf refuses a conf that repeats a component or limits a stranger --
+
+@pytest.mark.parametrize("tools", [
+    [{"Goblint": "all"}, {"Goblint": "true"}],
+    [{"Goblint": "all"}, [{"Deagle": "all"}, {"Goblint": "all"}]],
+    [[{"Goblint": "all"}, [{"Deagle": "all"}]], [{"Deagle": "all"}]],
+    [{"Goblint": "all", "Deagle": "all"}, {"Deagle": "false"}],
+], ids=["flat", "list-in-list", "two-lists", "one-element-two-keys"])
+def test_parseConf_refuses_a_component_named_twice(make_coop, tools):
+    coop = make_coop({"runType": "parallel", "tools": tools})
+
+    with pytest.raises(ValueError, match=r"'(Goblint|Deagle)' is named more than once"):
+        coop.parseConf()
+
+
+@pytest.mark.parametrize("limits", ["memoryLimits", "cpuTimeLimits"])
+def test_parseConf_refuses_a_limit_for_a_component_that_is_not_in_the_tree(make_coop, limits):
+    coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}],
+                      limits: {"Goblint": 1000, "Deagle": 1000}})
+
+    with pytest.raises(ValueError, match=f"{limits} has a limit for 'Deagle'"):
+        coop.parseConf()
+
+
+def test_parseConf_accepts_limits_for_components_in_nested_lists(make_coop):
+    coop = make_coop({"runType": "sequential",
+                      "tools": [{"Goblint": "all"}, [{"Deagle": "all"}]],
+                      "memoryLimits": {"Deagle": "70%"}, "cpuTimeLimits": {"Goblint": 30}})
+
+    coop.parseConf()

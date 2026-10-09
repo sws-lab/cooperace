@@ -406,7 +406,39 @@ class Cooperace:
         return executable_tools
             
         
+    def checkConf(self):
+        """Raises ValueError, naming the component or the key, if the conf
+        names a component more than once anywhere in its `tools` tree, or has a
+        key in `memoryLimits` or `cpuTimeLimits` that names no component of the
+        tree. A repeated component would share one tool-info object and one
+        entry of acceptable_results between its occurrences, and, in a
+        runParallel, one output directory of the component between concurrent
+        runs. A limit for a component that is not run would be ignored."""
+        names = []
+
+        def collect(tools):
+            for tool in tools:
+                if isinstance(tool, list):
+                    collect(tool)
+                else:
+                    names.extend(tool)
+
+        collect(self.conf["tools"])
+        for name in names:
+            if names.count(name) > 1:
+                raise ValueError(f"component {name!r} is named more than once in the conf's tools")
+        for limits in ("memoryLimits", "cpuTimeLimits"):
+            for name in self.conf.get(limits, {}):
+                if name not in names:
+                    raise ValueError(f"{limits} has a limit for {name!r}, "
+                                     "which is not a component of the conf's tools")
+
     def parseConf(self):
+        """Returns the run type and the tool-info objects of the conf's
+        `tools`, nested as the conf nests them, and records each component's
+        acceptance in acceptable_results. Raises ValueError for a conf that
+        checkConf refuses."""
+        self.checkConf()
         execution_type = self.conf["runType"]
         execution_tools = self.parseTools(self.conf["tools"])
         
