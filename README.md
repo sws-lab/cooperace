@@ -10,7 +10,9 @@ The goal of the CoOpeRace project is to identify the ultimate state-of-the-art i
 attempt better ways of communicating intermediate results between tools, and 
 provide a user interface for comparing output of different tools.
 
-To test the sv-comp package, run `./cooperace --prop tests/no-data-race.prp tests/no-data-race/00-sanity_09-include.i`.
+To test the sv-comp package, run `./cooperace --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i`,
+which prints `CoOpeRace verdict: false` as its last line and writes `witness.graphml`.
+`scripts/sv-comp/smoketest.sh` checks exactly that, and the archive carries both files at these paths.
 
 CoOpeRace can be started from any working directory: it finds its `lib/`, `conf/` and `tools/` from the location of the launcher. `--prop` is required, and the property file must hold the no-data-race property (`CHECK( init(main()), LTL(G ! data-race) )`); another property is refused. The last line of the output is `CoOpeRace verdict: true`, `false` or `unknown`. A defect of the command line, the property, the conf or the installation ends CoOpeRace with status 1 (2 for a command line that argparse refuses), one line `CoOpeRace: error: ...` on stderr and no verdict line, which BenchExec records as ERROR. A component that runs and fails is not such a defect: its status is printed and the next step runs.
 
