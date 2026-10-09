@@ -15,8 +15,8 @@ from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 
-from .processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
-from .strategy import NO_OUTCOME, Outcome, Strategy
+from .processes import run_in_session, run_memory_limit, with_rlimits
+from .strategy import NO_OUTCOME, Outcome
 
 
 
@@ -110,13 +110,13 @@ REGISTRY = {spec.name: spec for spec in (
 DATA_MODELS = ("ILP32", "LP64")
 DEFAULT_DATA_MODEL = "ILP32"
 
-class Cooperace(Strategy):
+class Cooperace:
     # `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
     # the option was not given, which means DEFAULT_DATA_MODEL (reported on
     # stderr). Any other value raises ValueError: given to the components as it
     # is, the Goblint and ULTIMATE tool-info modules raise
     # UnsupportedFeatureException inside runActor and Dartagnan's ignores it.
-    def __init__(self, file, property_file, data_model, conf):
+    def __init__(self, file, property_file, data_model):
         if data_model is None:
             print(f"CoOpeRace: no --arch given, assuming {DEFAULT_DATA_MODEL}", file=sys.stderr)
             data_model = DEFAULT_DATA_MODEL
@@ -125,17 +125,28 @@ class Cooperace(Strategy):
         self.file = file
         self.property_file = os.path.abspath(property_file)
         self.data_model = data_model
-        self.conf = conf
 
         #The components this instance can run, by name: a copy of REGISTRY,
         #to which the unit tests add stub components
         self.registry = dict(REGISTRY)
         #The directory that holds the components' directories
         self.tools_dir = os.path.join(os.getcwd(), "tools")
-
-        #Components started outside any runParallel; execute stops it on return
-        self.root_group = ComponentGroup()
         self.print_lock = threading.Lock()
+
+    def prepare(self):
+        """Removes the witness files an earlier run delivered to the working
+        directory and makes the work directory, which holds one directory per
+        component run, made in runActor."""
+        self.removeOldWitnessFiles()
+        self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
+
+    def deliver(self, witness_files):
+        """Delivers `witness_files` with witnessFilesToFileRoot."""
+        self.witnessFilesToFileRoot(witness_files)
+
+    def cleanup(self):
+        """Removes the work directory and everything in it."""
+        shutil.rmtree(self.work_dir, ignore_errors=True)
 
     def componentMemoryLimit(self, step):
         """Memory limit in bytes for the config.Step `step`, from its
@@ -188,7 +199,7 @@ class Cooperace(Strategy):
                 print(f"CPU-time limit of {tool_name}: {cpu} s (RLIMIT_CPU)", flush=True)
         return with_rlimits(command, memory, cpu)
 
-    def runOne(self, step, group):
+    def run_step(self, step, group):
         """Runs the config.Step `step` with runActor in the ComponentGroup
         `group` and returns the Outcome runActor returns.
 

@@ -26,25 +26,25 @@ finally:
     os.chdir(_start_directory)
 
 from src.cooperace.components import Cooperace
+from src.cooperace.processes import ComponentGroup
 
 
 @pytest.fixture
 def make_coop():
-    """Returns a function that makes a Cooperace for a dummy task and the given
-    conf (a sequential conf without components by default). Every instance
-    that was made has its root group stopped at the end of the test."""
-    made = []
+    """Returns a function that makes a Cooperace for a dummy task."""
 
-    def make(conf=None, data_model="ILP32"):
-        if conf is None:
-            conf = {"runType": "sequential", "tools": []}
-        coop = Cooperace("/dev/null", "/dev/null", data_model, conf)
-        made.append(coop)
-        return coop
+    def make(data_model="ILP32"):
+        return Cooperace("/dev/null", "/dev/null", data_model)
 
-    yield make
-    for coop in made:
-        coop.root_group.stop()
+    return make
+
+
+@pytest.fixture
+def group():
+    """A ComponentGroup to run steps in, stopped at the end of the test."""
+    group = ComponentGroup()
+    yield group
+    group.stop()
 
 
 @pytest.fixture

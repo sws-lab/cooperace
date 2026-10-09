@@ -48,9 +48,10 @@ def stopProcessGroups(processes):
 
 
 class ComponentGroup:
-    """The component processes started under one runParallel call, and the
-    groups of the runParallel calls nested in it. Cooperace.root_group holds
-    the components started outside any runParallel. Once stop() is called,
+    """The component processes started under one call of
+    strategy.run_parallel, and the groups of the calls nested in it. The
+    group that strategy.execute is given holds the components started
+    outside any run_parallel. Once stop() is called,
     run_in_session starts no further component in the group or its subgroups."""
 
     def __init__(self, parent=None):

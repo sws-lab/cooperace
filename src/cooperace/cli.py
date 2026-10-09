@@ -1,7 +1,9 @@
 import argparse
 import json
 import os
+import traceback
 
+from . import config, strategy
 from .components import DATA_MODELS, Cooperace
 
 
@@ -26,8 +28,27 @@ def main():
         with open("conf/svcomp26.json") as file:
             conf = json.load(file)
 
-    cooperace = Cooperace(abs_path, args.prop, args.arch, conf)
+    cooperace = Cooperace(abs_path, args.prop, args.arch)
 
 
-    verdict = cooperace.execute()
+    verdict = run(conf, cooperace)
     print("CoOpeRace verdict: " + verdict)
+
+
+def run(conf, runner, group=None):
+    """Loads the conf `conf` (a dict) with config.load against the components
+    of `runner` (a components.Cooperace) and runs it with strategy.execute in
+    the ComponentGroup `group` (a new one if None). Returns the verdict.
+
+    An error of config.load propagates, except config.RunTypeError: for that
+    it removes the old witness files, prints "Error, something went wrong:
+    <error>" and the traceback, and returns "unknown", as strategy.execute
+    does for an error of the run."""
+    try:
+        root = config.load(conf, runner.registry)
+    except config.RunTypeError as error:
+        runner.removeOldWitnessFiles()
+        print("Error, something went wrong:", error)
+        traceback.print_exc()
+        return "unknown"
+    return strategy.execute(root, runner, group)

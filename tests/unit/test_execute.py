@@ -1,6 +1,6 @@
-"""execute() end to end with stub components: shell scripts run through the
-real runActor, actorResult and componentStatus, and the stop on a signal in a
-separate process."""
+"""cli.run and strategy.execute end to end with stub components: shell scripts
+run through the real runActor, run_in_session and componentStatus, and the
+stop on a signal in a separate process."""
 import os
 import signal
 import subprocess
@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 from support import make_script, register_stub, wait_until
 
-from src.cooperace.processes import processExited
+from src.cooperace import cli
+from src.cooperace.processes import ComponentGroup, processExited
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPPORT_DIR = Path(__file__).resolve().parent
@@ -27,16 +28,29 @@ def run_dir(tmp_path, monkeypatch):
     return directory
 
 
+class Run:
+    """A Cooperace `runner` and a conf `conf` for it, run by execute with
+    cli.run in the ComponentGroup `group`."""
+
+    def __init__(self, runner, conf):
+        self.runner = runner
+        self.conf = conf
+        self.group = ComponentGroup()
+
+    def execute(self):
+        return cli.run(self.conf, self.runner, self.group)
+
+
 def stubbed_coop(make_coop, tmp_path, run_type, **stubs):
-    """A Cooperace whose conf runs the stub components in `stubs` (name to
+    """A Run whose conf runs the stub components in `stubs` (name to
     script body, in the order given, each accepting "all"), registered with
     register_stub. Returns it with the directory of each stub's script."""
     names = {key.replace("_", " "): body for key, body in stubs.items()}
-    coop = make_coop({"runType": run_type, "tools": [{name: "all"} for name in names]})
+    coop = Run(make_coop(), {"runType": run_type, "tools": [{name: "all"} for name in names]})
     directories = {}
     for name, body in names.items():
         directories[name] = tmp_path / "stubs" / name.replace(" ", "_")
-        register_stub(coop, name, make_script(directories[name], body))
+        register_stub(coop.runner, name, make_script(directories[name], body))
     return coop, directories
 
 
@@ -172,13 +186,13 @@ def test_the_work_directory_is_removed_and_no_component_is_left(
 
     coop.execute()
 
-    assert not os.path.exists(coop.work_dir)
-    assert coop.root_group.processes == set()
+    assert not os.path.exists(coop.runner.work_dir)
+    assert coop.group.processes == set()
 
 
 def test_an_unknown_run_type_prints_an_error_and_gives_unknown(
         make_coop, tmp_path, run_dir, capsys):
-    coop = make_coop({"runType": "interleaved", "tools": []})
+    coop = Run(make_coop(), {"runType": "interleaved", "tools": []})
 
     verdict = coop.execute()
     out = capsys.readouterr().out
@@ -210,15 +224,16 @@ DRIVER = textwrap.dedent('''
     root, support_dir, stub_dir, run_dir = sys.argv[1:5]
     os.chdir(root)
     sys.path[:0] = [root, support_dir]
+    from src.cooperace import cli
     from src.cooperace.components import Cooperace
     from support import register_stub
 
     os.chdir(run_dir)
     conf = {"runType": "parallel", "tools": [{"Stub A": "all"}, {"Stub B": "all"}]}
-    coop = Cooperace("/dev/null", "/dev/null", "ILP32", conf)
+    coop = Cooperace("/dev/null", "/dev/null", "ILP32")
     for letter in "AB":
         register_stub(coop, f"Stub {letter}", Path(stub_dir) / letter / "stub.sh")
-    print("verdict:", coop.execute(), flush=True)
+    print("verdict:", cli.run(conf, coop), flush=True)
 ''')
 
 # Writes its pid where the test can find it, then replaces the shell by sleep.
