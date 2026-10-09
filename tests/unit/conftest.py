@@ -1,5 +1,5 @@
-"""Imports src/cooperace.py with the repository root as the working
-directory, because the module puts lib/*.whl (the bundled BenchExec) on
+"""Imports the package src/cooperace with the repository root as the working
+directory, because its __init__.py puts lib/*.whl (the bundled BenchExec) on
 sys.path relative to the working directory at import. The tests can then be
 run from any directory."""
 import os
@@ -15,11 +15,11 @@ _start_directory = os.getcwd()
 os.chdir(ROOT)
 try:
     sys.path.insert(0, str(ROOT))
-    import src.cooperace  # noqa: F401
+    import src.cooperace.components  # noqa: F401
 finally:
     os.chdir(_start_directory)
 
-from src.cooperace import Cooperace
+from src.cooperace.components import Cooperace
 
 
 @pytest.fixture

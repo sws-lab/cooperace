@@ -4,7 +4,7 @@ import argparse
 import sys
 import json
 import os
-from src.cooperace import Cooperace, DATA_MODELS
+from src.cooperace.components import Cooperace, DATA_MODELS
 
 parser = argparse.ArgumentParser()
 

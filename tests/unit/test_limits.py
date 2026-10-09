@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from src import cooperace
-from src.cooperace import run_memory_limit
+from src.cooperace import components
+from src.cooperace.components import run_memory_limit
 
 MEBIBYTE = 2**20
 
@@ -117,7 +117,7 @@ def test_both_limits_apply_and_the_command_keeps_its_arguments(make_coop, tmp_pa
 
 def test_percentage_memory_limit_resolves_against_the_run_limit(make_coop, tmp_path,
                                                                 monkeypatch, capsys):
-    monkeypatch.setattr(cooperace, "run_memory_limit", lambda: 1000 * MEBIBYTE)
+    monkeypatch.setattr(components, "run_memory_limit", lambda: 1000 * MEBIBYTE)
     coop = coop_with(make_coop, memoryLimits={"Goblint": "70%"})
     expected = 700 * MEBIBYTE
 
@@ -141,7 +141,7 @@ def test_percentage_memory_limit_resolves_against_the_run_limit(make_coop, tmp_p
     (None, 1000, None),
 ])
 def test_componentMemoryLimit(make_coop, monkeypatch, value, run_limit, expected):
-    monkeypatch.setattr(cooperace, "run_memory_limit", lambda: run_limit)
+    monkeypatch.setattr(components, "run_memory_limit", lambda: run_limit)
     memory_limits = {} if value is None else {"Goblint": value}
     coop = coop_with(make_coop, memoryLimits=memory_limits)
 

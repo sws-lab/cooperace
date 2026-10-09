@@ -3,7 +3,7 @@ import time
 
 from support import group_members, wait_until
 
-from src.cooperace import (
+from src.cooperace.components import (
     STOP_GRACE_SECONDS,
     ComponentGroup,
     processExited,

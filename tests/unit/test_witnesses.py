@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.cooperace import DEFAULT_WITNESS_FILES, WITNESS_FILES
+from src.cooperace.components import DEFAULT_WITNESS_FILES, WITNESS_FILES
 
 LONG_AGO = 946684800 * 10**9  # 2000-01-01 in nanoseconds
 

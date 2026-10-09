@@ -4,16 +4,12 @@ import queue
 import signal
 import subprocess
 import shutil
-import glob
 import sys
 import importlib
 import tempfile
 import threading
 import time
 import traceback
-
-for whl_file in glob.glob("lib/*.whl"):
-    sys.path.insert(0, whl_file)
 
 from benchexec import result as bresult
 from benchexec import util as butil

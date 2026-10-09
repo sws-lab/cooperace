@@ -1,4 +1,4 @@
-"""Tests for defects of src/cooperace.py found in review (D1, D2 and D4 of the
+"""Tests for defects of CoOpeRace found in review (D1, D2 and D4 of the
 review's table), each stating the behaviour the fixed code has. D2 runs
 runParallel in a daemon thread so that a hang is a failure and not a stuck
 test run."""
@@ -7,8 +7,8 @@ import time
 
 import pytest
 
-from src import cooperace
-from src.cooperace import NO_OUTCOME, Outcome, StopSignal
+from src.cooperace import components
+from src.cooperace.components import NO_OUTCOME, Outcome, StopSignal
 
 
 def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop):
@@ -59,7 +59,7 @@ def test_D4_a_percentage_limit_without_a_cgroup_limit_says_that_no_limit_applies
     """Expected: withResourceLimits prints a line starting with
     "Memory limit of Goblint: none" naming the percentage; the command is
     still returned unchanged."""
-    monkeypatch.setattr(cooperace, "run_memory_limit", lambda: None)
+    monkeypatch.setattr(components, "run_memory_limit", lambda: None)
     coop = make_coop({"runType": "sequential", "tools": [],
                       "memoryLimits": {"Goblint": "70%"}})
     command = ["echo", "hello"]

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from support import make_script, register_stub, wait_until
 
-from src.cooperace import processExited
+from src.cooperace.components import processExited
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPPORT_DIR = Path(__file__).resolve().parent
@@ -210,7 +210,7 @@ DRIVER = textwrap.dedent('''
     root, support_dir, stub_dir, run_dir = sys.argv[1:5]
     os.chdir(root)
     sys.path[:0] = [root, support_dir]
-    from src.cooperace import Cooperace
+    from src.cooperace.components import Cooperace
     from support import register_stub
 
     os.chdir(run_dir)
