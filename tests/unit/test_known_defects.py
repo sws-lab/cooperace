@@ -8,7 +8,7 @@ import time
 import pytest
 
 from src.cooperace import components
-from src.cooperace.components import NO_OUTCOME, Outcome, StopSignal
+from src.cooperace.strategy import NO_OUTCOME, Outcome, StopSignal
 
 
 def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop):

@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from src.cooperace.components import NO_OUTCOME, Outcome
+from src.cooperace.strategy import NO_OUTCOME, Outcome
 
 # Letters for the components, so that a conf reads as a tree. All are names
 # that Cooperace registers.
