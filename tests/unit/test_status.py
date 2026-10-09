@@ -171,3 +171,13 @@ def test_parseConf_accepts_limits_for_components_in_nested_lists(make_coop):
                       "memoryLimits": {"Deagle": "70%"}, "cpuTimeLimits": {"Goblint": 30}})
 
     coop.parseConf()
+
+
+def test_parseConf_prints_nothing(make_coop, capsys):
+    """The standard output of a run starts with the first component's lines;
+    parseConf once printed the list of tool objects, with their addresses."""
+    coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}, [{"Deagle": "all"}]]})
+
+    coop.parseConf()
+
+    assert capsys.readouterr().out == ""
