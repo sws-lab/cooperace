@@ -1,9 +1,28 @@
-# The configuration of pytest and ruff. CoOpeRace is not installed: the
-# launcher `cooperace` runs the package src/cooperace from its checkout.
+# The metadata, dependencies and tool configuration of the project. CoOpeRace
+# is not installed as a package: the launcher `cooperace` runs the package
+# src/cooperace from its checkout (or from the archive, which is a directory).
 [project]
 name = "cooperace"
 version = "0.2"
 requires-python = ">=3.10"
+# What `./cooperace` needs at run time besides the standard library. It imports
+# benchexec.model from the bundled wheel in lib/, and that imports PyYAML; the
+# competition image has it as python3-yaml. BenchExec itself is not listed: the
+# bundled wheel is put first on sys.path (src/cooperace/__init__.py).
+dependencies = ["PyYAML"]
+
+[project.optional-dependencies]
+# The helper scripts that download components (scripts/download-tools.py,
+# scripts/download-validators.py), upload the archive (scripts/sv-comp/
+# upload-zenodo.py) and fetch the SV-COMP 2025 results
+# (src/tool_combinations/download_results.py). None of them runs in the
+# competition.
+scripts = ["fm-tools", "requests", "beautifulsoup4", "PyYAML"]
+
+[dependency-groups]
+# What the checks of .github/workflows/ci.yml install: `pip install --group dev`
+# (pip 25.1 or later) reads this table without building the project.
+dev = ["PyYAML", "pytest", "reuse", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
