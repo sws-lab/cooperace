@@ -1,14 +1,17 @@
 """The command line: what makes CoOpeRace end with status 1 or 2, one line on
 stderr and no "CoOpeRace verdict:" line (a defect of the command line, the
-property or the conf), and what does not (a component that crashes)."""
+property, the conf or the installation), and what does not (a component that
+crashes)."""
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from support import make_script, register_stub
 
-from src.cooperace import cli
+from src.cooperace import cli, components
+from src.cooperace.components import ComponentRunner
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_RACE = ROOT / "tests" / "properties" / "no-data-race.prp"
@@ -163,6 +166,73 @@ def test_a_conf_that_load_refuses_ends_cooperace_without_a_verdict(run_main, tmp
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
     assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "conf.json"), message)
+
+
+# --- the installation ----------------------------------------------------------
+
+def test_components_that_are_not_installed_are_refused_one_line_each_before_any_starts(
+        run_main, tmp_path, monkeypatch):
+    monkeypatch.setattr(components, "TOOL_DIR", str(tmp_path))
+    conf = {"runType": "sequential", "tools": [{"Goblint": "true"}, [{"Dartagnan": "all"}]]}
+    (tmp_path / "conf.json").write_text(json.dumps(conf))
+
+    status, out, err = run_main("--prop", str(DATA_RACE), "--conf", "conf.json")
+
+    assert (status, out) == (1, "")
+    lines = error_lines(err)
+    assert len(lines) == 2, err
+    assert lines[0].startswith("CoOpeRace: error: component 'Goblint': Could not find executable")
+    assert lines[1].startswith("CoOpeRace: error: component 'Dartagnan': Could not find executable")
+
+
+def test_nothing_starts_when_a_later_component_is_not_installed(make_runner, group, tmp_path):
+    marker = tmp_path / "started"
+    runner = make_runner()
+    runner.tools_dir = str(tmp_path / "no-tools")
+    register_stub(runner, "Stub A", make_script(tmp_path / "stub", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
+    conf = {"runType": "sequential", "tools": [{"Stub A": "all"}, {"Goblint": "all"}]}
+
+    with pytest.raises(cli.SetupError, match="component 'Goblint'"):
+        cli.run(conf, runner, group)
+
+    assert not marker.exists()
+    assert runner.work_dir is None
+
+
+def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_path, capsys):
+    runner = make_runner()
+    register_stub(runner, "Stub A", make_script(tmp_path / "stub", 'echo "STUB-STATUS: ERROR"\nexit 3\n'))
+
+    verdict = cli.run({"runType": "sequential", "tools": [{"Stub A": "all"}]}, runner, group)
+
+    assert verdict == "unknown"
+    assert "Tool name: Stub A Status: ERROR (3) Exit code: 3" in capsys.readouterr().out
+
+
+def test_missing_executables_names_each_missing_component_on_one_line(tmp_path):
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32")
+    runner.tools_dir = str(tmp_path)
+
+    problems = runner.missing_executables(["Goblint", "Dartagnan"])
+
+    assert len(problems) == 2
+    assert all("\n" not in problem for problem in problems)
+    assert problems[0].startswith("component 'Goblint': Could not find executable")
+    assert str(tmp_path / "goblint") in problems[0]
+
+
+def test_missing_executables_is_empty_for_components_that_are_found(make_runner, tmp_path):
+    runner = make_runner()
+    register_stub(runner, "Stub A", make_script(tmp_path / "stub", "exit 0\n"))
+
+    assert runner.missing_executables(["Stub A"]) == []
+
+
+def test_missing_executables_leaves_other_errors_to_the_step(make_runner):
+    runner = make_runner()
+    runner.registry["Broken"] = components.ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
+
+    assert runner.missing_executables(["Broken"]) == []
 
 
 # --- the launcher --------------------------------------------------------------

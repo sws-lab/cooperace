@@ -128,6 +128,14 @@ def load(conf: dict, known: Container[str]) -> Sequence | Parallel:
     return _node(kind, conf["tools"], conf.get("memoryLimits", {}), conf.get("cpuTimeLimits", {}))
 
 
+def component_names(node: Node) -> list[str]:
+    """The names of the components of the Steps under `node`, in the order of
+    the conf."""
+    if isinstance(node, Step):
+        return [node.component]
+    return [name for child in node.steps for name in component_names(child)]
+
+
 def _node(kind, tools, memory_limits, cpu_time_limits):
     """The `kind` (Sequence or Parallel) of the list `tools`, its nested lists
     of the other kind."""

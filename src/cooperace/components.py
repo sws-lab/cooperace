@@ -11,7 +11,11 @@ logs---", "Tool name: <name> Status: <status> Exit code: <code>" and, unless
 CoOpeRace stopped it, "Tool name: <name> Result: <verdict>"; "Memory limit
 of <name>: ..." and "CPU-time limit of <name>: ..." before a component with
 a limit starts. strategy.execute adds "CoOpeRace result from: <name>" and
-"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <verdict>"."""
+"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <verdict>".
+A component that cannot be run or crashes is reported in its block and is a
+step without a verdict (run_step). A component that is not installed is
+found out before any component starts (ComponentRunner.missing_executables),
+and cli ends CoOpeRace for it with an error on stderr and no verdict line."""
 from __future__ import annotations
 
 import importlib
@@ -28,7 +32,7 @@ from dataclasses import dataclass
 
 from benchexec import result as bresult
 from benchexec import util as butil
-from benchexec.tools.template import BaseTool2
+from benchexec.tools.template import BaseTool2, ToolNotFoundException
 
 from . import TOOL_DIR
 from .config import Step
@@ -161,6 +165,27 @@ class ComponentRunner:
         #The directory that holds the components' directories
         self.tools_dir = os.path.join(TOOL_DIR, "tools")
         self.work_dir = None
+
+    def missing_executables(self, names: list[str]) -> list[str]:
+        """One message for each component of `names` (conf names, keys of
+        `registry`) whose tool-info module's `executable` raises
+        ToolNotFoundException for the component's directory under `tools_dir`:
+        the component's name and the exception's message on one line. Empty
+        if every component can be found. Starts no component. Any other exception from
+        making the tool-info object or finding the executable is not
+        reported here: run_step reports it as an error of that step."""
+        problems = []
+        for name in names:
+            spec = self.registry[name]
+            try:
+                locator = BaseTool2.ToolLocator(tool_directory=os.path.join(self.tools_dir, spec.directory))
+                spec.tool().executable(locator)
+            except ToolNotFoundException as error:
+                problems.append(f"component {name!r}: {' '.join(str(error).split())}")
+            except Exception:
+                #Reported with its traceback when run_step makes the tool-info object
+                pass
+        return problems
 
     def prepare(self) -> None:
         """Removes the witness files an earlier run delivered to the working

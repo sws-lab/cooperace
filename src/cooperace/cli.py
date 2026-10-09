@@ -1,5 +1,6 @@
 """The command line of CoOpeRace (the launcher `cooperace` calls main): reads
-the arguments, the property file and the conf, checks them, runs the conf on the task, and prints "CoOpeRace verdict:
+the arguments, the property file and the conf, checks them and the
+installation, runs the conf on the task, and prints "CoOpeRace verdict:
 <verdict>" as the last line of standard output, which BenchExec's tool-info
 module for CoOpeRace reads.
 
@@ -10,12 +11,13 @@ Exit status and output. A verdict line is printed only for a run that was
 carried out, and then the status is 0; the verdict is "unknown" when no
 component gave an accepted verdict, also when a component crashed (its status
 is printed in its block and CoOpeRace goes on with the next step). A defect of
-the command line, the property or the conf ends CoOpeRace without a verdict
-line, before any component starts: each problem is one line "CoOpeRace:
-error: <problem>" on stderr and the status is 1; argparse refuses a command
-line with status 2. BenchExec's tool-info module reads a run without a
-verdict line as ERROR, not UNKNOWN. After SIGTERM, SIGINT or SIGHUP,
-CoOpeRace ends by that signal (strategy.execute)."""
+the command line, the property, the conf or the installation (a component
+the conf names whose executable is not under tools/) ends CoOpeRace without
+a verdict line, before any component starts: each problem is one line
+"CoOpeRace: error: <problem>" on stderr and the status is 1; argparse
+refuses a command line with status 2. BenchExec's tool-info module reads a
+run without a verdict line as ERROR, not UNKNOWN. After SIGTERM, SIGINT or SIGHUP, CoOpeRace ends by that
+signal (strategy.execute)."""
 from __future__ import annotations
 
 import argparse
@@ -110,14 +112,18 @@ def main() -> None:
 
 def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None) -> str:
     """Loads the conf `conf` (a dict) with config.load against the components
-    of `runner` (a components.ComponentRunner) and runs it with
-    strategy.execute in the ComponentGroup `group` (a new one if None).
-    Returns the verdict.
+    of `runner` (a components.ComponentRunner), checks that the executable of
+    each of its components is there (ComponentRunner.missing_executables),
+    and runs it with strategy.execute in the ComponentGroup `group` (a new
+    one if None). Returns the verdict.
 
     Raises SetupError, before any component starts, for a conf that
-    config.load refuses."""
+    config.load refuses and for components that are not installed."""
     try:
         root = config.load(conf, runner.registry)
     except config.ConfError as error:
         raise SetupError(str(error)) from error
+    problems = runner.missing_executables(config.component_names(root))
+    if problems:
+        raise SetupError(*problems)
     return strategy.execute(root, runner, group)

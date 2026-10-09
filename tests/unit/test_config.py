@@ -218,3 +218,10 @@ def test_load_refuses_a_conf_without_run_type_or_tools(known, key):
 def test_load_refuses_a_conf_of_the_wrong_shape(known, conf, message):
     with pytest.raises(config.ConfError, match=message):
         config.load(conf, known)
+
+
+def test_component_names_lists_the_components_in_the_order_of_the_conf(known):
+    conf = {"runType": "sequential",
+            "tools": [{"Goblint": "all"}, [{"Deagle": "all"}, [{"Dartagnan": "all", "nacpa": "true"}]]]}
+
+    assert config.component_names(config.load(conf, known)) == ["Goblint", "Deagle", "Dartagnan", "nacpa"]
