@@ -1,0 +1,33 @@
+import argparse
+import json
+import os
+
+from .components import DATA_MODELS, Cooperace
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--arch', required=False, choices=DATA_MODELS,
+                        help='data model of the task (default: ILP32, as for SV-COMP tasks without a data_model)')
+    parser.add_argument('--prop', required=False)
+    parser.add_argument('--conf', required=False)
+    parser.add_argument('--version', action='version', version='CoOpeRace 0.2')
+    parser.add_argument('filepath')
+
+    args = parser.parse_args()
+
+    abs_path = os.path.abspath(args.filepath) # to run outside benchexec
+
+    if args.conf:
+        with open(args.conf) as file:
+            conf = json.load(file)
+    else:
+        with open("conf/svcomp26.json") as file:
+            conf = json.load(file)
+
+    cooperace = Cooperace(abs_path, args.prop, args.arch, conf)
+
+
+    verdict = cooperace.execute()
+    print("CoOpeRace verdict: " + verdict)
