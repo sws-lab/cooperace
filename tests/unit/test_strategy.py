@@ -66,7 +66,7 @@ class Script:
 
 
 def load(coop):
-    return config.load(coop.conf, coop.tools)
+    return config.load(coop.conf, coop.registry)
 
 
 def run(coop):

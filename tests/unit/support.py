@@ -3,10 +3,13 @@ stub component that CoOpeRace can run without anything under tools/."""
 import os
 import stat
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from benchexec import result as bresult
 from benchexec.tools.template import BaseTool2
+
+from src.cooperace.components import ComponentSpec
 
 # Upper bound in seconds for every wait on a process or a file.
 WAIT_SECONDS = 15
@@ -79,11 +82,20 @@ def make_script(directory, body):
     return script
 
 
+@dataclass(frozen=True)
+class StubSpec(ComponentSpec):
+    """A registry entry whose tool-info object is a StubTool for `script`,
+    in the script's directory, with the default WitnessSpec."""
+
+    script: str = ""
+
+    def tool(self):
+        return StubTool(self.name, self.script)
+
+
 def register_stub(coop, tool_name, script):
     """Makes `coop` run the shell script `script` for the component
     `tool_name`, which the conf can then name. This is the test hook: the
-    Cooperace instance looks components up in its `tools` dictionary (tool-info
-    objects) and `tool_locations` dictionary (their directories), and both can
-    be assigned to after construction."""
-    coop.tools[tool_name] = StubTool(tool_name, script)
-    coop.tool_locations[tool_name] = str(Path(script).parent)
+    Cooperace instance looks components up in its `registry`, a copy of
+    components.REGISTRY, which can be added to after construction."""
+    coop.registry[tool_name] = StubSpec(tool_name, "", str(Path(script).parent), script=str(script))

@@ -1,7 +1,10 @@
-"""Imports the package src/cooperace with the repository root as the working
-directory, because its __init__.py puts lib/*.whl (the bundled BenchExec) on
-sys.path relative to the working directory at import. The tests can then be
-run from any directory."""
+"""Imports the package src/cooperace, and the tool-info module of every
+component in its registry, with the repository root as the working
+directory, because src/cooperace/__init__.py puts lib/*.whl (the bundled
+BenchExec) on sys.path relative to the working directory, and a module is
+read from the wheel by that relative path when it is first imported. The
+tests can then be run from any directory."""
+import importlib
 import os
 import subprocess
 import sys
@@ -15,7 +18,10 @@ _start_directory = os.getcwd()
 os.chdir(ROOT)
 try:
     sys.path.insert(0, str(ROOT))
-    import src.cooperace.components  # noqa: F401
+    import src.cooperace.components
+
+    for spec in src.cooperace.components.REGISTRY.values():
+        importlib.import_module(spec.module)
 finally:
     os.chdir(_start_directory)
 

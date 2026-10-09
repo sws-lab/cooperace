@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import signal
 import subprocess
@@ -7,72 +9,100 @@ import importlib
 import tempfile
 import threading
 import traceback
+from dataclasses import dataclass
 
 from benchexec import result as bresult
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
-from benchexec.tools.goblint import Tool as Goblint
-from benchexec.tools.dartagnan import Tool as Dartagnan
-from benchexec.tools.deagle import Tool as Deagle
-from benchexec.tools.ultimateautomizer import Tool as UltimateAutomizer
-from benchexec.tools.ultimategemcutter import Tool as UltimateGemCutter
-from benchexec.tools.ultimatetaipan import Tool as UltimateTaipan
-from benchexec.tools.nacpa import Tool as nacpa
-from benchexec.tools.cpachecker import Tool as CPAchecker
-from benchexec.tools.racerf import Tool as RacerF
-sv_sanitizers = importlib.import_module("benchexec.tools.sv-sanitizers")
 
 from .processes import ComponentGroup, run_memory_limit, stopProcessGroups
 from .strategy import NO_OUTCOME, Outcome, Strategy
 
 
 
-# Which files of a component run are its witness, per component name.
-# "directory" is "run" if "options" tell the component to write them into the
-# directory runActor makes for the run ({dir} in an option stands for it), and
-# "component" if the component writes them under its own directory, the
-# working directory of its run. "files" are their paths relative to that
-# directory, or None for every file there whose name contains "witness" and
-# ends in graphml or yml (Cooperace.witnessFiles). collectWitnessFiles takes
-# only those modified during the run, and witnessFilesToFileRoot delivers a
-# graphml file as witness.graphml and a YAML file as witness.yml. A component
-# that writes a new witness file, or a new format, needs only its entry here.
-_ULTIMATE_WITNESS_FILES = {
-    #Ultimate.py --witness-dir; witness.yml is written beside the graphml for "true"
-    "directory": "run", "options": ["--witness-dir", "{dir}"],
-    "files": ["witness.graphml", "witness.yml"],
-}
-WITNESS_FILES = {
-    #witness.yaml.path; the svcomp26 configuration writes no graphml witness
-    "Goblint": {"directory": "run", "options": ["--set", "witness.yaml.path", "{dir}/witness.yml"],
-                "files": ["witness.yml"]},
+@dataclass(frozen=True)
+class WitnessSpec:
+    """Which files of a component run are its witness. `directory` is "run" if
+    `options` tell the component to write them into the directory runActor
+    makes for the run ({dir} in an option stands for it), and "component" if
+    the component writes them under its own directory, the working directory
+    of its run. `files` are their paths relative to that directory, or None
+    for every file there whose name contains "witness" and ends in graphml or
+    yml (Cooperace.witnessFiles). collectWitnessFiles takes only those
+    modified during the run, and witnessFilesToFileRoot delivers a graphml
+    file as witness.graphml and a YAML file as witness.yml. A component that
+    writes a new witness file, or a new format, needs only a new WitnessSpec
+    in its registry entry."""
+
+    directory: str
+    options: tuple[str, ...] = ()
+    files: tuple[str, ...] | None = None
+
+
+#For a component without a WitnessSpec of its own: the name pattern, under its own directory
+DEFAULT_WITNESS = WitnessSpec("component")
+
+#Ultimate.py --witness-dir; witness.yml is written beside the graphml for "true"
+_ULTIMATE_WITNESS = WitnessSpec("run", ("--witness-dir", "{dir}"), ("witness.graphml", "witness.yml"))
+
+
+@dataclass(frozen=True)
+class ComponentSpec:
+    """A component CoOpeRace can run. `name` is its name in the conf, `module`
+    the name of its BenchExec tool-info module, imported when the component is
+    first run, `directory` its directory under tools/ (where
+    download-tools.py unpacks it), `options` the options it is run with, before
+    those of `witness`, the WitnessSpec of its witness files."""
+
+    name: str
+    module: str
+    directory: str
+    options: tuple[str, ...] = ()
+    witness: WitnessSpec = DEFAULT_WITNESS
+
+    def tool(self):
+        """A new object of the tool-info module's class Tool. The module is
+        imported here, from the BenchExec wheel that src/cooperace/__init__.py
+        puts on sys.path relative to the working directory, so the working
+        directory must still be the one CoOpeRace was started in; CoOpeRace
+        never changes it."""
+        return importlib.import_module(self.module).Tool()
+
+
+# The components CoOpeRace can run, by their name in the conf. A new
+# component needs only an entry here.
+REGISTRY = {spec.name: spec for spec in (
+    # The options of Goblint's own SV-COMP entry (benchexec_toolinfo_options
+    # of version svcomp26 in its fm-tools file goblint.yml). The portfolio
+    # path is relative to Goblint's directory, the working directory of its
+    # run. Goblint prints "SV-COMP result: ..." only when run through this
+    # portfolio. Keep in step with the Goblint version in tools.txt.
+    #Witness: witness.yaml.path; the svcomp26 configuration writes no graphml witness
+    ComponentSpec("Goblint", "benchexec.tools.goblint", "goblint",
+                  options=("--portfolio-conf", "conf/svcomp26/seq.txt"),
+                  witness=WitnessSpec("run", ("--set", "witness.yaml.path", "{dir}/witness.yml"),
+                                      ("witness.yml",))),
+    ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle"),
     #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
     #which must be Dartagnan's directory, and has no option for another one
-    "Dartagnan": {"directory": "component", "options": [], "files": ["output/witness.graphml"]},
-    "ULTIMATE Automizer": _ULTIMATE_WITNESS_FILES,
-    "ULTIMATE GemCutter": _ULTIMATE_WITNESS_FILES,
-    "ULTIMATE Taipan": _ULTIMATE_WITNESS_FILES,
-}
-#For a component without an entry: the name pattern, under its own directory
-DEFAULT_WITNESS_FILES = {"directory": "component", "options": [], "files": None}
-
-
-# This could be done in the download_tools.py part, where it creates a .json for this dictionary 
-def tool_locations():
-    default_path = os.path.join(os.getcwd(), "tools")
-    
-    return {
-            "Goblint": os.path.join(default_path, "goblint"),
-            "Deagle": os.path.join(default_path, "deagle"),
-            "Dartagnan": os.path.join(default_path, "dartagnan"),
-            "ULTIMATE Automizer": os.path.join(default_path, "uautomizer"),
-            "ULTIMATE GemCutter": os.path.join(default_path, "ugemcutter"),
-            "ULTIMATE Taipan": os.path.join(default_path, "utaipan"),
-            "nacpa": os.path.join(default_path, "nacpa"),
-            "CPAchecker": os.path.join(default_path, "CPAchecker-4.0-unix"),
-            "sv-sanitizers": os.path.join(default_path, "sv-sanitizers"),
-            "RacerF": os.path.join(default_path, "racerf")
-    }
+    ComponentSpec("Dartagnan", "benchexec.tools.dartagnan", "dartagnan",
+                  witness=WitnessSpec("component", (), ("output/witness.graphml",))),
+    ComponentSpec("ULTIMATE Automizer", "benchexec.tools.ultimateautomizer", "uautomizer",
+                  options=("--full-output",), witness=_ULTIMATE_WITNESS),
+    ComponentSpec("ULTIMATE GemCutter", "benchexec.tools.ultimategemcutter", "ugemcutter",
+                  options=("--full-output",), witness=_ULTIMATE_WITNESS),
+    ComponentSpec("ULTIMATE Taipan", "benchexec.tools.ultimatetaipan", "utaipan",
+                  options=("--full-output",), witness=_ULTIMATE_WITNESS),
+    ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
+    ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "CPAchecker-4.0-unix"),
+    # The tool-info module's name() is "SV-sanitizers", not "sv-sanitizers",
+    # and runActor looks a component's entry up by name(), as the tables this
+    # registry replaced did. A run of sv-sanitizers therefore raises KeyError
+    # before the component starts, and is reported with status "ERROR
+    # (KeyError: 'SV-sanitizers')" and result unknown.
+    ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers"),
+    ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
+)}
 
 # The values of a task's `data_model` option (and of `--arch`) that the
 # components' BenchExec tool-info modules understand. SV-COMP task definitions
@@ -97,22 +127,11 @@ class Cooperace(Strategy):
         self.data_model = data_model
         self.conf = conf
 
-        #Any new tools need to be added here. Key values taken from corresponding tool name() value
-        self.tools = {
-            "Goblint": Goblint(),
-            "Deagle": Deagle(),
-            "Dartagnan": Dartagnan(),
-            "ULTIMATE Automizer": UltimateAutomizer(),
-            "ULTIMATE GemCutter": UltimateGemCutter(),
-            "ULTIMATE Taipan": UltimateTaipan(),
-            "nacpa": nacpa(),
-            "CPAchecker": CPAchecker(),
-            "sv-sanitizers": sv_sanitizers.Tool(),
-            "RacerF": RacerF()
-        }
-
-        #Tool name and tool directory dictionary
-        self.tool_locations = tool_locations()
+        #The components this instance can run, by name: a copy of REGISTRY,
+        #to which the unit tests add stub components
+        self.registry = dict(REGISTRY)
+        #The directory that holds the components' directories
+        self.tools_dir = os.path.join(os.getcwd(), "tools")
 
         #Components started outside any runParallel; execute stops it on return
         self.root_group = ComponentGroup()
@@ -239,19 +258,24 @@ class Cooperace(Strategy):
         """Runs the config.Step `step` with runActor in the ComponentGroup
         `group` and returns the Outcome runActor returns.
 
-        An Exception from runActor, from setting the run up (for example
-        ToolNotFoundException from the tool-info module's `executable`) or
-        from the run, makes this step a step without a verdict: the traceback
-        goes to stderr, the component's block is printed with status "ERROR
-        (<exception class>: <message>)" and result "unknown", and NO_OUTCOME
-        is returned, so that the next step of a sequence runs. StopSignal is
-        a BaseException and propagates."""
-        actor = self.tools[step.component]
+        An Exception from making the tool-info object (ComponentSpec.tool,
+        which imports its module) or from runActor, from setting the run up
+        (for example ToolNotFoundException from the tool-info module's
+        `executable`) or from the run, makes this step a step without a
+        verdict: the traceback goes to stderr, the component's block is
+        printed with status "ERROR (<exception class>: <message>)" and result
+        "unknown", and NO_OUTCOME is returned, so that the next step of a
+        sequence runs. The block names the component by the tool-info
+        object's name(), or by the conf's name if there is no such object.
+        StopSignal is a BaseException and propagates."""
+        name = step.component
         try:
+            actor = self.registry[step.component].tool()
+            name = actor.name()
             return self.runActor(actor, step, group)
         except Exception as error:
             traceback.print_exc()
-            self.printComponentRun(actor.name(),
+            self.printComponentRun(name,
                                    subprocess.CompletedProcess(None, None, "", ""),
                                    f"ERROR ({type(error).__name__}: {error})", "unknown")
             return NO_OUTCOME
@@ -291,13 +315,10 @@ class Cooperace(Strategy):
             except FileNotFoundError:
                 pass
 
-    def witnessSpec(self, actor):
-        return WITNESS_FILES.get(actor.name(), DEFAULT_WITNESS_FILES)
-
-    def witnessOptions(self, actor, witness_dir):
-        """The "options" of `actor`'s entry in WITNESS_FILES, with {dir}
-        replaced by `witness_dir`."""
-        return [option.replace("{dir}", witness_dir) for option in self.witnessSpec(actor)["options"]]
+    def witnessOptions(self, witness, witness_dir):
+        """The `options` of the WitnessSpec `witness`, with {dir} replaced by
+        `witness_dir`."""
+        return [option.replace("{dir}", witness_dir) for option in witness.options]
 
     def startTime(self, witness_dir):
         """A time stamp of now, taken from the file system as the modification
@@ -307,10 +328,10 @@ class Cooperace(Strategy):
         open(marker, "w").close()
         return os.stat(marker).st_mtime_ns
 
-    def collectWitnessFiles(self, actor, cwd, witness_dir, started):
-        """Returns the witness files of the run of `actor` that began at
-        `started`, all in `witness_dir`: the files that `actor`'s entry in
-        WITNESS_FILES names, in `witness_dir` or under the component's own
+    def collectWitnessFiles(self, witness, cwd, witness_dir, started):
+        """Returns the witness files of the component run that began at
+        `started`, all in `witness_dir`: the files that the component's
+        WitnessSpec `witness` names, in `witness_dir` or under its own
         directory `cwd`, that were modified at or after `started`. Those under
         `cwd` are moved to the same relative path in `witness_dir`. Any other
         file, one left by an earlier run or shipped with the component
@@ -323,12 +344,11 @@ class Cooperace(Strategy):
         same granularity, which holds on Linux for ext4, tmpfs and overlayfs;
         on a file system with one-second time stamps, a witness written in the
         second of `started` would be dropped."""
-        spec = self.witnessSpec(actor)
-        source = witness_dir if spec["directory"] == "run" else cwd
-        if spec["files"] is None:
+        source = witness_dir if witness.directory == "run" else cwd
+        if witness.files is None:
             candidates = self.witnessFiles(source)
         else:
-            candidates = [os.path.join(source, file) for file in spec["files"]]
+            candidates = [os.path.join(source, file) for file in witness.files]
 
         collected = []
         for file in candidates:
@@ -358,9 +378,12 @@ class Cooperace(Strategy):
         the ComponentGroup `group`, with the step's limits, and prints its
         block. Returns the Outcome of its verdict, with the witness files it
         wrote during this run, if `step.accept` accepts the verdict and `group`
-        was not stopped, and NO_OUTCOME otherwise."""
-        tool_location = os.path.join(os.getcwd(), "tools")
-        tool_location = os.path.join(tool_location, self.tool_locations[actor.name()])
+        was not stopped, and NO_OUTCOME otherwise.
+
+        The component's entry in the registry is looked up by `actor.name()`;
+        see the entry of sv-sanitizers in REGISTRY."""
+        spec = self.registry[actor.name()]
+        tool_location = os.path.join(self.tools_dir, spec.directory)
 
         tool_locator = BaseTool2.ToolLocator(tool_directory=tool_location)
         executable = actor.executable(tool_locator)
@@ -374,21 +397,9 @@ class Cooperace(Strategy):
                      "language": "C"},
         )
 
-        if (actor.name() == "Goblint"):
-            # The options of Goblint's own SV-COMP entry (benchexec_toolinfo_options
-            # of version svcomp26 in its fm-tools file goblint.yml). The portfolio
-            # path is relative to cwd, Goblint's directory. Goblint prints
-            # "SV-COMP result: ..." only when run through this portfolio.
-            # Keep in step with the Goblint version in tools.txt.
-            options = ["--portfolio-conf", "conf/svcomp26/seq.txt"]
-        elif (actor.name().__contains__("ULTIMATE")):
-            options = ["--full-output"]
-        else:
-            options = []
-
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
-        options = options + self.witnessOptions(actor, witness_dir)
+        options = list(spec.options) + self.witnessOptions(spec.witness, witness_dir)
 
         cmdline = actor.cmdline(
             executable,
@@ -404,7 +415,7 @@ class Cooperace(Strategy):
             group=group
             )
         #Also for a stopped component, so that no file it wrote stays in its directory
-        witness_files = self.collectWitnessFiles(actor, cwd, witness_dir, started)
+        witness_files = self.collectWitnessFiles(spec.witness, cwd, witness_dir, started)
 
         if group.stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:

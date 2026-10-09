@@ -24,7 +24,7 @@ def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop
         return Outcome("true", actor.name(), [])
 
     coop.runActor = runActor
-    root = config.load(coop.conf, coop.tools)
+    root = config.load(coop.conf, coop.registry)
 
     assert coop.runSequential(root, coop.root_group) == Outcome("true", "Deagle", [])
 
@@ -43,7 +43,7 @@ def test_D2_a_branch_ending_with_systemexit_does_not_hang_runParallel(make_coop)
         return NO_OUTCOME
 
     coop.runOne = runOne
-    root = config.load(coop.conf, coop.tools)
+    root = config.load(coop.conf, coop.registry)
     result = {}
     thread = threading.Thread(target=lambda: result.update(outcome=coop.runParallel(root, coop.root_group)),
                               daemon=True)
@@ -78,7 +78,7 @@ def test_D1_a_failing_step_prints_its_block_with_an_error_status(make_coop, caps
         raise RuntimeError("Could not find executable")
 
     coop.runActor = runActor
-    root = config.load(coop.conf, coop.tools)
+    root = config.load(coop.conf, coop.registry)
     capsys.readouterr()
 
     assert coop.runSequential(root, coop.root_group) == NO_OUTCOME
@@ -104,7 +104,7 @@ def test_D1_a_failing_branch_of_a_parallel_node_does_not_stop_its_sibling(make_c
         return Outcome("false", actor.name(), [])
 
     coop.runActor = runActor
-    root = config.load(coop.conf, coop.tools)
+    root = config.load(coop.conf, coop.registry)
 
     assert coop.runParallel(root, coop.root_group) == Outcome("false", "Deagle", [])
 
@@ -118,7 +118,7 @@ def test_D1_a_stop_signal_in_a_step_propagates(make_coop):
         raise StopSignal(15)
 
     coop.runActor = runActor
-    root = config.load(coop.conf, coop.tools)
+    root = config.load(coop.conf, coop.registry)
 
     with pytest.raises(StopSignal):
         coop.runSequential(root, coop.root_group)

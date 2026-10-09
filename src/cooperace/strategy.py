@@ -45,7 +45,7 @@ class Strategy:
         witness files, prints "Error, something went wrong: <error>" and the
         traceback, and returns "unknown", as for any other error of the run."""
         try:
-            root = config.load(self.conf, self.tools)
+            root = config.load(self.conf, self.registry)
         except config.RunTypeError as error:
             self.removeOldWitnessFiles()
             print("Error, something went wrong:", error)
