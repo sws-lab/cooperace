@@ -281,11 +281,10 @@ class ComponentRunner:
             return NO_OUTCOME
 
         status = component_status(actor, cmdline, tool_result)
-        verdict = status.lower()
 
-        if confirm_verdict(step.accept, verdict, "true"):
+        if confirm_verdict(step.accept, status, "true"):
             verdict = "true"
-        elif confirm_verdict(step.accept, verdict, "false"):
+        elif confirm_verdict(step.accept, status, "false"):
             verdict = "false"
         else:
             verdict = "unknown"
@@ -388,18 +387,28 @@ def component_status(actor: BaseTool2, cmdline: list[str],
     return status
 
 
-def confirm_verdict(tool_acceptance_criteria: str, verdict: str, expected_verdict: str) -> bool | None:
-    """Whether `verdict` (a component's status in lower case) is
-    `expected_verdict` ("true" or "false") for an acceptance
-    `tool_acceptance_criteria` ("true", "false" or "all") that accepts it.
-    `verdict` matches if it contains `expected_verdict`, as
-    "false(no-data-race)" contains "false". Returns None, which is false,
-    if it does not."""
-    if verdict.__contains__(expected_verdict):
-        if tool_acceptance_criteria == "all" or tool_acceptance_criteria == expected_verdict:
-            return True
-        else:
-            return False
+#The statuses of a component, as BenchExec's tool-info modules return them, that
+#are a component's verdict "true" or "false" on the no-data-race property. Any
+#other status, among them a violation of another property such as
+#"false(unreach-call)", is no verdict. BenchExec's RESULT_FALSE_PROP, plain
+#"false", is what Dartagnan's tool-info module (BenchExec 3.31) returns for a
+#FAIL without a line that names the data race.
+ACCEPTED_STATUSES = {
+    "true": (bresult.RESULT_TRUE_PROP,),
+    "false": (bresult.RESULT_FALSE_DATARACE, bresult.RESULT_FALSE_PROP),
+}
+
+
+def confirm_verdict(tool_acceptance_criteria: str, status: str, expected_verdict: str) -> bool:
+    """Whether the status `status` of a component run (from component_status)
+    is the verdict `expected_verdict` ("true" or "false") and the acceptance
+    `tool_acceptance_criteria` ("true", "false" or "all") accepts that verdict.
+    `status` is the verdict if it is one of ACCEPTED_STATUSES[expected_verdict],
+    compared as it is, including the case; any other status, such as
+    "false(unreach-call)", "unknown", "TIMEOUT" or "ERROR (1)", is not."""
+    if status not in ACCEPTED_STATUSES.get(expected_verdict, ()):
+        return False
+    return tool_acceptance_criteria in ("all", expected_verdict)
 
 
 def print_component_run(name: str, tool_result: subprocess.CompletedProcess, status: str,

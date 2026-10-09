@@ -90,23 +90,48 @@ def test_component_status_gives_determine_result_the_signal_of_an_ended_componen
 
 # --- confirm_verdict ---------------------------------------------------------
 
-@pytest.mark.parametrize("acceptance, accepts_true, accepts_false", [
-    ("all", True, True),
-    ("true", True, False),
-    ("false", False, True),
-])
-def test_confirm_verdict_by_acceptance(acceptance, accepts_true, accepts_false):
-    assert bool(components.confirm_verdict(acceptance, "true", "true")) is accepts_true
-    assert bool(components.confirm_verdict(acceptance, "false", "false")) is accepts_false
+# For each status that component_status can return, whether the acceptance
+# "true", "false" or "all" accepts it as the verdict true and as the verdict false:
+# (status, accepted as true by "true", "false", "all", accepted as false by "true",
+# "false", "all"). Only true is a true verdict, and only false(no-data-race) and
+# plain false are false verdicts.
+ACCEPTANCES = ("true", "false", "all")
+ACCEPTANCE_TABLE = [
+    ("true", (True, False, True), (False, False, False)),
+    ("false(no-data-race)", (False, False, False), (False, True, True)),
+    ("false", (False, False, False), (False, True, True)),
+    ("false(unreach-call)", (False, False, False), (False, False, False)),
+    ("false(no-overflow)", (False, False, False), (False, False, False)),
+    ("false(valid-deref)", (False, False, False), (False, False, False)),
+    ("false(termination)", (False, False, False), (False, False, False)),
+    ("unknown", (False, False, False), (False, False, False)),
+    ("done", (False, False, False), (False, False, False)),
+    ("TIMEOUT", (False, False, False), (False, False, False)),
+    ("ERROR", (False, False, False), (False, False, False)),
+    ("ERROR (1)", (False, False, False), (False, False, False)),
+    ("EXCEPTION (SetDomain.Unsupported)", (False, False, False), (False, False, False)),
+    ("KILLED BY SIGNAL 24", (False, False, False), (False, False, False)),
+    # A status is compared as BenchExec returns it, not lower-cased
+    ("TRUE", (False, False, False), (False, False, False)),
+    ("False", (False, False, False), (False, False, False)),
+    # A status that merely contains a verdict is not that verdict
+    ("true(no-data-race)", (False, False, False), (False, False, False)),
+    ("not true", (False, False, False), (False, False, False)),
+    ("unknown (false)", (False, False, False), (False, False, False)),
+]
 
 
-def test_confirm_verdict_does_not_match_the_other_verdict():
-    assert not components.confirm_verdict("all", "false", "true")
-    assert not components.confirm_verdict("all", "true", "false")
-    assert not components.confirm_verdict("all", "unknown", "true")
-    assert not components.confirm_verdict("all", "unknown", "false")
+@pytest.mark.parametrize("status, as_true, as_false", ACCEPTANCE_TABLE)
+def test_confirm_verdict_accepts_only_the_statuses_of_a_verdict(status, as_true, as_false):
+    accepted_as_true = tuple(components.confirm_verdict(a, status, "true") for a in ACCEPTANCES)
+    accepted_as_false = tuple(components.confirm_verdict(a, status, "false") for a in ACCEPTANCES)
+
+    assert accepted_as_true == as_true
+    assert accepted_as_false == as_false
 
 
-def test_confirm_verdict_matches_a_verdict_that_contains_the_expected_one():
-    assert components.confirm_verdict("true", "true(no-data-race)", "true")
-    assert not components.confirm_verdict("true", "false(no-data-race)", "false")
+def test_confirm_verdict_returns_a_bool():
+    for status, _as_true, _as_false in ACCEPTANCE_TABLE:
+        for acceptance in ACCEPTANCES:
+            for expected in ("true", "false"):
+                assert isinstance(components.confirm_verdict(acceptance, status, expected), bool)

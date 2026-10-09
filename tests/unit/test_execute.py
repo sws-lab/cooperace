@@ -58,6 +58,23 @@ def lines_of(captured):
     return captured.out.splitlines()
 
 
+def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verdict(
+        make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(
+        make_runner, tmp_path, "sequential",
+        Stub_A='echo "STUB-STATUS: false(unreach-call)"\n',
+        Stub_B='echo "STUB-STATUS: false(no-data-race)"\n',
+    )
+
+    verdict = run.execute()
+    lines = lines_of(capsys.readouterr())
+
+    assert verdict == "false"
+    assert "Tool name: Stub A Status: false(unreach-call) Exit code: 0" in lines
+    assert "Tool name: Stub A Result: unknown" in lines
+    assert "CoOpeRace result from: Stub B" in lines
+
+
 def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
