@@ -1,5 +1,5 @@
-"""The status of a component run (componentStatus) and which verdicts a conf
-accepts (parseConf, confirmVerdict)."""
+"""The status of a component run (componentStatus) and which verdicts an
+acceptance accepts (confirmVerdict)."""
 import signal
 import subprocess
 
@@ -86,98 +86,25 @@ def test_componentStatus_gives_determine_result_the_signal_of_an_ended_component
     assert (run.exit_code.value, run.exit_code.signal) == (None, signal.SIGTERM)
 
 
-# --- parseConf and confirmVerdict -------------------------------------------
-
-def make_acceptance(make_coop, **acceptance):
-    coop = make_coop({"runType": "parallel",
-                      "tools": [{name: value} for name, value in acceptance.items()]})
-    coop.parseConf()
-    return coop
-
-
-def test_parseConf_records_the_acceptance_of_every_component(make_coop):
-    coop = make_coop({"runType": "sequential",
-                      "tools": [{"Goblint": "true"},
-                                [{"Dartagnan": "false"}, {"Deagle": "all"}]]})
-
-    coop.parseConf()
-
-    assert coop.acceptable_results == {"Goblint": "true", "Dartagnan": "false",
-                                       "Deagle": "all"}
-
+# --- confirmVerdict ---------------------------------------------------------
 
 @pytest.mark.parametrize("acceptance, accepts_true, accepts_false", [
     ("all", True, True),
     ("true", True, False),
     ("false", False, True),
 ])
-def test_confirmVerdict_by_acceptance(make_coop, acceptance, accepts_true, accepts_false):
-    coop = make_acceptance(make_coop, Goblint=acceptance)
-
-    assert bool(coop.confirmVerdict("Goblint", "true", "true")) is accepts_true
-    assert bool(coop.confirmVerdict("Goblint", "false", "false")) is accepts_false
+def test_confirmVerdict_by_acceptance(coop, acceptance, accepts_true, accepts_false):
+    assert bool(coop.confirmVerdict(acceptance, "true", "true")) is accepts_true
+    assert bool(coop.confirmVerdict(acceptance, "false", "false")) is accepts_false
 
 
-def test_confirmVerdict_does_not_match_the_other_verdict(make_coop):
-    coop = make_acceptance(make_coop, Goblint="all")
-
-    assert not coop.confirmVerdict("Goblint", "false", "true")
-    assert not coop.confirmVerdict("Goblint", "true", "false")
-    assert not coop.confirmVerdict("Goblint", "unknown", "true")
-    assert not coop.confirmVerdict("Goblint", "unknown", "false")
+def test_confirmVerdict_does_not_match_the_other_verdict(coop):
+    assert not coop.confirmVerdict("all", "false", "true")
+    assert not coop.confirmVerdict("all", "true", "false")
+    assert not coop.confirmVerdict("all", "unknown", "true")
+    assert not coop.confirmVerdict("all", "unknown", "false")
 
 
-def test_confirmVerdict_accepts_a_component_the_conf_does_not_list(make_coop):
-    coop = make_acceptance(make_coop, Goblint="false")
-
-    assert coop.confirmVerdict("Dartagnan", "true", "true")
-    assert coop.confirmVerdict("Dartagnan", "false", "false")
-
-
-def test_confirmVerdict_matches_a_verdict_that_contains_the_expected_one(make_coop):
-    coop = make_acceptance(make_coop, Goblint="true")
-
-    assert coop.confirmVerdict("Goblint", "true(no-data-race)", "true")
-    assert not coop.confirmVerdict("Goblint", "false(no-data-race)", "false")
-
-
-# --- parseConf refuses a conf that repeats a component or limits a stranger --
-
-@pytest.mark.parametrize("tools", [
-    [{"Goblint": "all"}, {"Goblint": "true"}],
-    [{"Goblint": "all"}, [{"Deagle": "all"}, {"Goblint": "all"}]],
-    [[{"Goblint": "all"}, [{"Deagle": "all"}]], [{"Deagle": "all"}]],
-    [{"Goblint": "all", "Deagle": "all"}, {"Deagle": "false"}],
-], ids=["flat", "list-in-list", "two-lists", "one-element-two-keys"])
-def test_parseConf_refuses_a_component_named_twice(make_coop, tools):
-    coop = make_coop({"runType": "parallel", "tools": tools})
-
-    with pytest.raises(ValueError, match=r"'(Goblint|Deagle)' is named more than once"):
-        coop.parseConf()
-
-
-@pytest.mark.parametrize("limits", ["memoryLimits", "cpuTimeLimits"])
-def test_parseConf_refuses_a_limit_for_a_component_that_is_not_in_the_tree(make_coop, limits):
-    coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}],
-                      limits: {"Goblint": 1000, "Deagle": 1000}})
-
-    with pytest.raises(ValueError, match=f"{limits} has a limit for 'Deagle'"):
-        coop.parseConf()
-
-
-def test_parseConf_accepts_limits_for_components_in_nested_lists(make_coop):
-    coop = make_coop({"runType": "sequential",
-                      "tools": [{"Goblint": "all"}, [{"Deagle": "all"}]],
-                      "memoryLimits": {"Deagle": "70%"}, "cpuTimeLimits": {"Goblint": 30}})
-
-    coop.parseConf()
-
-
-def test_parseConf_prints_nothing(make_coop, capsys):
-    """The standard output of a run starts with the first component's lines;
-    parseConf once printed the list of tool objects, with their addresses."""
-    coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}, [{"Deagle": "all"}]]})
-
-    coop.parseConf()
-
-    assert capsys.readouterr().out == ""
+def test_confirmVerdict_matches_a_verdict_that_contains_the_expected_one(coop):
+    assert coop.confirmVerdict("true", "true(no-data-race)", "true")
+    assert not coop.confirmVerdict("true", "false(no-data-race)", "false")

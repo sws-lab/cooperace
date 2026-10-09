@@ -96,7 +96,6 @@ class Cooperace(Strategy):
         self.property_file = os.path.abspath(property_file)
         self.data_model = data_model
         self.conf = conf
-        self.acceptable_results = {}
 
         #Any new tools need to be added here. Key values taken from corresponding tool name() value
         self.tools = {
@@ -119,14 +118,15 @@ class Cooperace(Strategy):
         self.root_group = ComponentGroup()
         self.print_lock = threading.Lock()
 
-    def componentMemoryLimit(self, tool_name):
-        """Memory limit in bytes for one component, from the conf's `memoryLimits`, or None.
+    def componentMemoryLimit(self, step):
+        """Memory limit in bytes for the config.Step `step`, from its
+        `memory_limit` (the conf's `memoryLimits`), or None.
 
         `memoryLimits` maps a component name to a number of bytes or to a
         percentage of the run's memory limit (`"70%"`, see run_memory_limit).
         A percentage gives None when the run has no memory limit.
         """
-        value = self.conf.get("memoryLimits", {}).get(tool_name)
+        value = step.memory_limit
         if isinstance(value, str) and value.endswith("%"):
             run_limit = run_memory_limit()
             if run_limit is None:
@@ -134,17 +134,18 @@ class Cooperace(Strategy):
             return int(run_limit * float(value[:-1]) / 100)
         return None if value is None else int(value)
 
-    def componentCpuTimeLimit(self, tool_name):
-        """CPU-time limit in seconds for one component, from the conf's `cpuTimeLimits`, or None."""
-        value = self.conf.get("cpuTimeLimits", {}).get(tool_name)
+    def componentCpuTimeLimit(self, step):
+        """CPU-time limit in seconds for the config.Step `step`, from its
+        `cpu_time_limit` (the conf's `cpuTimeLimits`), or None."""
+        value = step.cpu_time_limit
         return None if value is None else int(value)
 
-    def withResourceLimits(self, tool_name, command):
-        """`command`, started with the component's limits from the conf.
+    def withResourceLimits(self, step, command):
+        """`command`, started with the limits of the config.Step `step`.
 
         RLIMIT_DATA is set to the memory limit (componentMemoryLimit). A
         percentage for which the run has no memory limit applies no limit and
-        prints "Memory limit of <name>: none (no cgroup memory limit found for
+        prints "Memory limit of <component>: none (no cgroup memory limit found for
         "<value>")". RLIMIT_DATA bounds the private writable memory (heap,
         anonymous mmap) of each process of the component; the component's
         processes inherit it. A JVM
@@ -170,21 +171,22 @@ class Cooperace(Strategy):
         still ends it with every process it starts.
         """
         limits = []
-        memory = self.componentMemoryLimit(tool_name)
+        tool_name = step.component
+        memory = self.componentMemoryLimit(step)
         if memory is not None:
             limits.append(f"RLIMIT_DATA={memory}:{memory}")
             message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
             with self.print_lock:
                 print(message, flush=True)
         else:
-            value = self.conf.get("memoryLimits", {}).get(tool_name)
+            value = step.memory_limit
             if isinstance(value, str) and value.endswith("%"):
                 #A percentage that run_memory_limit could not resolve: no
                 #limit applies, and the run says so
                 with self.print_lock:
                     print(f"Memory limit of {tool_name}: none "
                           f"(no cgroup memory limit found for \"{value}\")", flush=True)
-        cpu = self.componentCpuTimeLimit(tool_name)
+        cpu = self.componentCpuTimeLimit(step)
         if cpu is not None:
             limits.append(f"RLIMIT_CPU={cpu}:{cpu + 1}")
             with self.print_lock:
@@ -233,60 +235,9 @@ class Cooperace(Strategy):
         return subprocess.CompletedProcess(command, process.returncode, output, "")
 
         
-    def parseTools(self, tools):
-        executable_tools = []
-        for tool in tools:
-            if isinstance(tool, list):
-                executable_tools.append(self.parseTools(tool))
-            else:
-                for tool_name, tool_value in tool.items():
-                    self.acceptable_results[tool_name] = tool_value
-                    executable_tools.append(self.tools[tool_name])
-
-        return executable_tools
-            
-        
-    def checkConf(self):
-        """Raises ValueError, naming the component or the key, if the conf
-        names a component more than once anywhere in its `tools` tree, or has a
-        key in `memoryLimits` or `cpuTimeLimits` that names no component of the
-        tree. A repeated component would share one tool-info object and one
-        entry of acceptable_results between its occurrences, and, in a
-        runParallel, one output directory of the component between concurrent
-        runs. A limit for a component that is not run would be ignored."""
-        names = []
-
-        def collect(tools):
-            for tool in tools:
-                if isinstance(tool, list):
-                    collect(tool)
-                else:
-                    names.extend(tool)
-
-        collect(self.conf["tools"])
-        for name in names:
-            if names.count(name) > 1:
-                raise ValueError(f"component {name!r} is named more than once in the conf's tools")
-        for limits in ("memoryLimits", "cpuTimeLimits"):
-            for name in self.conf.get(limits, {}):
-                if name not in names:
-                    raise ValueError(f"{limits} has a limit for {name!r}, "
-                                     "which is not a component of the conf's tools")
-
-    def parseConf(self):
-        """Returns the run type and the tool-info objects of the conf's
-        `tools`, nested as the conf nests them, and records each component's
-        acceptance in acceptable_results. Raises ValueError for a conf that
-        checkConf refuses."""
-        self.checkConf()
-        execution_type = self.conf["runType"]
-        execution_tools = self.parseTools(self.conf["tools"])
-        
-        return execution_type, execution_tools
-        
-    def runOne(self, actor, group):
-        """Runs `actor` with runActor in the ComponentGroup `group` and returns
-        the Outcome runActor returns.
+    def runOne(self, step, group):
+        """Runs the config.Step `step` with runActor in the ComponentGroup
+        `group` and returns the Outcome runActor returns.
 
         An Exception from runActor, from setting the run up (for example
         ToolNotFoundException from the tool-info module's `executable`) or
@@ -295,8 +246,9 @@ class Cooperace(Strategy):
         (<exception class>: <message>)" and result "unknown", and NO_OUTCOME
         is returned, so that the next step of a sequence runs. StopSignal is
         a BaseException and propagates."""
+        actor = self.tools[step.component]
         try:
-            return self.runActor(actor, group)
+            return self.runActor(actor, step, group)
         except Exception as error:
             traceback.print_exc()
             self.printComponentRun(actor.name(),
@@ -393,21 +345,20 @@ class Cooperace(Strategy):
             collected.append(file)
         return collected
 
-    def confirmVerdict(self, tool_name, verdict: str, expected_verdict: str):
-        tool_acceptance_criteria = self.acceptable_results.get(tool_name, None)
-
+    def confirmVerdict(self, tool_acceptance_criteria, verdict: str, expected_verdict: str):
         if verdict.__contains__(expected_verdict):
-            if tool_acceptance_criteria is None or tool_acceptance_criteria == "all" or tool_acceptance_criteria == expected_verdict:
+            if tool_acceptance_criteria == "all" or tool_acceptance_criteria == expected_verdict:
                 return True
             else:
                 return False
     
 
-    def runActor(self, actor: BaseTool2, group):
-        """Runs the component `actor` on the task in the ComponentGroup `group`
-        and prints its block. Returns the Outcome of its verdict, with the
-        witness files it wrote during this run, if the conf accepts the
-        verdict and `group` was not stopped, and NO_OUTCOME otherwise."""
+    def runActor(self, actor: BaseTool2, step, group):
+        """Runs the component `actor` of the config.Step `step` on the task in
+        the ComponentGroup `group`, with the step's limits, and prints its
+        block. Returns the Outcome of its verdict, with the witness files it
+        wrote during this run, if `step.accept` accepts the verdict and `group`
+        was not stopped, and NO_OUTCOME otherwise."""
         tool_location = os.path.join(os.getcwd(), "tools")
         tool_location = os.path.join(tool_location, self.tool_locations[actor.name()])
 
@@ -448,7 +399,7 @@ class Cooperace(Strategy):
 
         started = self.startTime(witness_dir)
         tool_result = self.actorResult(
-            command=self.withResourceLimits(actor.name(), cmdline),
+            command=self.withResourceLimits(step, cmdline),
             cwd=cwd,
             group=group
             )
@@ -467,9 +418,9 @@ class Cooperace(Strategy):
         status = self.componentStatus(actor, cmdline, tool_result)
         verdict = status.lower()
 
-        if self.confirmVerdict(actor.name(), verdict, "true"):
+        if self.confirmVerdict(step.accept, verdict, "true"):
             verdict = "true"
-        elif self.confirmVerdict(actor.name(), verdict, "false"):
+        elif self.confirmVerdict(step.accept, verdict, "false"):
             verdict = "false"
         else:
             verdict = "unknown"

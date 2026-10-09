@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+from src.cooperace import config
 from src.cooperace.strategy import NO_OUTCOME, Outcome
 
 # Letters for the components, so that a conf reads as a tree. All are names
@@ -49,7 +50,7 @@ class Script:
         self.returncodes = {}
         coop.runActor = self.runActor
 
-    def runActor(self, actor, group):
+    def runActor(self, actor, step, group):
         letter, seconds, verdict, *witness = self.components[actor.name()]
         result = self.coop.actorResult(["sleep", str(seconds)], str(self.tmp_path), group)
         if result.returncode is None:
@@ -64,12 +65,13 @@ class Script:
         return NO_OUTCOME
 
 
+def load(coop):
+    return config.load(coop.conf, coop.tools)
+
+
 def run(coop):
     """What execute does with the conf, without the witness delivery."""
-    run_type, tools = coop.parseConf()
-    if run_type == "sequential":
-        return coop.runSequential(tools, coop.root_group)
-    return coop.runParallel(tools, coop.root_group)
+    return coop.runNode(load(coop), coop.root_group)
 
 
 # --- runSequential ----------------------------------------------------------
@@ -128,15 +130,15 @@ def test_outcome_carries_the_witness_files_of_the_returned_component(make_coop, 
 def test_runOne_gives_no_witness_files_for_an_unknown_verdict(make_coop, tmp_path):
     coop = make_coop(conf("sequential", "a"))
     Script(coop, tmp_path, a=(0.1, "unknown", ["/run/a/witness.yml"]))
-    _, (actor,) = coop.parseConf()
+    (step,) = load(coop).steps
 
-    assert coop.runOne(actor, coop.root_group) == NO_OUTCOME
+    assert coop.runOne(step, coop.root_group) == NO_OUTCOME
 
 
 def test_runOne_forgets_the_witness_files_of_the_previous_component(make_coop, tmp_path):
     coop = make_coop(conf("sequential", "a", "b"))
     Script(coop, tmp_path, a=(0.1, "true", ["/run/a/witness.yml"]), b=(0.1, "true"))
-    _, (first, second) = coop.parseConf()
+    first, second = load(coop).steps
 
     assert coop.runOne(first, coop.root_group).witness_files == ["/run/a/witness.yml"]
     assert coop.runOne(second, coop.root_group).witness_files == []
@@ -199,10 +201,10 @@ def test_exception_in_a_parallel_branch_leaves_the_other_branches(make_coop, tmp
     script = Script(coop, tmp_path, b=(0.3, "true"))
     fake_runActor = coop.runActor
 
-    def runActor(actor, group):
+    def runActor(actor, step, group):
         if actor.name() == "Goblint":
             raise RuntimeError("setup failed")
-        return fake_runActor(actor, group)
+        return fake_runActor(actor, step, group)
 
     coop.runActor = runActor
 
@@ -217,10 +219,10 @@ def test_parallel_returns_the_verdict_when_another_branch_ends_with_systemexit(m
     other branch reports one it hangs; test_known_defects.py, D2.)"""
     coop = make_coop(conf("parallel", "a", "b"))
 
-    def runOne(actor, group):
-        if actor.name() == "Goblint":
+    def runOne(step, group):
+        if step.component == "Goblint":
             raise SystemExit(3)
-        return Outcome("true", actor.name(), [])
+        return Outcome("true", step.component, [])
 
     coop.runOne = runOne
 
@@ -284,14 +286,3 @@ def test_parallel_inside_parallel_is_stopped_with_the_outer_group(make_coop, tmp
     assert time.monotonic() - started < 10
     assert script.returncodes["a"] in (-15, -9)
     assert script.returncodes["b"] in (-15, -9)
-
-
-@pytest.mark.parametrize("run_type", ["sequential", "parallel"])
-def test_parseConf_returns_the_run_type_and_the_nested_tool_objects(make_coop, run_type):
-    coop = make_coop(conf(run_type, "a", ["b", "c"]))
-
-    parsed_type, tools = coop.parseConf()
-
-    assert parsed_type == run_type
-    assert tools[0] is coop.tools["Goblint"]
-    assert tools[1] == [coop.tools["Deagle"], coop.tools["Dartagnan"]]

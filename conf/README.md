@@ -26,3 +26,6 @@ We add the tools as a key-value pair where the key is the tool name and value is
 
 ##### Optional: a CPU-time limit per component
 - cpuTimeLimits --- maps a tool name to a CPU-time limit in seconds for that tool alone (`{"Goblint": 30}`). It is set as `RLIMIT_CPU` on the tool's processes, each of which may use that much CPU time on its own (the kernel ends it with SIGXCPU, and SIGKILL one second later). Goblint's portfolio runner starts one process per level and gives up the remaining levels when the limit ends one, so a limit for Goblint bounds its whole stage by the time of the levels that end by themselves plus the limit. Without it, a strategy that runs Goblint before the other tools loses their answers on every task where Goblint's last levels run until the run's own time limit.
+
+##### What CoOpeRace refuses
+CoOpeRace checks the conf before it starts any tool (`src/cooperace/config.py`) and stops with an error, without a verdict, if a tool is named more than once anywhere in `tools`, if `memoryLimits` or `cpuTimeLimits` has a key that is not a tool of `tools`, if a tool's name is not one CoOpeRace knows, or if an accepted value is not "true", "false" or "all". A `runType` other than sequential or parallel is reported as `Error, something went wrong` and gives the verdict unknown.

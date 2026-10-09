@@ -7,7 +7,8 @@ import time
 
 import pytest
 
-from src.cooperace import components
+from src.cooperace import components, config
+from src.cooperace.config import Step
 from src.cooperace.strategy import NO_OUTCOME, Outcome, StopSignal
 
 
@@ -17,15 +18,15 @@ def test_D1_a_failing_step_does_not_stop_the_later_steps_of_a_sequence(make_coop
     coop = make_coop({"runType": "sequential",
                       "tools": [{"Goblint": "all"}, {"Deagle": "all"}]})
 
-    def runActor(actor, group):
+    def runActor(actor, step, group):
         if actor.name() == "Goblint":
             raise RuntimeError("Could not find executable")
         return Outcome("true", actor.name(), [])
 
     coop.runActor = runActor
-    _, tools = coop.parseConf()
+    root = config.load(coop.conf, coop.tools)
 
-    assert coop.runSequential(tools, coop.root_group) == Outcome("true", "Deagle", [])
+    assert coop.runSequential(root, coop.root_group) == Outcome("true", "Deagle", [])
 
 
 def test_D2_a_branch_ending_with_systemexit_does_not_hang_runParallel(make_coop):
@@ -35,16 +36,16 @@ def test_D2_a_branch_ending_with_systemexit_does_not_hang_runParallel(make_coop)
     coop = make_coop({"runType": "parallel",
                       "tools": [{"Goblint": "all"}, {"Deagle": "all"}]})
 
-    def runOne(actor, group):
-        if actor.name() == "Goblint":
+    def runOne(step, group):
+        if step.component == "Goblint":
             raise SystemExit(3)
         time.sleep(0.3)
         return NO_OUTCOME
 
     coop.runOne = runOne
-    _, tools = coop.parseConf()
+    root = config.load(coop.conf, coop.tools)
     result = {}
-    thread = threading.Thread(target=lambda: result.update(outcome=coop.runParallel(tools, coop.root_group)),
+    thread = threading.Thread(target=lambda: result.update(outcome=coop.runParallel(root, coop.root_group)),
                               daemon=True)
     thread.start()
     thread.join(2)
@@ -59,11 +60,10 @@ def test_D4_a_percentage_limit_without_a_cgroup_limit_says_that_no_limit_applies
     "Memory limit of Goblint: none" naming the percentage; the command is
     still returned unchanged."""
     monkeypatch.setattr(components, "run_memory_limit", lambda: None)
-    coop = make_coop({"runType": "sequential", "tools": [],
-                      "memoryLimits": {"Goblint": "70%"}})
+    coop = make_coop()
     command = ["echo", "hello"]
 
-    assert coop.withResourceLimits("Goblint", command) is command
+    assert coop.withResourceLimits(Step("Goblint", "all", memory_limit="70%"), command) is command
     lines = capsys.readouterr().out.splitlines()
     assert lines == ['Memory limit of Goblint: none (no cgroup memory limit found for "70%")']
 
@@ -74,14 +74,14 @@ def test_D1_a_failing_step_prints_its_block_with_an_error_status(make_coop, caps
     stderr."""
     coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}]})
 
-    def runActor(actor, group):
+    def runActor(actor, step, group):
         raise RuntimeError("Could not find executable")
 
     coop.runActor = runActor
-    _, tools = coop.parseConf()
+    root = config.load(coop.conf, coop.tools)
     capsys.readouterr()
 
-    assert coop.runSequential(tools, coop.root_group) == NO_OUTCOME
+    assert coop.runSequential(root, coop.root_group) == NO_OUTCOME
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
         "---Goblint logs---",
@@ -98,28 +98,28 @@ def test_D1_a_failing_branch_of_a_parallel_node_does_not_stop_its_sibling(make_c
     coop = make_coop({"runType": "parallel",
                       "tools": [{"Goblint": "all"}, {"Deagle": "all"}]})
 
-    def runActor(actor, group):
+    def runActor(actor, step, group):
         if actor.name() == "Goblint":
             raise RuntimeError("Could not find executable")
         return Outcome("false", actor.name(), [])
 
     coop.runActor = runActor
-    _, tools = coop.parseConf()
+    root = config.load(coop.conf, coop.tools)
 
-    assert coop.runParallel(tools, coop.root_group) == Outcome("false", "Deagle", [])
+    assert coop.runParallel(root, coop.root_group) == Outcome("false", "Deagle", [])
 
 
 def test_D1_a_stop_signal_in_a_step_propagates(make_coop):
     coop = make_coop({"runType": "sequential", "tools": [{"Goblint": "all"}, {"Deagle": "all"}]})
     ran = []
 
-    def runActor(actor, group):
+    def runActor(actor, step, group):
         ran.append(actor.name())
         raise StopSignal(15)
 
     coop.runActor = runActor
-    _, tools = coop.parseConf()
+    root = config.load(coop.conf, coop.tools)
 
     with pytest.raises(StopSignal):
-        coop.runSequential(tools, coop.root_group)
+        coop.runSequential(root, coop.root_group)
     assert ran == ["Goblint"]

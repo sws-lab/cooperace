@@ -7,10 +7,12 @@ import tempfile
 import threading
 import traceback
 
+from . import config
+from .config import Sequence, Step
 from .processes import ComponentGroup
 
 
-# What runSequential, runParallel, runActorThread, runOne and runActor return:
+# What runNode, runSequential, runParallel, runOne and runActor return:
 # the verdict ("true", "false" or "unknown"), the name of the component that
 # gave it (None for "unknown") and that component's witness files from this
 # run.
@@ -36,8 +38,19 @@ class Strategy:
         verdict it returns, so that the launcher's verdict line follows it
         directly. If SIGTERM, SIGINT or SIGHUP arrives while it
         runs (in the main thread), it stops every component, prints that it was
-        stopped, and ends CoOpeRace with that signal, without a verdict."""
-        executon_type, execution_tools = self.parseConf()
+        stopped, and ends CoOpeRace with that signal, without a verdict.
+
+        The conf is loaded with config.load first, and an error it raises
+        propagates, except config.RunTypeError: for that it removes the old
+        witness files, prints "Error, something went wrong: <error>" and the
+        traceback, and returns "unknown", as for any other error of the run."""
+        try:
+            root = config.load(self.conf, self.tools)
+        except config.RunTypeError as error:
+            self.removeOldWitnessFiles()
+            print("Error, something went wrong:", error)
+            traceback.print_exc()
+            return "unknown"
 
         handlers = {}
 
@@ -62,12 +75,7 @@ class Strategy:
         #Holds one directory per component run, made in runActor
         self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
         try:
-            if executon_type == "sequential":
-                outcome = self.runSequential(execution_tools, self.root_group)
-            elif executon_type == "parallel":
-                outcome = self.runParallel(execution_tools, self.root_group)
-            else:
-                raise Exception("execution type in conf file is incorrect. Must be 'parallel' or 'sequential'")
+            outcome = self.runNode(root, self.root_group)
             #Only the witness of the component whose verdict is returned
             self.witnessFilesToFileRoot(outcome.witness_files)
             verdict = outcome.verdict
@@ -92,58 +100,57 @@ class Strategy:
         return verdict
 
 
-    def runSequential(self, actors, group):
-        """Runs the elements of `actors` one after another in the
-        ComponentGroup `group`, a list element with runParallel, and returns
-        the Outcome of the first accepted verdict, or NO_OUTCOME if there is
-        none or `group` is stopped first."""
-        for actor in actors:
+    def runNode(self, node, group):
+        """Runs the config.Node `node` in the ComponentGroup `group`: a Step
+        with runOne, a Sequence with runSequential, a Parallel with
+        runParallel. Returns its Outcome."""
+        if isinstance(node, Step):
+            return self.runOne(node, group)
+        if isinstance(node, Sequence):
+            return self.runSequential(node, group)
+        return self.runParallel(node, group)
+
+    def runSequential(self, sequence, group):
+        """Runs the steps of the config.Sequence `sequence` one after another
+        in the ComponentGroup `group`, and returns the Outcome of the first
+        accepted verdict, or NO_OUTCOME if there is none or `group` is stopped
+        first."""
+        for node in sequence.steps:
             if group.stopped:
                 break
-            #If actor is a list, then we want the list of tools to be run in parallel
-            if isinstance(actor, list):
-                outcome = self.runParallel(actor, group)
-            else:
-                outcome = self.runOne(actor, group)
+            outcome = self.runNode(node, group)
 
             if outcome.verdict == "true" or outcome.verdict == "false":
                 return outcome
 
         return NO_OUTCOME
 
-    def runActorThread(self, actor, group):
-        #If actor in parallel running is a list, then that list should be run sequentially
-        if isinstance(actor, list):
-            return self.runSequential(actor, group)
-        else:
-            return self.runOne(actor, group)
-
-    def runParallel(self, actors, parent):
-        """Runs the elements of `actors` at the same time, each in a thread of
-        its own (a list element runs there with runSequential), in a new
-        ComponentGroup nested in the group `parent`. Returns the
-        Outcome of the first accepted verdict that a thread reports, or
-        NO_OUTCOME once every thread has reported none. Before returning it
-        stops the group, which ends the components still running, and joins
-        every thread, so that no component of the group runs or prints
-        afterwards."""
+    def runParallel(self, parallel, parent):
+        """Runs the steps of the config.Parallel `parallel` at the same time,
+        each in a thread of its own (a Sequence runs there with
+        runSequential), in a new ComponentGroup nested in the group `parent`.
+        Returns the Outcome of the first accepted verdict that a thread
+        reports, or NO_OUTCOME once every thread has reported none. Before
+        returning it stops the group, which ends the components still running,
+        and joins every thread, so that no component of the group runs or
+        prints afterwards."""
         group = ComponentGroup(parent)
         outcomes = queue.Queue()
 
-        def runBranch(actor):
+        def runBranch(node):
             #Every branch puts exactly one outcome, also when it ends with a
             #BaseException (such as SystemExit from a module), which is
             #printed and counts as no verdict; otherwise the wait below would
             #never end. StopSignal is raised in the main thread only.
             outcome = NO_OUTCOME
             try:
-                outcome = self.runActorThread(actor, group)
+                outcome = self.runNode(node, group)
             except BaseException:
                 traceback.print_exc()
             finally:
                 outcomes.put(outcome)
 
-        threads = [threading.Thread(target=runBranch, args=(actor,)) for actor in actors]
+        threads = [threading.Thread(target=runBranch, args=(node,)) for node in parallel.steps]
         for thread in threads:
             thread.start()
 
