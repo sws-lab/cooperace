@@ -414,22 +414,15 @@ class ComponentRunner:
         in the registry, and its options in `versions`, which
         installation_problems has checked hold it; the case of `actor.name()`
         (BenchExec's sv-sanitizers module names itself "SV-sanitizers") does
-        not matter. It is started as `command` says. The block is printed
-        under `actor.name()`."""
+        not matter. It is started as `command` says, with launch, and its
+        status is read with status; a subclass that runs components another
+        way overrides those two. The block is printed under `actor.name()`."""
         spec = self.registry[step.component]
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
         command = self.command(actor, spec, witness_dir)
 
-        started = start_time(witness_dir)
-        tool_result = run_in_session(
-            command=with_resource_limits(step, command.cmdline),
-            cwd=command.cwd,
-            group=group,
-            env=command.env,
-            )
-        #Also for a stopped component, so that no file it wrote stays in its directory
-        witness_files = collect_witness_files(spec.witness, command.cwd, witness_dir, started)
+        tool_result, witness_files = self.launch(step, spec, command, witness_dir, group)
 
         if group.stopped:
             #Another component's verdict was returned, or CoOpeRace is stopping:
@@ -440,7 +433,7 @@ class ComponentRunner:
             print_component_run(actor.name(), tool_result, "stopped by CoOpeRace", None)
             return NO_OUTCOME
 
-        status = component_status(actor, command.cmdline, tool_result, component_cpu_time_limit(step))
+        status = self.status(actor, step, command, tool_result)
 
         if confirm_verdict(step.accept, status, "true", self.property_name):
             verdict = "true"
@@ -454,6 +447,36 @@ class ComponentRunner:
         if verdict == "unknown":
             return NO_OUTCOME
         return Outcome(verdict, actor.name(), witness_files, reported_result(self.property_name, status))
+
+
+    def launch(self, step: Step, spec: ComponentSpec, command: ComponentCommand, witness_dir: str,
+               group: ComponentGroup) -> tuple[subprocess.CompletedProcess, list[str]]:
+        """Runs `command`, the ComponentCommand of the component of `step`
+        (its registry entry `spec`), in the ComponentGroup `group` and waits
+        for it to end. Returns its processes.FinishedProcess and its witness
+        files, collected into `witness_dir`, the directory made for this run.
+
+        Here the component runs as the leader of a session of its own
+        (run_in_session) under the rlimits of `step` (with_resource_limits),
+        and its witness files are those of its WitnessSpec modified since it
+        started (collect_witness_files), collected also when `group` was
+        stopped, so that no file it wrote stays in its directory."""
+        started = start_time(witness_dir)
+        tool_result = run_in_session(
+            command=with_resource_limits(step, command.cmdline),
+            cwd=command.cwd,
+            group=group,
+            env=command.env,
+            )
+        witness_files = collect_witness_files(spec.witness, command.cwd, witness_dir, started)
+        return tool_result, witness_files
+
+    def status(self, actor: BaseTool2, step: Step, command: ComponentCommand,
+               tool_result: subprocess.CompletedProcess) -> str:
+        """The status of the run `tool_result` of `command`, which launch
+        returned for the component `actor` of `step`: component_status under
+        the step's CPU-time limit."""
+        return component_status(actor, command.cmdline, tool_result, component_cpu_time_limit(step))
 
 
 def component_memory_limit(step: Step) -> int | None:
@@ -486,13 +509,27 @@ def with_resource_limits(step: Step, command: list[str]) -> list[str]:
     (component_memory_limit) and RLIMIT_CPU to its CPU-time limit
     (component_cpu_time_limit). Prints "Memory limit of <component>: <n>
     bytes (RLIMIT_DATA)" and "CPU-time limit of <component>: <n> s
-    (RLIMIT_CPU)" for the limits it sets. A percentage for which the run
-    has no memory limit applies no limit and prints "Memory limit of
-    <component>: none (no cgroup memory limit found for "<value>")"."""
+    (RLIMIT_CPU)" for the limits it sets (announce_limits). A percentage for
+    which the run has no memory limit applies no limit and prints "Memory
+    limit of <component>: none (no cgroup memory limit found for
+    "<value>")"."""
+    memory, cpu = announce_limits(step, "RLIMIT_DATA", "RLIMIT_CPU")
+    return with_rlimits(command, memory, cpu)
+
+
+def announce_limits(step: Step, memory_mechanism: str, cpu_mechanism: str) -> tuple[int | None, int | None]:
+    """The memory limit in bytes (component_memory_limit) and the CPU-time
+    limit in seconds (component_cpu_time_limit) of the config.Step `step`,
+    None where it has none. Prints "Memory limit of <component>: <n> bytes
+    (<memory_mechanism>)" and "CPU-time limit of <component>: <n> s
+    (<cpu_mechanism>)" for the limits it returns, the mechanisms naming how
+    the runner applies them; for a percentage for which the run has no memory
+    limit, "Memory limit of <component>: none (no cgroup memory limit found
+    for "<value>")"."""
     tool_name = step.component
     memory = component_memory_limit(step)
     if memory is not None:
-        message = f"Memory limit of {tool_name}: {memory} bytes (RLIMIT_DATA)"
+        message = f"Memory limit of {tool_name}: {memory} bytes ({memory_mechanism})"
         with PRINT_LOCK:
             print(message, flush=True)
     else:
@@ -506,8 +543,8 @@ def with_resource_limits(step: Step, command: list[str]) -> list[str]:
     cpu = component_cpu_time_limit(step)
     if cpu is not None:
         with PRINT_LOCK:
-            print(f"CPU-time limit of {tool_name}: {cpu} s (RLIMIT_CPU)", flush=True)
-    return with_rlimits(command, memory, cpu)
+            print(f"CPU-time limit of {tool_name}: {cpu} s ({cpu_mechanism})", flush=True)
+    return memory, cpu
 
 
 def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subprocess.CompletedProcess,
