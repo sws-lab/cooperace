@@ -957,7 +957,7 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
              7: "CoOpeRace prints the configured component limits",
-             8: "Goblint's CPU-time limit ends a level and a later stage answers",
+             8: "Goblint's CPU-time limit ends it (TIMEOUT) and a later stage answers",
              9: "a parallel stage stops its other components once one answers"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of a false witness], CPU time; "
