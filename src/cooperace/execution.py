@@ -3,26 +3,18 @@
 # SPDX-License-Identifier: MIT
 
 """Running a component under BenchExec's benchexec.runexecutor.RunExecutor
-in its container (execute_run), which is how CoOpeRace runs every component.
+in its container (execute_run), which is how CoOpeRace runs every component:
+stop() kills the container with every process in it, the component's
+directory is an overlay (container_dir_modes), and the memory and CPU-time
+limits are limits of the run's cgroup, for all its processes together.
 
-The container needs user namespaces and its limits need cgroups, which a
-process has inside BenchExec's own container, under runexec or benchexec
-with cgroups v2, as in the competition. From a shell on Ubuntu 24.04,
-AppArmor gives user namespaces only to runexec and benchexec, not to
-python3, so CoOpeRace is run there through the wrapper `cooperace-run`, which
-calls runexec. container_works says whether the container can be made;
-cli.run refuses to start any component where it cannot.
-
-In the container, stop() kills the container's PID namespace with every
-process in it, the component's directory is an overlay
-(container_dir_modes), and the files matching `result_files_patterns` are
-moved from the overlay to `output_dir` after the run. The memory limit
-(`memlimit`) and the CPU-time limit (`hardtimelimit`) are limits of the
-run's cgroup, for all its processes together. BenchExec logs to stderr
-through `logging`.
-
-components.py imports this module only when a component runs, since
-benchexec.runexecutor needs Linux."""
+The container needs user namespaces and the limits cgroups v2, which a
+process has inside the container of runexec or benchexec, as in the
+competition; on Ubuntu 24.04, AppArmor refuses user namespaces to python3
+from a shell. container_works says whether the container can be made, and
+cli.run starts no component where it cannot. BenchExec logs to stderr
+through `logging`. components.py imports this module only when a component
+runs, since benchexec.runexecutor needs Linux."""
 from __future__ import annotations
 
 import os

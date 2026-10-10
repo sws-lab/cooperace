@@ -699,7 +699,7 @@ def run_lines(name: str, tool_result: subprocess.CompletedProcess) -> list[str]:
     walltime=<s>s memory=<bytes>B terminationreason=<reason>" with what
     BenchExec measured, a value it did not measure as "-" and a run that
     ended by itself as "terminationreason=none"; else none."""
-    if not hasattr(tool_result, "termination_reason") or tool_result.returncode is None:
+    if tool_result.returncode is None:
         return []
 
     def seconds(value):
