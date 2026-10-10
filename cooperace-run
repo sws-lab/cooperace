@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+
+# Runs CoOpeRace, the launcher `cooperace` next to this script, under
+# BenchExec's runexec, as SV-COMP runs it:
+#
+#   cooperace-run [RUNEXEC_OPTION ... --] COOPERACE_ARGUMENT ...
+#
+#   cooperace-run --prop tests/properties/no-data-race.prp task.i
+#   cooperace-run --timelimit 60s --memlimit 4GB --cores 0-3 -- --prop p.prp task.i
+#
+# CoOpeRace runs each component in a BenchExec container of its own, which
+# it can make only inside the container of runexec or benchexec. The run gets
+# the competition's options: `/` read-only, /home hidden, this directory an
+# overlay, `pids.max=5000`, 900 s of CPU time and 15 GB of memory. The
+# working directory is an overlay too, so that the witness can be written
+# there, and the directory of each argument that names a file is readable,
+# so that a task under /home or /tmp can be read. runexec options before
+# `--` come after these, so that a limit given there replaces the
+# competition's. TMPDIR is /tmp, so that runexec's temporary directories are
+# not inside a directory it overlays.
+#
+# CoOpeRace's output goes to stdout, runexec's report (CPU time, memory) to
+# stderr, and the witness files to the working directory. The exit status is
+# CoOpeRace's, 128+N if signal N ended it, and 1 if runexec did not run it.
+#
+# runexec is /usr/bin/runexec, from BenchExec's Debian package, if it exists:
+# on Ubuntu 24.04 AppArmor lets only that one make user namespaces. Otherwise
+# it is the runexec of the bundled lib/benchexec-*.whl, run by python3.
+
+set -euo pipefail
+
+DIR="$(dirname "$(realpath "$0")")"
+CWD="$(pwd -P)"
+
+RUNEXEC_OPTIONS=()
+for arg in "$@"; do
+  if [ "${arg}" = -- ]; then
+    while [ "$1" != -- ]; do RUNEXEC_OPTIONS+=("$1"); shift; done
+    shift
+    break
+  fi
+done
+
+# One directory mode per directory: runexec refuses a directory given twice.
+declare -A MODES=([/]=--read-only-dir [/home]=--hidden-dir ["${DIR}"]=--overlay-dir ["${CWD}"]=--overlay-dir)
+for arg in "$@"; do
+  if [ -f "${arg}" ]; then
+    parent="$(dirname "$(realpath "${arg}")")"
+    MODES["${parent}"]="${MODES["${parent}"]:---read-only-dir}"
+  fi
+done
+DIR_OPTIONS=()
+for path in "${!MODES[@]}"; do DIR_OPTIONS+=("${MODES["${path}"]}" "${path}"); done
+
+if [ -x /usr/bin/runexec ]; then
+  RUNEXEC=(/usr/bin/runexec)
+else
+  RUNEXEC=(env PYTHONPATH="$(echo "${DIR}"/lib/benchexec-*.whl)" python3 -m benchexec.runexecutor)
+fi
+
+OUT="$(mktemp -d /tmp/cooperace-run.XXXXXX)"
+trap 'rm -rf "${OUT}"' EXIT
+
+TMPDIR=/tmp "${RUNEXEC[@]}" --container "${DIR_OPTIONS[@]}" --set-cgroup-value pids.max=5000 \
+  --timelimit 900s --memlimit 15GB "${RUNEXEC_OPTIONS[@]}" \
+  --dir "${CWD}" --output "${OUT}/output.log" --output-directory "${OUT}/files" --result-files 'witness*' \
+  -- "${DIR}/cooperace" "$@" > "${OUT}/report" || true
+cat "${OUT}/report" >&2
+
+# runexec's output file starts with the command line, two empty lines, a
+# line of dashes and two empty lines.
+if [ -f "${OUT}/output.log" ]; then tail -n +7 "${OUT}/output.log"; fi
+shopt -s nullglob
+WITNESSES=("${OUT}"/files/witness*)
+if [ "${#WITNESSES[@]}" -gt 0 ]; then cp -r "${WITNESSES[@]}" .; fi
+
+SIGNAL="$(sed -n 's/^exitsignal=//p' "${OUT}/report")"
+if [ -n "${SIGNAL}" ]; then exit $((128 + SIGNAL)); fi
+exit "$(sed -n 's/^returnvalue=//p' "${OUT}/report" | grep . || echo 1)"

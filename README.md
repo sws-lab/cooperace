@@ -23,9 +23,35 @@ competition image has it as `python3-yaml`). The helper scripts need more: [`pyp
 lists their packages as the `scripts` extra, and the packages of the checks in `.github/workflows/ci.yml`
 as the `dev` dependency group. The project is not installed as a package; the launcher runs from its checkout.
 
-To test the sv-comp package, run `./cooperace --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i`,
-which prints `CoOpeRace verdict: false` as its last line and writes `witness.graphml`.
-`scripts/sv-comp/smoketest.sh` checks exactly that, and the archive carries both files at these paths.
+## Running CoOpeRace by hand
+
+CoOpeRace runs under BenchExec, as in the competition, where `benchexec` runs `./cooperace` through
+BenchExec's tool-info module. From a shell, run it through `./cooperace-run`, which calls BenchExec's
+`runexec` with the competition's options (`/` read-only, `/home` hidden, CoOpeRace's directory an overlay,
+`pids.max=5000`, 900 s of CPU time, 15 GB of memory):
+
+```bash
+./cooperace-run --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i
+./cooperace-run --timelimit 60s --memlimit 4GB -- --prop task.prp task.i
+```
+
+The first prints `CoOpeRace verdict: false` as its last line and writes `witness.graphml` into the working
+directory; `scripts/sv-comp/smoketest.sh` checks exactly that, and the archive carries both files at these
+paths. `runexec` options go before a `--` and replace the competition's limits. `cooperace-run` prints
+CoOpeRace's output on stdout and `runexec`'s report (CPU time, wall time, memory) on stderr, copies the
+witness files into the working directory, and exits with CoOpeRace's exit status.
+
+The machine needs:
+
+- Linux with cgroups v2, in which BenchExec can make a cgroup: from a shell under systemd that takes
+  `pystemd` (Ubuntu's `python3-pystemd`). `python3 -m benchexec.check_cgroups` says whether it can.
+- User namespaces for BenchExec's container. On Ubuntu 24.04, AppArmor allows them only to programs with a
+  profile that permits them: install BenchExec's Debian package (with its recommended packages, among them
+  `python3-pystemd` and `fuse-overlayfs`), whose `/usr/bin/runexec` has one and which `cooperace-run` uses
+  when it exists, or set `sysctl kernel.apparmor_restrict_unprivileged_userns=0`. Without
+  `/usr/bin/runexec`, `cooperace-run` runs the `runexec` of the bundled wheel in `lib/`.
+- What the components need, the `required_ubuntu_packages` of their fm-tools entries (Java 21 for Dartagnan
+  and ULTIMATE Automizer).
 
 CoOpeRace can be started from any working directory: it finds its `lib/`, `conf/` and `tools/` from the location of the launcher. `--prop` is required. CoOpeRace recognizes the property from the formulas in the property file (unreach-call, no-overflow, valid-memsafety or no-data-race, as sv-benchmarks writes them) and runs the conf's strategy for that property; a conf can give each property its own strategy ([`conf/README.md`](conf/README.md)). A property the conf has no strategy for, and a property file of none of these four properties, are refused. Every conf in `conf/`, `conf/svcomp26.json` included, has a strategy for no-data-race only, so CoOpeRace answers only no-data-race. The last line of the output is `CoOpeRace verdict: true`, `false` or `unknown` for no-data-race; for the other properties a `false` names the property, as BenchExec's result for the accepted component does: `false(unreach-call)`, `false(no-overflow)`, or `false(valid-deref)`, `false(valid-free)` or `false(valid-memtrack)` for valid-memsafety. A component's status counts as a verdict only if it belongs to the task's property: `false(unreach-call)` is no verdict on a no-data-race task, and a plain `false` is none on a valid-memsafety task, whose expected `false` names the violated sub-property. A defect of the command line, the property, the conf or the installation ends CoOpeRace with status 1 (2 for a command line that argparse refuses), one line `CoOpeRace: error: ...` on stderr and no verdict line, which BenchExec records as ERROR. A component that runs and fails is not such a defect: its status is printed and the next step runs.
 

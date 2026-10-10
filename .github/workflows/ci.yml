@@ -41,7 +41,7 @@ jobs:
         run: reuse lint
 
       - name: shellcheck
-        run: find scripts -name '*.sh' -print0 | xargs -0 shellcheck
+        run: shellcheck cooperace-run && find scripts -name '*.sh' -print0 | xargs -0 shellcheck
 
       - name: The launcher runs from another directory
         working-directory: ${{ runner.temp }}
