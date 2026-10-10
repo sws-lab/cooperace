@@ -89,11 +89,11 @@ def test_cooperace_options_and_benchexec_args_reach_the_cooperace_runs(tmp_path,
                         lambda path, module, options, *args, **kwargs: definitions.append(options))
     runs = {"svcomp26": dict(kind="config", tasks=[{"id": "t"}], conf=cdir / "conf" / "svcomp26.json")}
     args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
-                           cooperace_option=["--component-runner", "nested"],
+                           cooperace_option=["--arch", "LP64"],
                            benchexec_args="--read-only-dir / --overlay-dir ./ --hidden-dir /home/")
 
     run.verify(args, runs, cdir, tmp_path / "out")
 
     assert definitions == [{"svcomp26": [("--conf", str(cdir / "conf" / "svcomp26.json")),
-                                         ("--component-runner", "nested")]}]
+                                         ("--arch", "LP64")]}]
     assert started[0][-7:-1] == ["--read-only-dir", "/", "--overlay-dir", "./", "--hidden-dir", "/home/"]

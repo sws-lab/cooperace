@@ -37,9 +37,8 @@ of these checks (see README.md):
      `CoOpeRace: error:`, one witness file for a `false`
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
-  8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends a level of Goblint's
-     portfolio (with `--component-runner nested`: ends Goblint, TIMEOUT) and
-     a later stage gives the expected verdict
+  8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends Goblint (status
+     TIMEOUT) and a later stage gives the expected verdict
   9  when a component of a parallel stage gives the returned verdict, every
      other component of that stage is stopped or answered unknown; no
      component runs twice
@@ -669,16 +668,18 @@ DELIVERED_WITNESSES = {"witness.graphml": is_graphml, "witness.yml": is_yaml_wit
 def limit_problems(run, r, lines):
     """What is wrong with the lines in which CoOpeRace announces the limits of
     `memoryLimits` and `cpuTimeLimits` of the run's configuration (check 7):
-    each component with a limit that started must have its line, and every
+    each component with a limit that started must have its line, every
     such line must give the configured limit, a percentage taken of the
-    memory limit BenchExec records for the run, within 1 %."""
+    memory limit BenchExec records for the run, within 1 %, and none may say
+    that the limit was not applied (under BenchExec every limit has its
+    cgroup)."""
     config = run.get("config") or {}
     if lines is None or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
         return []
     blocks, _ = component_blocks(lines)
     started = {b["name"] for b in blocks if b["exit_code"] != "none, not started"}
     problems = []
-    # The lines with_resource_limits of src/cooperace/components.py prints.
+    # The lines announce_limits of src/cooperace/components.py prints.
     for key, label, unit in (("memoryLimits", "Memory limit", "bytes"),
                              ("cpuTimeLimits", "CPU-time limit", "s")):
         for name, value in config.get(key, {}).items():
@@ -698,17 +699,17 @@ def limit_problems(run, r, lines):
             for n in printed:
                 if abs(n - expected) > 0.01 * expected:
                     problems.append(f"{name}'s limit is printed as {n} {unit}, but {key} gives {wanted}")
+            if any(line_of.match(line) and "not applied" in line for line in lines):
+                problems.append(f"{name}'s {label[0].lower() + label[1:]} is printed as not applied")
     return problems
 
 
 def goblint_cpu_limit_problems(r, t, lines):
     """What departs, in the run `r` of task `t`, from what a CPU-time limit of
-    Goblint that ends a level of its portfolio should cause (check 8): the
-    portfolio runner reports `goblint exited with code -24` (SIGXCPU) in
-    Goblint's block, or, with `--component-runner nested`, whose limit is one
-    of Goblint's cgroup and ends the whole portfolio, Goblint's status is
-    TIMEOUT; Goblint's stage ends without a verdict, and a component of a
-    later stage gives the expected verdict."""
+    Goblint should cause (check 8): the limit, one of the cgroup of Goblint's
+    run, ends its whole portfolio, so Goblint's status is TIMEOUT; Goblint's
+    stage ends without a verdict, and a component of a later stage gives the
+    expected verdict."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
     blocks, _ = component_blocks(lines)
@@ -716,10 +717,8 @@ def goblint_cpu_limit_problems(r, t, lines):
     problems = []
     if not goblint:
         return ["Goblint did not run"]
-    if not (any("goblint exited with code -24" in line for line in goblint[0]["output"])
-            or goblint[0]["status"] == "TIMEOUT"):
-        problems.append("no level of Goblint's portfolio ended with `goblint exited with code -24`, "
-                        "and Goblint's status is not TIMEOUT")
+    if goblint[0]["status"] != "TIMEOUT":
+        problems.append(f"Goblint's status is {goblint[0]['status']}, not TIMEOUT")
     if goblint[0]["result"] != "unknown":
         problems.append(f"Goblint's result is {goblint[0]['result']}, not unknown")
     answered = answering_name(lines)
@@ -1010,8 +1009,8 @@ def main():
     ap.add_argument("--timelimit", type=int, default=100, help="CPU seconds per run")
     ap.add_argument("--witness-format", choices=list(WITNESS_FORMATS), default="graphml-1.0")
     ap.add_argument("--cooperace-option", action="append", default=[], metavar="OPT",
-                    help="an option for every ./cooperace run, e.g. --cooperace-option=--component-runner "
-                         "--cooperace-option=nested")
+                    help="an option for every ./cooperace run, e.g. --cooperace-option=--arch "
+                         "--cooperace-option=LP64")
     ap.add_argument("--benchexec-args", default="",
                     help="further arguments for every benchexec call, as one shell-quoted string, e.g. "
                          "the competition's container: \"--read-only-dir / --overlay-dir ./ --hidden-dir /home/\"")
