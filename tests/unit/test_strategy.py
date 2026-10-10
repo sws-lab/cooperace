@@ -3,15 +3,16 @@
 # SPDX-License-Identifier: MIT
 
 """The strategy: run_sequence, run_parallel and their nesting, with fake
-components. Each fake runs a real `sleep` child through run_in_session, so that
-stopping a loser really ends a process; only run_component is replaced."""
+components. Each fake runs a real `sleep` under RunExecutor
+(support.run_command), so that stopping a loser really ends a process; only
+run_component is replaced."""
 import threading
 import time
 
 import pytest
+from support import run_command
 
 from src.cooperace import config, strategy
-from src.cooperace.processes import run_in_session
 from src.cooperace.strategy import NO_OUTCOME, Outcome
 
 # Letters for the components, so that a conf reads as a tree. All are names
@@ -57,7 +58,7 @@ class Script:
 
     def run_component(self, actor, step, group):
         letter, seconds, verdict, *witness = self.components[actor.name()]
-        result = run_in_session(["sleep", str(seconds)], str(self.tmp_path), group)
+        result = run_command(["sleep", str(seconds)], self.tmp_path, group)
         if result.returncode is None:
             return NO_OUTCOME
         with self.lock:
@@ -161,7 +162,7 @@ def test_parallel_returns_the_first_accepted_verdict_and_stops_the_loser(make_ru
 
     assert outcome == Outcome("false", "Deagle", ["/run/b/w.yml"], "false")
     assert elapsed < 10  # the 60 s sleep was ended, not waited for
-    assert script.returncodes["a"] in (-15, -9)
+    assert script.returncodes["a"] == -9
     assert script.returncodes["b"] == 0
 
 
@@ -244,7 +245,7 @@ def test_parallel_group_inside_a_sequence_returns_its_first_verdict(make_runner,
 
     assert outcome.component == "Deagle"
     assert "c" not in script.started
-    assert script.returncodes["a"] in (-15, -9)
+    assert script.returncodes["a"] == -9
 
 
 def test_sequence_goes_on_when_the_parallel_group_inside_it_has_no_verdict(make_runner, group, tmp_path):
@@ -265,7 +266,7 @@ def test_sequence_inside_a_parallel_group_runs_its_steps_in_order(make_runner, g
     # `started` is in the order the children ended: a, then b, whose verdict
     # ends c.
     assert script.started == ["a", "b", "c"]
-    assert script.returncodes["c"] in (-15, -9)
+    assert script.returncodes["c"] == -9
 
 
 def test_stopped_parallel_group_does_not_start_the_later_steps_of_its_sequence(
@@ -289,5 +290,5 @@ def test_parallel_inside_parallel_is_stopped_with_the_outer_group(make_runner, g
 
     assert outcome.component == "Dartagnan"
     assert time.monotonic() - started < 10
-    assert script.returncodes["a"] in (-15, -9)
-    assert script.returncodes["b"] in (-15, -9)
+    assert script.returncodes["a"] == -9
+    assert script.returncodes["b"] == -9

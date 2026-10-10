@@ -2,37 +2,23 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Per-component resource limits: with_resource_limits, with_rlimits,
-component_memory_limit and run_memory_limit, the CPU time run_in_session
-reports, and the status TIMEOUT of a component its CPU-time limit ends."""
+"""Per-component resource limits: which limits announce_limits passes on and
+prints for a Mode with and without cgroups, component_memory_limit,
+component_cpu_time_limit and run_memory_limit. That the limits end a run is
+tested with real runs in test_execution.py and test_execute.py."""
 import inspect
-import subprocess
-import sys
 
 import pytest
-from support import make_script, register_stub
 
 from src.cooperace import components
 from src.cooperace.config import Step
-from src.cooperace.processes import ComponentGroup, run_in_session, run_memory_limit, with_rlimits
+from src.cooperace.execution import Mode
+from src.cooperace.processes import run_memory_limit
 
 MEBIBYTE = 2**20
 
-# A command that ends only by a signal from outside. It first makes itself
-# non-dumpable (PR_SET_DUMPABLE is 4), because SIGXCPU's default action dumps
-# core, and a core_pattern that pipes to a crash reporter makes that take
-# seconds.
-BUSY_LOOP = [sys.executable, "-c",
-             "import ctypes; ctypes.CDLL(None).prctl(4, 0)\nwhile True: pass"]
-PRINT_DATA_LIMIT = [sys.executable, "-c",
-                    "import resource; print(resource.getrlimit(resource.RLIMIT_DATA))"]
-
-
-def run_limited(command, cwd, timeout=30):
-    """Runs `command` (from with_resource_limits) to its end with its output
-    captured."""
-    return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False,
-                          timeout=timeout)
+WITH_CGROUPS = Mode(container=True, memory=True, cpu_time=True, freezer=True)
+WITHOUT_CGROUPS = Mode(container=False, memory=False, cpu_time=False, freezer=False)
 
 
 def goblint(memory=None, cpu=None):
@@ -40,126 +26,41 @@ def goblint(memory=None, cpu=None):
     return Step("Goblint", "all", memory_limit=memory, cpu_time_limit=cpu)
 
 
-# --- with_resource_limits -----------------------------------------------------
+# --- announce_limits ----------------------------------------------------------
 
-def test_no_limits_returns_the_command_unchanged(capsys):
-    command = ["echo", "hello"]
-
-    assert components.with_resource_limits(goblint(), command) is command
+def test_no_limits_print_nothing(capsys):
+    assert components.announce_limits(goblint(), WITH_CGROUPS) == (None, None)
     assert capsys.readouterr().out == ""
 
 
-def test_cpu_time_limit_ends_a_busy_loop_by_sigxcpu(tmp_path, capsys):
-    command = components.with_resource_limits(goblint(cpu=1), BUSY_LOOP)
-    result = run_limited(command, tmp_path)
-
-    assert result.returncode == -24
-    assert "CPU-time limit of Goblint: 1 s (RLIMIT_CPU)" in capsys.readouterr().out
-
-
-def test_a_component_ended_by_its_cpu_time_limit_has_status_timeout(make_runner, group, tmp_path, capsys):
-    runner = make_runner()
-    loop = " ".join(f"'{part}'" for part in BUSY_LOOP)
-    register_stub(runner, "Looping", make_script(tmp_path / "stub", f"exec {loop}\n"))
-
-    outcome = runner.run_step(Step("Looping", "all", cpu_time_limit=1), group)
-
-    assert outcome.verdict == "unknown"
-    lines = capsys.readouterr().out.splitlines()
-    assert "Tool name: Looping Status: TIMEOUT Exit code: signal 24" in lines
-    assert "Tool name: Looping Result: unknown" in lines
+def test_limits_the_mode_can_apply_are_returned_and_printed_with_their_cgroup(capsys):
+    assert components.announce_limits(goblint(memory=512 * MEBIBYTE, cpu=7), WITH_CGROUPS) == (512 * MEBIBYTE, 7)
+    assert capsys.readouterr().out.splitlines() == [
+        f"Memory limit of Goblint: {512 * MEBIBYTE} bytes (memory cgroup of its run)",
+        "CPU-time limit of Goblint: 7 s (cpu cgroup of its run)"]
 
 
-def test_run_in_session_reports_the_cpu_time_of_the_process_and_its_waited_for_children(tmp_path):
-    spin = "import time\nend = time.process_time() + 0.5\nwhile time.process_time() < end: pass"
-    code = f"import subprocess, sys; subprocess.run([sys.executable, '-c', {spin!r}])"
-
-    result = run_in_session([sys.executable, "-c", code], str(tmp_path), ComponentGroup())
-
-    assert result.returncode == 0
-    assert result.cpu_time >= 0.5
+def test_limits_the_mode_cannot_apply_are_printed_as_not_applied_and_not_returned(capsys):
+    assert components.announce_limits(goblint(memory=512 * MEBIBYTE, cpu=7), WITHOUT_CGROUPS) == (None, None)
+    assert capsys.readouterr().out.splitlines() == [
+        f"Memory limit of Goblint: {512 * MEBIBYTE} bytes, not applied: no usable memory cgroup",
+        "CPU-time limit of Goblint: 7 s, not applied: no usable cpu cgroup"]
 
 
-def test_cpu_time_limit_does_not_touch_a_command_that_ends_by_itself(tmp_path):
-    command = components.with_resource_limits(goblint(cpu=5), [sys.executable, "-c", "print('done')"])
-    result = run_limited(command, tmp_path)
+def test_each_limit_depends_on_its_own_cgroup(capsys):
+    memory_only = Mode(container=True, memory=True, cpu_time=False, freezer=False)
 
-    assert (result.returncode, result.stdout) == (0, "done\n")
-
-
-def test_cpu_time_limit_sets_a_hard_limit_one_second_higher(tmp_path):
-    code = "import resource; print(resource.getrlimit(resource.RLIMIT_CPU))"
-
-    command = components.with_resource_limits(goblint(cpu=7), [sys.executable, "-c", code])
-    result = run_limited(command, tmp_path)
-
-    assert result.stdout.strip() == "(7, 8)"
+    assert components.announce_limits(goblint(memory=1000, cpu=7), memory_only) == (1000, None)
+    assert capsys.readouterr().out.splitlines()[1] == (
+        "CPU-time limit of Goblint: 7 s, not applied: no usable cpu cgroup")
 
 
-def test_memory_limit_in_bytes_sets_rlimit_data(tmp_path, capsys):
-    limit = 512 * MEBIBYTE
-
-    command = components.with_resource_limits(goblint(memory=limit), PRINT_DATA_LIMIT)
-    result = run_limited(command, tmp_path)
-
-    assert result.stdout.strip() == f"({limit}, {limit})"
-    assert (f"Memory limit of Goblint: {limit} bytes (RLIMIT_DATA)"
-            in capsys.readouterr().out)
-
-
-def test_memory_limit_makes_a_larger_allocation_fail(tmp_path):
-    code = f"bytearray({1024 * MEBIBYTE})"
-
-    command = components.with_resource_limits(goblint(memory=256 * MEBIBYTE), [sys.executable, "-c", code])
-    result = run_limited(command, tmp_path)
-
-    assert result.returncode == 1
-    assert "MemoryError" in result.stderr
-
-
-def test_both_limits_apply_and_the_command_keeps_its_arguments(tmp_path):
-    code = ("import resource, sys\n"
-            "print(resource.getrlimit(resource.RLIMIT_DATA)[0],"
-            " resource.getrlimit(resource.RLIMIT_CPU)[0], sys.argv[1:])")
-
-    command = components.with_resource_limits(goblint(memory=512 * MEBIBYTE, cpu=7),
-                                      [sys.executable, "-c", code, "a b", "c"])
-    result = run_limited(command, tmp_path)
-
-    assert result.stdout.strip() == f"{512 * MEBIBYTE} 7 ['a b', 'c']"
-
-
-def test_percentage_memory_limit_resolves_against_the_run_limit(tmp_path, monkeypatch, capsys):
+def test_a_percentage_resolves_against_the_run_limit(monkeypatch, capsys):
     monkeypatch.setattr(components, "run_memory_limit", lambda: 1000 * MEBIBYTE)
-    expected = 700 * MEBIBYTE
 
-    command = components.with_resource_limits(goblint(memory="70%"), PRINT_DATA_LIMIT)
-    result = run_limited(command, tmp_path)
-
-    assert result.stdout.strip() == f"({expected}, {expected})"
-    assert (f"Memory limit of Goblint: {expected} bytes (RLIMIT_DATA)"
-            in capsys.readouterr().out)
-
-
-# --- with_rlimits ----------------------------------------------------------
-
-def test_with_rlimits_without_limits_returns_the_command():
-    command = ["echo", "hello"]
-
-    assert with_rlimits(command) is command
-    assert with_rlimits(command, None, None) is command
-
-
-def test_with_rlimits_runs_the_command_in_place_of_the_wrapper(tmp_path):
-    """The wrapper execs the command, so the command keeps the wrapper's
-    process: the session and the process group that run_in_session made."""
-    code = "import os; print(os.getpid())"
-    command = with_rlimits([sys.executable, "-c", code], cpu=10)
-
-    process = subprocess.Popen(command, cwd=tmp_path, stdout=subprocess.PIPE, text=True)
-    output, _ = process.communicate(timeout=30)
-
-    assert int(output) == process.pid
+    assert components.announce_limits(goblint(memory="70%"), WITH_CGROUPS) == (700 * MEBIBYTE, None)
+    assert capsys.readouterr().out.splitlines() == [
+        f"Memory limit of Goblint: {700 * MEBIBYTE} bytes (memory cgroup of its run)"]
 
 
 # --- component_memory_limit and component_cpu_time_limit -------------------------

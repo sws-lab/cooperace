@@ -6,8 +6,6 @@
 component in its registry. The package finds the bundled BenchExec (lib/*.whl)
 from its own location, so the tests can be run from any directory."""
 import importlib
-import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -46,32 +44,3 @@ def group():
 @pytest.fixture
 def runner(make_runner):
     return make_runner()
-
-
-@pytest.fixture
-def spawn():
-    """Returns a function that starts a command as the leader of a new
-    session, with no input and its output discarded. The process group of
-    every command started is killed and the leader reaped at the end of the
-    test."""
-    started = []
-
-    def start(command, **kwargs):
-        process = subprocess.Popen(
-            command,
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            **kwargs,
-        )
-        started.append(process)
-        return process
-
-    yield start
-    for process in started:
-        try:
-            os.killpg(process.pid, 9)
-        except ProcessLookupError:
-            pass
-        process.wait()

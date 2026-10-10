@@ -3,22 +3,24 @@
 # SPDX-License-Identifier: MIT
 
 """cli.run and strategy.execute end to end with stub components: shell scripts
-run through the real run_component, run_in_session and component_status, and the
-stop on a signal in a separate process."""
+run through the real run_component, execution.execute_run and
+component_status, in the execution.Mode found here, and the stop on a signal
+in a separate process."""
 import os
 import shlex
 import signal
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
 from support import make_script, register_stub, wait_until
 
-from src.cooperace import cli
+from src.cooperace import TOOL_DIR, cli, execution
 from src.cooperace.components import ComponentRunner
-from src.cooperace.processes import ComponentGroup, processExited
+from src.cooperace.processes import ComponentGroup
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPPORT_DIR = Path(__file__).resolve().parent
@@ -61,7 +63,28 @@ def stubbed_run(make_runner, tmp_path, run_type, **stubs):
 
 
 def lines_of(captured):
-    return captured.out.splitlines()
+    """The lines of the captured standard output without the lines
+    "Tool name: X Mode: ..." and "Tool name: X Measured: ...", whose values
+    depend on the machine; test_the_block_of_a_started_run_ends_with_its_mode_and_measurements
+    checks them."""
+    return [line for line in captured.out.splitlines()
+            if not (line.startswith("Tool name: ") and (" Mode: " in line or " Measured: " in line))]
+
+
+def mode_here():
+    return execution.detect_mode(os.path.join(TOOL_DIR, "tools"))
+
+
+def test_the_block_of_a_started_run_ends_with_its_mode_and_measurements(make_runner, tmp_path, run_dir, capsys):
+    run, _ = stubbed_run(make_runner, tmp_path, "sequential", Stub_A='echo "STUB-STATUS: true"\n')
+
+    run.execute()
+    lines = capsys.readouterr().out.splitlines()
+
+    result = lines.index("Tool name: Stub A Result: true")
+    assert lines[result + 1] == f"Tool name: Stub A Mode: {mode_here().description()}"
+    assert lines[result + 2].startswith("Tool name: Stub A Measured: cputime=")
+    assert lines[result + 2].endswith(" terminationreason=none")
 
 
 def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verdict(
@@ -198,7 +221,7 @@ def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
 
     assert verdict == "true"
     assert "Tool name: Stub Fast Result: true" in lines
-    assert "Tool name: Stub Slow Status: stopped by CoOpeRace Exit code: signal 15" in lines
+    assert "Tool name: Stub Slow Status: stopped by CoOpeRace Exit code: signal 9" in lines
     assert not any(line.startswith("Tool name: Stub Slow Result:") for line in lines)
 
 
@@ -297,11 +320,9 @@ def test_run_returns_the_result_of_the_accepted_status_for_the_property(
 
 # --- per-component limits ----------------------------------------------------
 
-# A stub that runs until a signal ends it. It first makes itself non-dumpable
-# (PR_SET_DUMPABLE is 4), because SIGXCPU's default action dumps core.
-BUSY_STUB = (f"exec {shlex.quote(sys.executable)} -c "
-             + shlex.quote("import ctypes; ctypes.CDLL(None).prctl(4, 0)\nwhile True: pass") + "\n")
-# A stub that allocates 1 GiB, which fails with MemoryError under a smaller RLIMIT_DATA.
+# A stub that runs until a signal ends it.
+BUSY_STUB = f"exec {shlex.quote(sys.executable)} -c 'while True: pass'\n"
+# A stub that allocates 1 GiB.
 ALLOCATING_STUB = f"exec {shlex.quote(sys.executable)} -c 'bytearray(2**30)'\n"
 
 
@@ -324,14 +345,16 @@ def limited_run(make_runner, tmp_path, property_name, per_property, limits):
     ids=["one-strategy", "per-property-no-data-race", "per-property-valid-memsafety"])
 def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_next(
         make_runner, tmp_path, run_dir, capsys, property_name, per_property):
+    if not mode_here().cpu_time:
+        pytest.skip(f"no CPU-time limit here: {mode_here().description()}")
     run = limited_run(make_runner, tmp_path, property_name, per_property, {"cpuTimeLimits": {"Stub A": 1}})
 
     verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
     assert verdict == "true"
-    assert "CPU-time limit of Stub A: 1 s (RLIMIT_CPU)" in lines
-    assert "Tool name: Stub A Status: TIMEOUT Exit code: signal 24" in lines
+    assert "CPU-time limit of Stub A: 1 s (cpu cgroup of its run)" in lines
+    assert "Tool name: Stub A Status: TIMEOUT Exit code: signal 9" in lines
     assert "Tool name: Stub A Result: unknown" in lines
     assert not any(line.startswith("CPU-time limit of Stub B") for line in lines)
     assert lines[-1] == "CoOpeRace result from: Stub B"
@@ -339,6 +362,8 @@ def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_n
 
 def test_a_component_stopped_at_its_memory_limit_leaves_cooperace_to_run_the_next(
         make_runner, tmp_path, run_dir, capsys):
+    if not mode_here().memory:
+        pytest.skip(f"no memory limit here: {mode_here().description()}")
     limit = 256 * 2**20
     run = limited_run(make_runner, tmp_path, "unreach-call", True, {"memoryLimits": {"Stub A": limit}})
 
@@ -346,8 +371,8 @@ def test_a_component_stopped_at_its_memory_limit_leaves_cooperace_to_run_the_nex
     lines = lines_of(capsys.readouterr())
 
     assert verdict == "true"
-    assert f"Memory limit of Stub A: {limit} bytes (RLIMIT_DATA)" in lines
-    assert "Tool name: Stub A Status: unknown Exit code: 1" in lines
+    assert f"Memory limit of Stub A: {limit} bytes (memory cgroup of its run)" in lines
+    assert "Tool name: Stub A Status: OUT OF MEMORY Exit code: signal 9" in lines
     assert lines[-1] == "CoOpeRace result from: Stub B"
 
 
@@ -374,18 +399,18 @@ DRIVER = textwrap.dedent('''
     print("verdict:", cli.run(conf, run), flush=True)
 ''')
 
-# Writes its pid where the test can find it, then replaces the shell by sleep.
-SLEEPING_STUB = 'echo $$ > "$(dirname "$0")/pid"\necho "stub started"\nexec sleep 60\n'
+# Starts a child that would write the file `escaped` beside the script after
+# 3 s, writes `started` there, then replaces the shell by sleep.
+SLEEPING_STUB = ('dir="$(dirname "$0")"\n(sleep 3; touch "$dir/escaped") &\n'
+                 'touch "$dir/started"\necho "stub started"\nexec sleep 60\n')
 
 
 @pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
 def test_a_stop_signal_ends_cooperace_and_every_component(tmp_path, signum):
     stub_dir, run_dir = tmp_path / "stubs", tmp_path / "cwd"
     run_dir.mkdir()
-    pid_files = []
     for letter in "AB":
         make_script(stub_dir / letter, SLEEPING_STUB)
-        pid_files.append(stub_dir / letter / "pid")
     driver_file = tmp_path / "driver.py"
     driver_file.write_text(DRIVER)
 
@@ -395,8 +420,13 @@ def test_a_stop_signal_ends_cooperace_and_every_component(tmp_path, signum):
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, start_new_session=True)
     try:
-        assert wait_until(lambda: all(f.exists() and f.read_text().strip()
-                                      for f in pid_files)), "the stubs did not start"
+        # In the container a stub's files reach its directory only through
+        # the overlay, so its output is what shows that it started.
+        assert wait_until(lambda: mode_here().container
+                          or all((stub_dir / letter / "started").exists() for letter in "AB")), \
+            "the stubs did not start"
+        if mode_here().container:
+            time.sleep(2)
         os.kill(driver.pid, signum)
         output, _ = driver.communicate(timeout=30)
     finally:
@@ -409,9 +439,9 @@ def test_a_stop_signal_ends_cooperace_and_every_component(tmp_path, signum):
     assert f"CoOpeRace stopped by signal {signum}" in lines
     for letter in "AB":
         assert (f"Tool name: Stub {letter} Status: stopped by CoOpeRace "
-                "Exit code: signal 15") in lines
+                "Exit code: signal 9") in lines
         assert f"Tool name: Stub {letter} Result: unknown" not in lines
     assert not any(line.startswith("verdict:") for line in lines)
-    for pid_file in pid_files:
-        pid = int(pid_file.read_text())
-        assert wait_until(lambda pid=pid: processExited(pid)), f"stub {pid} still runs"
+    # The children of the stubs were ended with them
+    time.sleep(3.5)
+    assert not any((stub_dir / letter / "escaped").exists() for letter in "AB")

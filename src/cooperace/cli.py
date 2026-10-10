@@ -15,10 +15,7 @@ other properties the status with its property, as "false(unreach-call)",
 "false(valid-free)" or "false(valid-memtrack)".
 
 The task, the property file and `--conf` are paths relative to the working
-directory; without `--conf`, conf/svcomp26.json of TOOL_DIR is read.
-`--component-runner` chooses how each component runs: "session"
-(components.ComponentRunner, the default) or "nested"
-(components.NestedComponentRunner, a nested BenchExec run each). The
+directory; without `--conf`, conf/svcomp26.json of TOOL_DIR is read. The
 property is recognized from the formulas in the property file
 (properties.recognize), never from a file name or path. A property file with
 formulas of no property in properties.FORMULAS, and a property the conf gives
@@ -51,7 +48,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from . import TOOL_DIR, config, properties, strategy
-from .components import DATA_MODELS, REGISTRY, ComponentRunner, NestedComponentRunner, OptionsFileError
+from .components import DATA_MODELS, REGISTRY, ComponentRunner, OptionsFileError
 from .config import Node
 from .processes import ComponentGroup
 
@@ -124,10 +121,6 @@ def version_string(root: Path) -> str:
     return "unknown"
 
 
-# The ComponentRunner classes `--component-runner` chooses between.
-COMPONENT_RUNNERS = {"session": ComponentRunner, "nested": NestedComponentRunner}
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
 
@@ -137,10 +130,6 @@ def main() -> None:
                         help='property file; its property must have a strategy in the conf')
     parser.add_argument('--conf', required=False,
                         help='conf file (default: conf/svcomp26.json of the tool directory)')
-    parser.add_argument('--component-runner', choices=sorted(COMPONENT_RUNNERS), default='session',
-                        help='how each component is run: "session" (default), a process session of its own '
-                             'under rlimits; "nested", a nested BenchExec run in a container and cgroup of '
-                             'its own, which needs cgroups v2 inside BenchExec\'s container')
     parser.add_argument('--version', action='version', version='CoOpeRace ' + version_string(Path(TOOL_DIR)))
     parser.add_argument('filepath')
 
@@ -157,8 +146,7 @@ def main() -> None:
         #so that a refused conf or property gives one line there
         strategy_for(load_strategies(conf, REGISTRY), property_name)
         try:
-            runner = COMPONENT_RUNNERS[args.component_runner](abs_path, args.prop, args.arch,
-                                                              property_name=property_name)
+            runner = ComponentRunner(abs_path, args.prop, args.arch, property_name=property_name)
         except OptionsFileError as error:
             raise SetupError(str(error)) from error
         verdict = run(conf, runner)

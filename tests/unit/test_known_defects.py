@@ -13,6 +13,7 @@ import pytest
 
 from src.cooperace import components, config, strategy
 from src.cooperace.config import Step
+from src.cooperace.execution import Mode
 from src.cooperace.strategy import NO_OUTCOME, Outcome, StopSignal
 
 
@@ -63,13 +64,12 @@ def test_D2_a_branch_ending_with_systemexit_does_not_hang_run_parallel(make_runn
 
 def test_D4_a_percentage_limit_without_a_cgroup_limit_says_that_no_limit_applies(
         monkeypatch, capsys):
-    """Expected: with_resource_limits prints a line starting with
-    "Memory limit of Goblint: none" naming the percentage; the command is
-    still returned unchanged."""
+    """Expected: announce_limits prints a line starting with "Memory limit
+    of Goblint: none" naming the percentage, and returns no limit."""
     monkeypatch.setattr(components, "run_memory_limit", lambda: None)
-    command = ["echo", "hello"]
+    mode = Mode(container=True, memory=True, cpu_time=True, freezer=True)
 
-    assert components.with_resource_limits(Step("Goblint", "all", memory_limit="70%"), command) is command
+    assert components.announce_limits(Step("Goblint", "all", memory_limit="70%"), mode) == (None, None)
     lines = capsys.readouterr().out.splitlines()
     assert lines == ['Memory limit of Goblint: none (no cgroup memory limit found for "70%")']
 

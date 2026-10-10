@@ -11,7 +11,6 @@ import subprocess
 import pytest
 
 from src.cooperace import components
-from src.cooperace.processes import FinishedProcess
 
 
 class StatusActor:
@@ -30,10 +29,10 @@ class StatusActor:
         return self.status
 
 
-def status_of(status, returncode, stdout="output", cpu_time=None, cpu_time_limit=None):
+def status_of(status, returncode, stdout="output", termination_reason=None):
     actor = StatusActor(status)
-    result = FinishedProcess(["fake"], returncode, stdout, "", cpu_time)
-    return components.component_status(actor, ["fake"], result, cpu_time_limit)
+    result = subprocess.CompletedProcess(["fake"], returncode, stdout, "")
+    return components.component_status(actor, ["fake"], result, termination_reason)
 
 
 # What component_status returns for the status that determine_result gives and
@@ -61,10 +60,7 @@ STATUS_TABLE = [
     ("ERROR", -signal.SIGSEGV, "SEGMENTATION FAULT"),
     ("unknown", -signal.SIGTERM, "KILLED"),
     ("ERROR", -signal.SIGTERM, "KILLED"),
-    # SIGXCPU is sent only by RLIMIT_CPU
-    ("unknown", -signal.SIGXCPU, "TIMEOUT"),
-    ("ERROR", -signal.SIGXCPU, "TIMEOUT"),
-    ("done", -signal.SIGXCPU, "TIMEOUT"),
+    ("unknown", -signal.SIGXCPU, "KILLED BY SIGNAL 24"),
     ("unknown", -signal.SIGKILL, "KILLED BY SIGNAL 9"),
 ]
 
@@ -74,40 +70,35 @@ def test_component_status(status, returncode, expected):
     assert status_of(status, returncode) == expected
 
 
-# With a CPU-time limit of 10 s: (determine_result's status, returncode, CPU
-# time of the run, status of the run). SIGKILL after more CPU time than the
-# limit is the kernel's at RLIMIT_CPU's hard limit; at or below the limit it
-# came from elsewhere. A specific result is kept, as before.
-CPU_LIMIT_TABLE = [
-    ("unknown", -signal.SIGKILL, 11.0, "TIMEOUT"),
-    ("ERROR", -signal.SIGKILL, 10.5, "TIMEOUT"),
-    ("unknown", -signal.SIGKILL, 10.0, "KILLED BY SIGNAL 9"),
-    ("unknown", -signal.SIGKILL, 2.0, "KILLED BY SIGNAL 9"),
-    ("unknown", -signal.SIGKILL, None, "KILLED BY SIGNAL 9"),
-    ("unknown", -signal.SIGXCPU, 10.0, "TIMEOUT"),
-    ("true", -signal.SIGXCPU, 10.0, "true"),
-    ("false(no-data-race)", -signal.SIGKILL, 11.0, "false(no-data-race)"),
-    # Goblint's portfolio runner exits by itself after a level was ended by SIGXCPU
-    ("unknown", 0, 11.0, "unknown"),
-    ("ERROR", 1, 11.0, "ERROR (1)"),
-    ("unknown", -signal.SIGTERM, 11.0, "KILLED"),
+# A run that RunExecutor ended: (determine_result's status, returncode, the
+# termination reason, status of the run). The termination reason decides an
+# unspecific result, also where the signal alone would give KILLED BY SIGNAL 9;
+# a specific result is kept.
+TERMINATION_TABLE = [
+    ("unknown", -signal.SIGKILL, "cputime", "TIMEOUT"),
+    ("unknown", -signal.SIGKILL, "walltime", "TIMEOUT"),
+    ("ERROR", -signal.SIGKILL, "memory", "OUT OF MEMORY"),
+    ("unknown", 0, "memory", "OUT OF MEMORY"),
+    ("done", 1, "cputime", "TIMEOUT"),
+    ("unknown", -signal.SIGKILL, "killed", "KILLED"),
+    ("true", -signal.SIGKILL, "cputime", "true"),
+    ("false(no-data-race)", -signal.SIGKILL, "memory", "false(no-data-race)"),
+    ("unknown", -signal.SIGKILL, "files-count", "FILES-COUNT LIMIT"),
+    ("unknown", -signal.SIGKILL, "something new", "something new"),
 ]
 
 
-@pytest.mark.parametrize("status, returncode, cpu_time, expected", CPU_LIMIT_TABLE)
-def test_component_status_under_a_cpu_time_limit(status, returncode, cpu_time, expected):
-    assert status_of(status, returncode, cpu_time=cpu_time, cpu_time_limit=10) == expected
+@pytest.mark.parametrize("status, returncode, reason, expected", TERMINATION_TABLE)
+def test_component_status_of_a_run_that_runexecutor_ended(status, returncode, reason, expected):
+    assert status_of(status, returncode, termination_reason=reason) == expected
 
 
-def test_sigkill_without_a_cpu_time_limit_is_no_timeout():
-    assert status_of("unknown", -signal.SIGKILL, cpu_time=1000.0) == "KILLED BY SIGNAL 9"
-
-
-def test_a_completed_process_without_cpu_time_is_judged_by_its_signal():
+def test_component_status_gives_determine_result_the_termination_reason():
     actor = StatusActor("unknown")
-    result = subprocess.CompletedProcess(["fake"], -signal.SIGKILL, "", "")
 
-    assert components.component_status(actor, ["fake"], result, 10) == "KILLED BY SIGNAL 9"
+    components.component_status(actor, ["fake"], subprocess.CompletedProcess(["fake"], -9, "", ""), "cputime")
+
+    assert actor.runs[0].termination_reason == "cputime"
 
 
 def test_component_status_gives_determine_result_the_real_exit_code():

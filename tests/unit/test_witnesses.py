@@ -2,9 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Witness files: the time filter and WitnessSpecs of collect_witness_files, the
-delivery of witness_files_to_file_root and remove_old_witness_files."""
+"""Witness files: which files of a run's directory are its witness
+(witness_files_in), how a run without the container tells the files it wrote
+under the component's directory from the others (witness_file_states,
+move_new_witness_files), the patterns of a run in the container
+(result_files_patterns), the delivery of witness_files_to_file_root and
+remove_old_witness_files."""
 import os
+import time
 
 import pytest
 
@@ -40,125 +45,90 @@ def run_dirs(tmp_path):
     return component, run
 
 
-# --- start_time --------------------------------------------------------------
+# --- witness_files_in --------------------------------------------------------
 
-def test_start_time_is_the_modification_time_of_a_new_marker_file(tmp_path):
-    started = components.start_time(str(tmp_path))
+def test_the_files_a_spec_names_are_collected_from_the_run_directory(run_dirs):
+    _component, run = run_dirs
+    write(run / "witness.graphml")  # Goblint writes only witness.yml
+    wanted = write(run / "witness.yml")
 
-    assert started == (tmp_path / ".started").stat().st_mtime_ns
-
-
-def test_start_time_does_not_go_backwards(tmp_path):
-    first = components.start_time(str(tmp_path))
-    second = components.start_time(str(tmp_path))
-
-    assert second >= first
-
-
-# --- collect_witness_files ----------------------------------------------------
-
-def test_files_written_in_the_run_directory_are_collected(run_dirs):
-    component, run = run_dirs
-    started = components.start_time(str(run))
-    witness = write(run / "witness.yml", mtime_ns=started + 1)
-
-    collected = components.collect_witness_files(witness_of("Goblint"), str(component), str(run), started)
-
-    assert collected == [str(witness)]
-    assert witness.exists()
-
-
-def test_only_files_modified_at_or_after_the_start_are_collected(run_dirs):
-    component, run = run_dirs
-    started = components.start_time(str(run))
-    write(run / "witness.graphml", mtime_ns=started - 1)
-    write(run / "witness.yml", mtime_ns=started)
-
-    collected = components.collect_witness_files(witness_of("ULTIMATE Automizer"), str(component),
-                                         str(run), started)
-
-    assert collected == [str(run / "witness.yml")]
-
-
-def test_an_old_file_is_left_where_it_is(run_dirs):
-    component, run = run_dirs
-    started = components.start_time(str(run))
-    old = write(component / "output/witness.graphml", "old", mtime_ns=LONG_AGO)
-
-    collected = components.collect_witness_files(witness_of("Dartagnan"), str(component), str(run), started)
-
-    assert collected == []
-    assert old.read_text() == "old"
-
-
-def test_a_file_under_the_component_directory_is_moved_into_the_run_directory(run_dirs):
-    component, run = run_dirs
-    started = components.start_time(str(run))
-    source = write(component / "output/witness.graphml", "new", mtime_ns=started + 1)
-
-    collected = components.collect_witness_files(witness_of("Dartagnan"), str(component), str(run), started)
-
-    destination = run / "output/witness.graphml"
-    assert collected == [str(destination)]
-    assert destination.read_text() == "new"
-    assert not source.exists()
+    assert components.witness_files_in(witness_of("Goblint"), str(run)) == [str(wanted)]
+    assert components.witness_files_in(witness_of("ULTIMATE GemCutter"), str(run)) == [
+        str(run / "witness.graphml"), str(wanted)]
 
 
 def test_missing_files_are_ignored(run_dirs):
-    component, run = run_dirs
-    started = components.start_time(str(run))
+    _component, run = run_dirs
 
     for name in ("Goblint", "Dartagnan", "ULTIMATE Taipan", "Unlisted"):
-        assert components.collect_witness_files(witness_of(name), str(component), str(run), started) == []
+        assert components.witness_files_in(witness_of(name), str(run)) == []
 
 
-def test_a_component_collects_only_the_files_its_entry_names(run_dirs):
+def test_a_spec_without_names_collects_by_name_pattern(run_dirs):
+    _component, run = run_dirs
+    wanted = [write(run / "witness.graphml"), write(run / "sub/dir/Mixed-WITNESS.yml")]
+    write(run / "witness.yaml")
+    write(run / "result.graphml")
+
+    assert sorted(components.witness_files_in(witness_of("Unlisted"), str(run))) == sorted(map(str, wanted))
+
+
+# --- witness_file_states and move_new_witness_files ---------------------------
+
+def test_a_file_written_by_the_run_is_moved_and_a_file_left_before_stays(run_dirs):
     component, run = run_dirs
-    started = components.start_time(str(run))
-    write(run / "witness.graphml", mtime_ns=started + 1)  # Goblint writes only witness.yml
-    wanted = write(run / "witness.yml", mtime_ns=started + 1)
+    old = write(component / "old-witness.yml", "old", mtime_ns=LONG_AGO)
+    # Newer than any file the run writes: no comparison with a start time would leave it
+    future = write(component / "shipped-witness.yml", "shipped", mtime_ns=time.time_ns() + 3600 * 10**9)
+    before = components.witness_file_states(witness_of("Unlisted"), str(component))
+    new = write(component / "sub/dir/new-witness.graphml", "new")
 
-    collected = components.collect_witness_files(witness_of("Goblint"), str(component), str(run), started)
+    components.move_new_witness_files(witness_of("Unlisted"), str(component), str(run), before)
 
-    assert collected == [str(wanted)]
+    assert (run / "sub/dir/new-witness.graphml").read_text() == "new"
+    assert not new.exists()
+    assert old.read_text() == "old" and future.read_text() == "shipped"
+    assert not (run / "old-witness.yml").exists() and not (run / "shipped-witness.yml").exists()
 
 
-def test_ultimate_collects_graphml_and_yaml_witnesses(run_dirs):
+def test_a_file_the_run_rewrites_is_moved(run_dirs):
     component, run = run_dirs
-    started = components.start_time(str(run))
-    write(run / "witness.graphml", mtime_ns=started + 1)
-    write(run / "witness.yml", mtime_ns=started + 1)
+    write(component / "output/witness.graphml", "old", mtime_ns=LONG_AGO)
+    before = components.witness_file_states(witness_of("Dartagnan"), str(component))
+    write(component / "output/witness.graphml", "rewritten")
 
-    collected = components.collect_witness_files(witness_of("ULTIMATE GemCutter"), str(component),
-                                         str(run), started)
+    components.move_new_witness_files(witness_of("Dartagnan"), str(component), str(run), before)
 
-    assert collected == [str(run / "witness.graphml"), str(run / "witness.yml")]
+    assert (run / "output/witness.graphml").read_text() == "rewritten"
+    assert components.witness_files_in(witness_of("Dartagnan"), str(run)) == [str(run / "output/witness.graphml")]
 
 
-def test_a_component_without_an_entry_collects_by_name_pattern_under_its_directory(run_dirs):
+def test_only_the_files_a_spec_names_are_moved(run_dirs):
     component, run = run_dirs
-    started = components.start_time(str(run))
-    new = started + 1
-    wanted = {
-        "witness.graphml": write(component / "witness.graphml", mtime_ns=new),
-        "Mixed-WITNESS.yml": write(component / "Mixed-WITNESS.yml", mtime_ns=new),
-        "sub/dir/my-witness.yml": write(component / "sub/dir/my-witness.yml", mtime_ns=new),
-    }
-    ignored = [
-        write(component / "witness.txt", mtime_ns=new),
-        write(component / "witness.yaml", mtime_ns=new),
-        write(component / "witness.graphml.bak", mtime_ns=new),
-        write(component / "result.graphml", mtime_ns=new),
-        write(component / "old-witness.yml", mtime_ns=LONG_AGO),
-    ]
+    before = components.witness_file_states(witness_of("Dartagnan"), str(component))
+    other = write(component / "output/other-witness.graphml")
 
-    collected = components.collect_witness_files(witness_of("Unlisted"), str(component), str(run), started)
+    components.move_new_witness_files(witness_of("Dartagnan"), str(component), str(run), before)
 
-    assert sorted(collected) == sorted(str(run / relative) for relative in wanted)
-    for relative, source in wanted.items():
-        assert not source.exists()
-        assert (run / relative).exists()
-    assert all(path.exists() for path in ignored)
+    assert other.exists() and list(run.iterdir()) == []
+
+
+def test_witness_file_states_records_the_existing_candidates(run_dirs):
+    component, _run = run_dirs
+    path = write(component / "output/witness.graphml", "abc", mtime_ns=LONG_AGO)
+
+    states = components.witness_file_states(witness_of("Dartagnan"), str(component))
+
+    assert states == {str(path): (path.stat().st_ino, 3, LONG_AGO)}
+
+
+# --- result_files_patterns ----------------------------------------------------
+
+def test_result_files_patterns():
+    assert components.result_files_patterns(WitnessSpec("run", ("--w", "{dir}"), ("witness.yml",))) == []
+    assert components.result_files_patterns(witness_of("Dartagnan")) == ["output/witness.graphml"]
+    patterns = components.result_files_patterns(DEFAULT_WITNESS)
+    assert len(patterns) == 2 and all(p.startswith("**/") for p in patterns)
 
 
 def test_the_default_witness_spec_and_the_components_with_their_own():

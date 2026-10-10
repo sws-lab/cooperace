@@ -4,18 +4,18 @@
 
 """How a component is started (ComponentRunner.command): the command line from
 benchexec.model.cmdline_for_run, the working directory from the tool-info
-module's working_directory() and the environment from its environment()
-(run_environment), and that run_in_session starts it so."""
+module's working_directory() and the environments from its environment(),
+and that RunExecutor starts it so."""
 import os
 from pathlib import Path
 
 import pytest
-from support import STUB_DOI, StubTool, make_script, register_stub
+from support import STUB_DOI, StubTool, make_script, register_stub, run_command
 
 from src.cooperace import components
-from src.cooperace.components import REGISTRY, ComponentRunner, run_environment
+from src.cooperace.components import REGISTRY, ComponentRunner
 from src.cooperace.config import Step
-from src.cooperace.processes import ComponentGroup, run_in_session
+from src.cooperace.processes import ComponentGroup
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -55,7 +55,7 @@ def test_the_working_directory_is_the_tool_directory_also_for_an_executable_in_a
     command = runner.command(tool, runner.registry["Placed"], "/w")
 
     assert command.cwd == str(tmp_path / "tool")
-    assert command.env is None
+    assert command.environments == {}
 
 
 def test_the_working_directory_is_relative_to_the_tool_directory(tmp_path, make_runner):
@@ -88,21 +88,9 @@ def test_the_environment_of_the_module_is_applied(tmp_path, make_runner, monkeyp
     runner = placed_runner(tmp_path, make_runner)
 
     command = runner.command(tool, runner.registry["Placed"], "/w")
-    result = run_in_session(command.cmdline, command.cwd, ComponentGroup(), env=command.env)
+    result = run_command(command.cmdline, command.cwd, ComponentGroup(), environments=command.environments)
 
     assert result.stdout == "new /a:/b\n"
-
-
-def test_run_environment():
-    environ = dict(os.environ)
-
-    assert run_environment({}) is None
-    assert run_environment({"newEnv": {}, "additionalEnv": {}}) is None
-    assert run_environment({"newEnv": {"X_NEW": "1"}}) == {**environ, "X_NEW": "1"}
-    assert run_environment({"additionalEnv": {"PATH": ":/extra"}})["PATH"] == environ.get("PATH", "") + ":/extra"
-    assert run_environment({"keepEnv": {}}) == {}
-    assert run_environment({"keepEnv": {"PATH": "", "X_UNSET_ANYWHERE": ""}}) == (
-        {"PATH": environ["PATH"]} if "PATH" in environ else {})
 
 
 @pytest.mark.parametrize("name", ["Goblint", "Dartagnan", "ULTIMATE Automizer"])
@@ -119,7 +107,7 @@ def test_the_components_of_svcomp26_run_in_their_directory_with_cooperace_s_envi
 
     assert command.cwd == os.path.join(runner.tools_dir, spec.directory)
     assert command.cwd == os.path.dirname(command.cmdline[0])
-    assert command.env is None
+    assert command.environments == {}
 
 
 def test_a_step_runs_the_component_in_its_working_directory(make_runner, group, tmp_path, capsys):
