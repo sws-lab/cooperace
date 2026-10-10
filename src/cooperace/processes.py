@@ -59,11 +59,16 @@ def stopProcessGroups(processes: Iterable[subprocess.Popen]) -> None:
 
 
 class ComponentGroup:
-    """The component processes started under one call of
-    strategy.run_parallel, and the groups of the calls nested in it. The
-    group that strategy.execute is given holds the components started
-    outside any run_parallel. Once stop() is called,
-    run_in_session starts no further component in the group or its subgroups."""
+    """The components started under one call of strategy.run_parallel, and
+    the groups of the calls nested in it. The group that strategy.execute is
+    given holds the components started outside any run_parallel. Once stop()
+    is called, no further component starts in the group or its subgroups.
+
+    A running component is recorded in `processes` as what started it: the
+    subprocess.Popen of the session leader that run_in_session starts, or
+    any other object with a method stop() that ends the component and every
+    process it started, such as the nested.NestedRun of a component run
+    under BenchExec's RunExecutor."""
 
     def __init__(self, parent: ComponentGroup | None = None):
         self.lock = threading.Lock()
@@ -80,22 +85,23 @@ class ComponentGroup:
         if stopped:
             group.stop()
 
-    def add(self, process: subprocess.Popen) -> bool:
-        """Records a running component process. Returns False, and records
-        nothing, if the group is already stopped."""
+    def add(self, process) -> bool:
+        """Records a running component, a subprocess.Popen or an object with
+        a method stop(). Returns False, and records nothing, if the group is
+        already stopped."""
         with self.lock:
             if self.stopped:
                 return False
             self.processes.add(process)
             return True
 
-    def remove(self, process: subprocess.Popen) -> None:
+    def remove(self, process) -> None:
         with self.lock:
             self.processes.discard(process)
 
-    def markStopped(self) -> list[subprocess.Popen]:
-        """Marks this group and its subgroups stopped and returns the processes
-        running in them."""
+    def markStopped(self) -> list:
+        """Marks this group and its subgroups stopped and returns the
+        components running in them, as add recorded them."""
         with self.lock:
             self.stopped = True
             processes = list(self.processes)
@@ -105,9 +111,15 @@ class ComponentGroup:
         return processes
 
     def stop(self) -> None:
-        """Stops every component running in this group or its subgroups with
-        stopProcessGroups and keeps further ones from starting."""
-        stopProcessGroups(self.markStopped())
+        """Stops every component running in this group or its subgroups and
+        keeps further ones from starting: a component recorded as an object
+        with stop() by calling it, then the subprocess.Popen ones with
+        stopProcessGroups."""
+        running = self.markStopped()
+        for component in running:
+            if not isinstance(component, subprocess.Popen):
+                component.stop()
+        stopProcessGroups([component for component in running if isinstance(component, subprocess.Popen)])
 
 
 def run_memory_limit(cgroup_file: str = "/proc/self/cgroup",

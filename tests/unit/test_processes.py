@@ -254,3 +254,27 @@ def test_run_in_session_records_the_process_while_it_runs_and_stop_ends_it(tmp_p
     assert not thread.is_alive()
     assert results[0].returncode == -15
     assert group.processes == set()
+
+
+class FakeRun:
+    """A component recorded as an object with stop(), as nested.NestedRun is."""
+
+    def __init__(self):
+        self.stops = 0
+
+    def stop(self):
+        self.stops += 1
+
+
+def test_group_stop_calls_stop_of_a_component_that_is_not_a_process(spawn):
+    parent = ComponentGroup()
+    child = ComponentGroup(parent)
+    run = FakeRun()
+    leader = start_leader_and_child(spawn)
+    assert child.add(run) and parent.add(leader)
+
+    parent.stop()
+
+    assert run.stops == 1
+    assert wait_until(lambda: group_members(leader.pid) == [])
+    assert child.add(FakeRun()) is False
