@@ -5,9 +5,11 @@
 """The components CoOpeRace runs (REGISTRY) and how one is run: its command
 line, working directory and environment from its BenchExec tool-info module
 (ComponentRunner.command), its limits, its status and verdict, its witness
-files, and the block of protocol lines it prints (print_component_run). ComponentRunner is the strategy.StepRunner the
-strategy runs steps with. The only module of the package that imports
-BenchExec.
+files, and the block of protocol lines it prints (print_component_run).
+ComponentRunner is the strategy.StepRunner the strategy runs steps with;
+NestedComponentRunner is the one that runs each component as a nested
+BenchExec run (nested.py). With nested.py, the only module of the package
+that imports BenchExec.
 
 The standard output is read by programs, so its lines are a protocol: for
 each component run, "---<name> logs---", its output, "---end of <name>
@@ -479,6 +481,113 @@ class ComponentRunner:
         return component_status(actor, command.cmdline, tool_result, component_cpu_time_limit(step))
 
 
+class NestedComponentRunner(ComponentRunner):
+    """A ComponentRunner that runs each component as a nested BenchExec run
+    (nested.run_nested) instead of in a session of its own; cli makes it for
+    `--component-runner nested`. Everything but launch and status is
+    ComponentRunner's: the command line, the protocol lines, the acceptance
+    of verdicts and the delivery of the witness.
+
+    What differs for a component run:
+
+    - It runs in a container of its own (nested.container_dir_modes): `/`
+      read-only, `/home`, `/run` and `/tmp` hidden, its directory under
+      `tools_dir` an overlay, and, for a component whose WitnessSpec writes
+      into the run's directory, that directory with full access.
+    - Its limits (announce_limits) are limits of its cgroup: the memory
+      limit counts all its processes together, as does the CPU-time limit,
+      which so covers all levels of Goblint's portfolio together where
+      RLIMIT_CPU covers each level on its own. A component ended by one of
+      them has status TIMEOUT or OUT OF MEMORY (component_status with the
+      run's termination reason).
+    - Its witness files are those it wrote during this run, by construction
+      (nested_witness_files): the run's directory is new, and a file under
+      its own directory is collected from the container's overlay with
+      `result_files_patterns`. No modification time is compared.
+    - Stopping its ComponentGroup kills its container, with every process
+      in it (nested.NestedRun).
+    - After the status line of its block, a line "Tool name: <name>
+      Measured: ..." gives the CPU time, wall time and peak memory BenchExec
+      measured for the run and its termination reason (measurement_line).
+
+    It needs what nested.run_nested needs: cgroups that BenchExec can use
+    (inside BenchExec's container, cgroups v2) and user namespaces, which
+    Ubuntu 24.04 forbids to CoOpeRace started outside BenchExec; there each
+    component is a step without a verdict, with status "ERROR
+    (NestedRunError: ...)"."""
+
+    def launch(self, step: Step, spec: ComponentSpec, command: ComponentCommand, witness_dir: str,
+               group: ComponentGroup) -> tuple[subprocess.CompletedProcess, list[str]]:
+        """Runs `command` as a nested BenchExec run in `group` with the
+        limits of `step` and returns its nested.NestedFinishedProcess and
+        its witness files in `witness_dir` (nested_witness_files). Its
+        output goes to the file `witness_dir`.log of the work directory."""
+        from . import nested  # imports benchexec.runexecutor, which needs Linux
+
+        memory, cpu = announce_limits(step, "cgroup of its nested run", "cgroup of its nested run")
+        tool_directory = os.path.join(self.tools_dir, spec.directory)
+        writable = [witness_dir] if spec.witness.directory == "run" else []
+        patterns = nested_result_files_patterns(spec.witness)
+        tool_result = nested.run_nested(
+            command.cmdline, command.cwd, nested_environments(command.env), group,
+            log_file=witness_dir + ".log",
+            dir_modes=nested.container_dir_modes(tool_directory, writable),
+            memory=memory, cpu_time=cpu,
+            output_dir=witness_dir if patterns else None, result_files_patterns=patterns)
+        return tool_result, nested_witness_files(spec.witness, witness_dir)
+
+    def status(self, actor: BaseTool2, step: Step, command: ComponentCommand,
+               tool_result: subprocess.CompletedProcess) -> str:
+        """component_status of the nested run `tool_result` with its
+        termination reason; the CPU-time limit is the cgroup's, so no
+        RLIMIT_CPU is judged."""
+        return component_status(actor, command.cmdline, tool_result,
+                                termination_reason=getattr(tool_result, "termination_reason", None))
+
+
+def nested_environments(env: dict[str, str] | None) -> dict:
+    """The `environments` argument of nested.run_nested that gives a nested
+    run the environment `env` (ComponentCommand.env, from run_environment),
+    or CoOpeRace's own environment for None. RunExecutor sets HOME of the
+    container in either case."""
+    if env is None:
+        return {}
+    return {"keepEnv": {}, "newEnv": dict(env)}
+
+
+# The patterns, as glob's, of the files a component without a list of witness
+# files writes under its own directory (WitnessSpec.files None): the names
+# witness_files_under matches, "witness" in any case and ending in graphml or
+# yml.
+_WITNESS_NAME_PATTERNS = ("**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*graphml", "**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*yml")
+
+
+def nested_result_files_patterns(witness: WitnessSpec) -> list[str]:
+    """The `result_files_patterns` of a nested run of a component with the
+    WitnessSpec `witness`, relative to its working directory: none for a
+    component that writes into the run's directory, which its container
+    gives it with full access; else the files `witness` names, or the
+    witness name patterns."""
+    if witness.directory == "run":
+        return []
+    if witness.files is None:
+        return list(_WITNESS_NAME_PATTERNS)
+    return list(witness.files)
+
+
+def nested_witness_files(witness: WitnessSpec, witness_dir: str) -> list[str]:
+    """The witness files of a nested run of a component with the WitnessSpec
+    `witness`, all in the run's directory `witness_dir`: the files `witness`
+    names there, or every file there that witness_files_under matches. The
+    component wrote them into `witness_dir` itself, or nested.run_nested
+    moved them there from the overlay of its directory, so each was written
+    during this run."""
+    if witness.files is None:
+        return witness_files_under(witness_dir)
+    return [path for path in (os.path.join(witness_dir, file) for file in witness.files)
+            if os.path.isfile(path)]
+
+
 def component_memory_limit(step: Step) -> int | None:
     """Memory limit in bytes for the config.Step `step`, from its
     `memory_limit` (the conf's `memoryLimits`), or None.
@@ -548,7 +657,7 @@ def announce_limits(step: Step, memory_mechanism: str, cpu_mechanism: str) -> tu
 
 
 def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subprocess.CompletedProcess,
-                     cpu_time_limit: int | None = None) -> str:
+                     cpu_time_limit: int | None = None, termination_reason: str | None = None) -> str:
     """The status BenchExec would give this run of `actor` (a
     processes.FinishedProcess from run_in_session, or a
     subprocess.CompletedProcess, which has no CPU time) under the CPU-time
@@ -567,6 +676,14 @@ def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subproce
     "EXCEPTION (SetDomain.Unsupported)" or "ERROR (1)", which confirm_verdict
     does not accept.
 
+    `termination_reason` is BenchExec's termination reason of a nested run
+    (nested.NestedFinishedProcess), None for a run that ended by itself or
+    was not run under BenchExec. It is given to `actor.determine_result`, and
+    an unspecific result of a run with one becomes what BenchExec makes of
+    it (TERMINATION_STATUSES: "TIMEOUT" for "cputime" or "walltime", "OUT OF
+    MEMORY" for "memory"), also where the signal that ended the run would
+    give "KILLED BY SIGNAL 9".
+
     Where this differs from BenchExec: BenchExec gives TIMEOUT whenever the
     run's CPU time exceeded its limit, and writes a specific result found
     after that as "TIMEOUT (true)"; here a specific result is kept as the
@@ -581,11 +698,13 @@ def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subproce
         cmdline=cmdline,
         exit_code=exit_code,
         output=BaseTool2.RunOutput(output_lines(tool_result.stdout)),
-        termination_reason=None
+        termination_reason=termination_reason
     )
     status = actor.determine_result(run)
 
-    if status in bresult.RESULT_LIST_OTHER:
+    if status in bresult.RESULT_LIST_OTHER and termination_reason is not None:
+        status = TERMINATION_STATUSES.get(termination_reason, termination_reason)
+    elif status in bresult.RESULT_LIST_OTHER:
         if ended_by_cpu_time_limit(exit_code.signal, getattr(tool_result, "cpu_time", None), cpu_time_limit):
             status = bresult.RESULT_TIMEOUT
         elif exit_code.signal == signal.SIGABRT:
@@ -599,6 +718,22 @@ def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subproce
         elif exit_code.value and status != bresult.RESULT_UNKNOWN:
             status = f"{bresult.RESULT_ERROR} ({exit_code.value})"
     return status
+
+
+# The status of a nested run that BenchExec ended, by its termination reason,
+# as benchexec.model gives it (_ERROR_RESULTS_FOR_TERMINATION_REASON, the same
+# in BenchExec 3.31 to 3.35). "killed" is a run that CoOpeRace stopped, which
+# run_component reports as "stopped by CoOpeRace" before any status is read.
+TERMINATION_STATUSES = {
+    "cputime": bresult.RESULT_TIMEOUT,
+    "cputime-soft": bresult.RESULT_TIMEOUT,
+    "walltime": bresult.RESULT_TIMEOUT,
+    "memory": "OUT OF MEMORY",
+    "killed": "KILLED",
+    "failed": "FAILED",
+    "files-count": "FILES-COUNT LIMIT",
+    "files-size": "FILES-SIZE LIMIT",
+}
 
 
 def ended_by_cpu_time_limit(signal_number: int | None, cpu_time: float | None,
@@ -703,8 +838,9 @@ def print_component_run(name: str, tool_result: subprocess.CompletedProcess, sta
     """Prints the output of a component run between "---<name> logs---"
     and "---end of <name> logs---", then the line "Tool name: <name>
     Status: <status> Exit code: <exit code>" and, unless `verdict` is None,
-    "Tool name: <name> Result: <verdict>", all at once, so that the
-    output of components running in parallel is not interleaved."""
+    "Tool name: <name> Result: <verdict>", and, for a nested run, the line
+    of measurement_line, all at once, so that the output of components
+    running in parallel is not interleaved."""
     returncode = tool_result.returncode
     if returncode is None:
         exit_code = "none, not started"
@@ -716,8 +852,30 @@ def print_component_run(name: str, tool_result: subprocess.CompletedProcess, sta
              f"Tool name: {name} Status: {status} Exit code: {exit_code}"]
     if verdict is not None:
         lines.append(f"Tool name: {name} Result: {verdict}")
+    measured = measurement_line(name, tool_result)
+    if measured is not None:
+        lines.append(measured)
     with PRINT_LOCK:
         print("\n".join(lines), flush=True)
+
+
+def measurement_line(name: str, tool_result: subprocess.CompletedProcess) -> str | None:
+    """For a nested run that was started (a nested.NestedFinishedProcess,
+    recognized by its `termination_reason`, with a returncode), the line
+    "Tool name: <name> Measured: cputime=<s>s walltime=<s>s memory=<bytes>B
+    terminationreason=<reason>" with what BenchExec measured, a value it did
+    not measure as "-" and a run that ended by itself as
+    "terminationreason=none"; else None."""
+    if not hasattr(tool_result, "termination_reason") or tool_result.returncode is None:
+        return None
+
+    def seconds(value):
+        return "-" if value is None else f"{value:.2f}s"
+
+    memory = "-" if tool_result.memory is None else f"{tool_result.memory}B"
+    return (f"Tool name: {name} Measured: cputime={seconds(tool_result.cpu_time)} "
+            f"walltime={seconds(tool_result.wall_time)} memory={memory} "
+            f"terminationreason={tool_result.termination_reason or 'none'}")
 
 
 def witness_options(witness: WitnessSpec, witness_dir: str) -> list[str]:

@@ -8,10 +8,11 @@ first verdict it accepts.
 
 The modules, each importing only modules listed after it: cli (the command
 line), components (the registry of components, running one and reading its
-result and witness; the only module that imports BenchExec), strategy
-(running the tree), config (the conf as a tree of steps per property),
-properties (the properties and their recognition in a property file),
-processes (starting and stopping the components' processes).
+result and witness), nested (running a component as a nested BenchExec run;
+with components, the only modules that import BenchExec), strategy (running
+the tree), config (the conf as a tree of steps per property), properties
+(the properties and their recognition in a property file), processes
+(starting and stopping the components' processes).
 
 CoOpeRace runs from any working directory. TOOL_DIR, the directory that holds
 the launcher `cooperace`, is where it finds everything of its own: the
