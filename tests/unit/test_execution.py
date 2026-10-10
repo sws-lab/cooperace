@@ -88,17 +88,20 @@ class FakeExecutor:
 
 @pytest.fixture
 def fake_executor(monkeypatch):
-    """Makes execute_run use FakeExecutor in a Mode with cgroups, with the
-    keyword arguments given to the returned function, and returns that
-    function."""
+    """Makes execute_run use FakeExecutor in place of RunExecutor and
+    RunExecutorWithoutCgroups, with the keyword arguments given to the
+    returned function, and returns that function."""
     FakeExecutor.instances = []
     settings = {}
 
     def configure(**kwargs):
         settings.update(kwargs)
 
-    monkeypatch.setattr(execution.runexecutor, "RunExecutor",
-                        lambda **kwargs: FakeExecutor(**kwargs, **settings))
+    def make(**kwargs):
+        return FakeExecutor(**kwargs, **settings)
+
+    monkeypatch.setattr(execution.runexecutor, "RunExecutor", make)
+    monkeypatch.setattr(execution, "RunExecutorWithoutCgroups", make)
     return configure
 
 
@@ -217,15 +220,32 @@ def test_container_dir_modes():
                      "/tools/x": DIR_OVERLAY, "/work/run": DIR_FULL_ACCESS}
 
 
-def test_mode_description_and_what_follows_from_it():
+def test_mode_description_and_cgroups():
     assert WITH_CGROUPS.description() == "RunExecutor with its container, with cgroups (memory, cpu, freezer)"
     assert WITHOUT_ANYTHING.description() == "RunExecutor without its container, without cgroups"
     assert Mode(False, False, True, True).description() == (
         "RunExecutor without its container, with cgroups (cpu, freezer)")
-    assert (WITH_CGROUPS.cgroups, WITH_CGROUPS.kills_process_group) == (True, False)
-    assert (WITHOUT_ANYTHING.cgroups, WITHOUT_ANYTHING.kills_process_group) == (False, True)
-    assert Mode(True, False, False, False).kills_process_group is False
-    assert Mode(False, True, True, True).kills_process_group is False
+    assert (WITH_CGROUPS.cgroups, WITHOUT_ANYTHING.cgroups, Mode(True, True, False, False).cgroups) == (
+        True, False, True)
+
+
+@pytest.mark.parametrize("mode, kills_group", [
+    (WITHOUT_ANYTHING, True), (WITH_CGROUPS, False), (Mode(True, False, False, False), False),
+    (Mode(False, True, True, True), False)])
+def test_only_a_run_without_the_container_and_the_freezer_kills_its_process_group(
+        fake_executor, tmp_path, monkeypatch, mode, kills_group):
+    killed = []
+    monkeypatch.setattr(execution.os, "killpg", lambda pid, signum: killed.append((pid, signum)))
+    fake_executor(block=True)
+    group = ComponentGroup()
+    thread = threading.Thread(target=lambda: run_fake(tmp_path, group, mode=mode))
+    thread.start()
+    assert wait_until(lambda: FakeExecutor.instances and FakeExecutor.instances[0].SUB_PROCESS_PIDS)
+
+    group.stop()
+    thread.join(15)
+
+    assert killed == ([(4711, signal.SIGKILL)] if kills_group else [])
 
 
 class FakeCgroups:
@@ -251,13 +271,15 @@ class FakeCgroups:
     (False, (), Mode(False, False, False, False)),
 ])
 def test_detect_mode(monkeypatch, container, usable, expected):
-    monkeypatch.setattr(execution, "_MODE", None)
+    execution.detect_mode.cache_clear()
     monkeypatch.setattr(execution, "container_works", lambda tools_dir: container)
     monkeypatch.setattr(execution.Cgroups, "initialize", staticmethod(lambda: FakeCgroups(*usable)))
-
-    assert execution.detect_mode("/tools") == expected
-    monkeypatch.setattr(execution, "container_works", lambda tools_dir: not container)
-    assert execution.detect_mode("/tools") == expected  # found once
+    try:
+        assert execution.detect_mode("/tools") == expected
+        monkeypatch.setattr(execution, "container_works", lambda tools_dir: not container)
+        assert execution.detect_mode("/tools") == expected  # found once
+    finally:
+        execution.detect_mode.cache_clear()
 
 
 def test_run_lines():

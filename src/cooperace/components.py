@@ -207,11 +207,8 @@ def installed_doi(tool_location: str) -> str | None:
 @dataclass(frozen=True)
 class ComponentCommand:
     """How a component run is started: the command line `cmdline`, the
-    working directory `cwd`, and `environments`, the result of its tool-info
-    module's environment(), from which RunExecutor makes the run's
-    environment as BenchExec does: with "keepEnv", only the variables it
-    names are kept from CoOpeRace's environment, else all are; "newEnv" sets
-    variables and "additionalEnv" appends to them."""
+    working directory `cwd`, and `environments`, its tool-info module's
+    environment(), from which RunExecutor makes the run's environment."""
 
     cmdline: list[str]
     cwd: str
@@ -238,8 +235,7 @@ class ComponentRunner:
     (`registry`), their versions and options (`versions`, by fm-tools name),
     the directory that holds their directories (`tools_dir`, tools/ in
     TOOL_DIR, wherever the working directory is), the execution.Mode its
-    components run in (`mode`; None until execution.detect_mode has found
-    it, in prepare or at the first run, unless it is given) and, between
+    components run in (`mode`, from run_mode unless given) and, between
     prepare and cleanup, the work directory with one directory per
     component run (`work_dir`).
 
@@ -319,13 +315,13 @@ class ComponentRunner:
     def prepare(self) -> None:
         """Removes the witness files an earlier run delivered to the working
         directory, makes the work directory, which holds one directory per
-        component run, made in run_component, and finds the Mode (run_mode)."""
+        component run, made in run_component, and sets `mode` (run_mode)."""
         remove_old_witness_files()
         self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
         self.run_mode()
 
     def run_mode(self) -> Mode:
-        """`mode`, set to execution.detect_mode's the first time it is None."""
+        """`mode`, set to execution.detect_mode's if it is None."""
         from . import execution  # imports benchexec.runexecutor, which needs Linux
 
         if self.mode is None:
@@ -415,19 +411,15 @@ class ComponentRunner:
         (BenchExec's sv-sanitizers module names itself "SV-sanitizers") does
         not matter. The block is printed under `actor.name()`.
 
-        It is started as `command` says, with execution.execute_run in the
-        Mode `run_mode()`, with the limits announce_limits returns, and its
-        output goes to the file `witness_dir`.log of the work directory,
-        where `witness_dir` is the directory made for this run. Its witness
-        files all end up in `witness_dir` (witness_files_in): a component
-        whose WitnessSpec writes into the run's directory writes them there
-        (in the container, which gives that directory full access); one that
-        writes under its own directory writes them, in the container, into
-        the overlay of that directory, from which RunExecutor moves the files
-        result_files_patterns matches into `witness_dir`, and, without the
-        container, into the directory itself, from which
-        move_new_witness_files moves the files this run wrote. Its status is
-        component_status with the run's termination reason."""
+        It runs as `command` says, with execution.execute_run in the Mode
+        `run_mode()` and the limits of announce_limits, with its output in
+        `witness_dir`.log beside `witness_dir`, the directory made for this
+        run. Its witness files end up in `witness_dir`: a component whose
+        WitnessSpec writes there gets it with full access; one that writes
+        under its own directory writes, in the container, into the overlay,
+        from which RunExecutor moves them (result_files_patterns), and,
+        without it, into the directory itself, from which
+        move_new_witness_files moves them."""
         from . import execution  # imports benchexec.runexecutor, which needs Linux
 
         spec = self.registry[step.component]
@@ -449,7 +441,7 @@ class ComponentRunner:
             memory=memory, cpu_time=cpu, output_dir=witness_dir,
             result_files_patterns=result_files_patterns(spec.witness))
         if before is not None:
-            #Also when `group` was stopped, so that no file it wrote stays in its directory
+            #Also for a stopped run, so that no file it wrote stays in its directory
             move_new_witness_files(spec.witness, command.cwd, witness_dir, before)
         witness_files = witness_files_in(spec.witness, witness_dir)
 
@@ -487,10 +479,8 @@ _WITNESS_NAME_PATTERNS = ("**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*graphml", "**/*[Ww][
 
 def result_files_patterns(witness: WitnessSpec) -> list[str]:
     """The `result_files_patterns` of a run in the container of a component
-    with the WitnessSpec `witness`, relative to its working directory: none
-    for a component that writes into the run's directory, which its
-    container gives it with full access; else the files `witness` names, or
-    the witness name patterns."""
+    with the WitnessSpec `witness`: none if it writes into the run's
+    directory, else the files `witness` names or the witness name patterns."""
     if witness.directory == "run":
         return []
     if witness.files is None:
@@ -499,26 +489,23 @@ def result_files_patterns(witness: WitnessSpec) -> list[str]:
 
 
 def witness_candidates(witness: WitnessSpec, directory: str) -> list[str]:
-    """The paths under `directory` that the WitnessSpec `witness` names, or,
-    for a WitnessSpec without names, the files there that
-    witness_files_under matches."""
+    """The paths under `directory` that `witness` names, or, if it names
+    none, the files there that witness_files_under matches."""
     if witness.files is None:
         return witness_files_under(directory)
     return [os.path.join(directory, file) for file in witness.files]
 
 
 def witness_files_in(witness: WitnessSpec, witness_dir: str) -> list[str]:
-    """The witness files of a component run with the WitnessSpec `witness`,
-    all in the run's directory `witness_dir`: the candidates
-    (witness_candidates) there that are files. Every file in `witness_dir`
-    was written during the run, since the directory is new."""
+    """The witness_candidates of `witness` in the run's directory
+    `witness_dir` that are files; the directory is new, so each was
+    written during the run."""
     return [path for path in witness_candidates(witness, witness_dir) if os.path.isfile(path)]
 
 
 def witness_file_states(witness: WitnessSpec, directory: str) -> dict[str, tuple[int, int, int]]:
-    """The inode, size and modification time of each witness candidate
-    (witness_candidates) of `witness` under `directory` that is a file, by
-    path: what move_new_witness_files compares a run's files with."""
+    """The inode, size and modification time of each witness_candidates file
+    of `witness` under `directory`, by path."""
     states = {}
     for path in witness_candidates(witness, directory):
         try:
@@ -531,15 +518,13 @@ def witness_file_states(witness: WitnessSpec, directory: str) -> dict[str, tuple
 
 def move_new_witness_files(witness: WitnessSpec, directory: str, witness_dir: str,
                            before: Mapping[str, tuple[int, int, int]]) -> None:
-    """Moves each witness candidate of `witness` under the component's
-    directory `directory` whose state differs from the one in `before`
-    (witness_file_states before the run), or that was not there, to the same
-    relative path under `witness_dir`. A file left by an earlier run, or
-    shipped with the component (Goblint's smoketests/*witness*.yml), keeps
-    its state, and is neither moved nor touched. This is how a run without
-    the container tells the files it wrote from the others; a file that a
-    run rewrites with the same inode, size and modification time is not
-    told apart."""
+    """Moves each witness_candidates file of `witness` under the component's
+    directory `directory` whose witness_file_states differ from `before`,
+    taken before a run without the container, to the same relative path
+    under `witness_dir`. A file left by an earlier run, or shipped with the
+    component (Goblint's smoketests/*witness*.yml), is not touched; a file
+    rewritten with the same inode, size and modification time is not
+    moved."""
     for path, state in witness_file_states(witness, directory).items():
         if before.get(path) == state:
             continue
@@ -574,69 +559,49 @@ def component_cpu_time_limit(step: Step) -> int | None:
 
 def announce_limits(step: Step, mode: Mode) -> tuple[int | None, int | None]:
     """The memory limit in bytes (component_memory_limit) and the CPU-time
-    limit in seconds (component_cpu_time_limit) of the config.Step `step`
-    that the execution.Mode `mode` can apply, None where the step has none
-    or `mode` cannot apply it. Prints, for each limit of the step,
-    "Memory limit of <component>: <n> bytes (memory cgroup of its run)" and
-    "CPU-time limit of <component>: <n> s (cpu cgroup of its run)", or the
-    same with ", not applied: no usable memory cgroup" (or cpu) in place of
-    the parenthesis where `mode` has no such cgroup; and, for a percentage
-    for which the run has no memory limit, "Memory limit of <component>:
-    none (no cgroup memory limit found for "<value>")"."""
-    tool_name = step.component
+    limit in seconds (component_cpu_time_limit) of `step` that the
+    execution.Mode `mode` has a cgroup for, else None. Prints each limit of
+    the step as "Memory limit of <component>: <n> bytes (memory cgroup of its
+    run)" and "CPU-time limit of <component>: <n> s (cpu cgroup of its run)",
+    or, without that cgroup, with ", not applied: no usable memory cgroup"
+    (or cpu) in place of the parenthesis; and a percentage the run has no
+    memory limit for as "Memory limit of <component>: none (no cgroup memory
+    limit found for "<value>")"."""
+    limits = {"memory": component_memory_limit(step), "cpu": component_cpu_time_limit(step)}
     lines = []
-    memory = component_memory_limit(step)
-    if memory is not None:
-        if mode.memory:
-            lines.append(f"Memory limit of {tool_name}: {memory} bytes (memory cgroup of its run)")
-        else:
-            lines.append(f"Memory limit of {tool_name}: {memory} bytes, not applied: no usable memory cgroup")
-            memory = None
-    elif isinstance(step.memory_limit, str) and step.memory_limit.endswith("%"):
-        #A percentage that run_memory_limit could not resolve: no limit
-        #applies, and the run says so
-        lines.append(f"Memory limit of {tool_name}: none "
+    if limits["memory"] is None and isinstance(step.memory_limit, str):
+        #A percentage that run_memory_limit could not resolve
+        lines.append(f"Memory limit of {step.component}: none "
                      f"(no cgroup memory limit found for \"{step.memory_limit}\")")
-    cpu = component_cpu_time_limit(step)
-    if cpu is not None:
-        if mode.cpu_time:
-            lines.append(f"CPU-time limit of {tool_name}: {cpu} s (cpu cgroup of its run)")
-        else:
-            lines.append(f"CPU-time limit of {tool_name}: {cpu} s, not applied: no usable cpu cgroup")
-            cpu = None
+    for cgroup, label, unit, usable in (("memory", "Memory limit", "bytes", mode.memory),
+                                        ("cpu", "CPU-time limit", "s", mode.cpu_time)):
+        prefix = f"{label} of {step.component}: {limits[cgroup]} {unit}"
+        if limits[cgroup] is not None and usable:
+            lines.append(f"{prefix} ({cgroup} cgroup of its run)")
+        elif limits[cgroup] is not None:
+            lines.append(f"{prefix}, not applied: no usable {cgroup} cgroup")
+            limits[cgroup] = None
     if lines:
         with PRINT_LOCK:
             print("\n".join(lines), flush=True)
-    return memory, cpu
+    return limits["memory"], limits["cpu"]
 
 
 def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subprocess.CompletedProcess,
                      termination_reason: str | None = None) -> str:
-    """The status BenchExec would give this run `tool_result` of `actor`
-    (an execution.FinishedRun, or a subprocess.CompletedProcess) with the
-    command line `cmdline`, which RunExecutor ended with the termination
-    reason `termination_reason` (None: the component ended by itself).
-
-    The status is `actor.determine_result` on a Run as
-    benchexec.model.Run.set_result makes it, with the output's lines as
-    output_lines splits them, the real exit code and the termination reason.
-    An unspecific result (unknown, error or done) is then refined as
-    benchexec.model.Run._analyze_result (BenchExec 3.31 to 3.35) refines it,
-    which this copies: what BenchExec makes of a termination reason
-    (TERMINATION_STATUSES: "TIMEOUT" for "cputime" or "walltime", "OUT OF
-    MEMORY" for "memory"), also where the signal that ended the run would
-    give "KILLED BY SIGNAL 9"; else "ABORTED", "SEGMENTATION FAULT", "KILLED"
-    or "KILLED BY SIGNAL <n>" for the signal that ended it, or "ERROR
-    (<code>)" for an error with a non-zero exit code. A component that
-    crashes is so reported as, for example, "EXCEPTION
-    (SetDomain.Unsupported)" or "ERROR (1)", which confirm_verdict does not
-    accept.
-
-    Where this differs from BenchExec: BenchExec gives TIMEOUT whenever the
-    run's CPU time exceeded its limit, and writes a specific result found
-    after that as "TIMEOUT (true)"; here a specific result is kept as the
-    module returns it, so a verdict a component printed before its limit
-    ended it is still accepted."""
+    """The status BenchExec would give the run `tool_result` (an
+    execution.FinishedRun) of `actor` with the command line `cmdline`, which
+    RunExecutor ended with `termination_reason` (None: it ended by itself):
+    `actor.determine_result` on a Run as benchexec.model.Run.set_result
+    makes it, with the lines of output_lines; an unspecific result
+    (unknown, error or done) refined as benchexec.model.Run._analyze_result
+    (BenchExec 3.31 to 3.35) refines it: TERMINATION_STATUSES of the
+    termination reason ("TIMEOUT", "OUT OF MEMORY"), else "ABORTED",
+    "SEGMENTATION FAULT", "KILLED" or "KILLED BY SIGNAL <n>" for the signal
+    that ended it, or "ERROR (<code>)" for an error with a non-zero exit code.
+    Unlike BenchExec, which writes a specific result found after a limit as
+    "TIMEOUT (true)", a specific result is kept, so a verdict a component
+    printed before its limit ended it is still accepted."""
     returncode = tool_result.returncode
     if returncode < 0:
         exit_code = butil.ProcessExitCode.create(signal=-returncode)
