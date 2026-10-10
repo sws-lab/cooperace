@@ -3,20 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 """Witness files: which files of a run's directory are its witness
-(witness_files_in), how a run without the container tells the files it wrote
-under the component's directory from the others (witness_file_states,
-move_new_witness_files), the patterns of a run in the container
+(witness_files_in), the patterns of a run in the container
 (result_files_patterns), the delivery of witness_files_to_file_root and
 remove_old_witness_files."""
-import os
-import time
-
 import pytest
 
 from src.cooperace import components
 from src.cooperace.components import DEFAULT_WITNESS, REGISTRY, WitnessSpec
-
-LONG_AGO = 946684800 * 10**9  # 2000-01-01 in nanoseconds
 
 
 def witness_of(name):
@@ -25,12 +18,10 @@ def witness_of(name):
     return REGISTRY[name].witness if name in REGISTRY else DEFAULT_WITNESS
 
 
-def write(path, text="witness", mtime_ns=None):
-    """Writes `path` and sets its modification time to `mtime_ns`."""
+def write(path, text="witness"):
+    """Writes `path`, making its directory, and returns it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
-    if mtime_ns is not None:
-        os.utime(path, ns=(mtime_ns, mtime_ns))
     return path
 
 
@@ -71,55 +62,6 @@ def test_a_spec_without_names_collects_by_name_pattern(run_dirs):
     write(run / "result.graphml")
 
     assert sorted(components.witness_files_in(witness_of("Unlisted"), str(run))) == sorted(map(str, wanted))
-
-
-# --- witness_file_states and move_new_witness_files ---------------------------
-
-def test_a_file_written_by_the_run_is_moved_and_a_file_left_before_stays(run_dirs):
-    component, run = run_dirs
-    old = write(component / "old-witness.yml", "old", mtime_ns=LONG_AGO)
-    # Newer than any file the run writes: no comparison with a start time would leave it
-    future = write(component / "shipped-witness.yml", "shipped", mtime_ns=time.time_ns() + 3600 * 10**9)
-    before = components.witness_file_states(witness_of("Unlisted"), str(component))
-    new = write(component / "sub/dir/new-witness.graphml", "new")
-
-    components.move_new_witness_files(witness_of("Unlisted"), str(component), str(run), before)
-
-    assert (run / "sub/dir/new-witness.graphml").read_text() == "new"
-    assert not new.exists()
-    assert old.read_text() == "old" and future.read_text() == "shipped"
-    assert not (run / "old-witness.yml").exists() and not (run / "shipped-witness.yml").exists()
-
-
-def test_a_file_the_run_rewrites_is_moved(run_dirs):
-    component, run = run_dirs
-    write(component / "output/witness.graphml", "old", mtime_ns=LONG_AGO)
-    before = components.witness_file_states(witness_of("Dartagnan"), str(component))
-    write(component / "output/witness.graphml", "rewritten")
-
-    components.move_new_witness_files(witness_of("Dartagnan"), str(component), str(run), before)
-
-    assert (run / "output/witness.graphml").read_text() == "rewritten"
-    assert components.witness_files_in(witness_of("Dartagnan"), str(run)) == [str(run / "output/witness.graphml")]
-
-
-def test_only_the_files_a_spec_names_are_moved(run_dirs):
-    component, run = run_dirs
-    before = components.witness_file_states(witness_of("Dartagnan"), str(component))
-    other = write(component / "output/other-witness.graphml")
-
-    components.move_new_witness_files(witness_of("Dartagnan"), str(component), str(run), before)
-
-    assert other.exists() and list(run.iterdir()) == []
-
-
-def test_witness_file_states_records_the_existing_candidates(run_dirs):
-    component, _run = run_dirs
-    path = write(component / "output/witness.graphml", "abc", mtime_ns=LONG_AGO)
-
-    states = components.witness_file_states(witness_of("Dartagnan"), str(component))
-
-    assert states == {str(path): (path.stat().st_ino, 3, LONG_AGO)}
 
 
 # --- result_files_patterns ----------------------------------------------------

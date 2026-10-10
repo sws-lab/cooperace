@@ -30,6 +30,8 @@ the command line, the property, the conf or the installation, and an
 exception of CoOpeRace's own while the components run, end CoOpeRace without
 a verdict line: each problem is one line "CoOpeRace: error: <problem>" on
 stderr (an unexpected exception adds its traceback) and the status is 1;
+so does a run where BenchExec cannot run a component in its container,
+that is, outside runexec and benchexec (ComponentRunner.container_problems);
 argparse refuses a command line with status 2. BenchExec's tool-info module
 reads a run without a verdict line as ERROR, not UNKNOWN. No component is
 started in these cases, except that an exception while they run first stops
@@ -185,21 +187,23 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     components of `runner` (a components.ComponentRunner), takes its strategy
     for `runner.property_name` (strategy_for), checks that each component of
     every strategy of the conf is installed in the version whose options
-    `runner` has (ComponentRunner.installation_problems), and runs the
-    strategy taken with strategy.execute in the ComponentGroup `group` (a new
-    one if None). Returns the result strategy.execute returns, which main
-    prints after "CoOpeRace verdict: ".
+    `runner` has (ComponentRunner.installation_problems) and that BenchExec
+    can run a component in its container here
+    (ComponentRunner.container_problems), and runs the strategy taken with
+    strategy.execute in the ComponentGroup `group` (a new one if None).
+    Returns the result strategy.execute returns, which main prints after
+    "CoOpeRace verdict: ".
 
     Raises SetupError, before any component starts, for a conf that
     config.load_strategies refuses, for a property the conf has no strategy
     for, and for components that are not installed or not in that version,
     also those of another property's strategy, so that a conf with such a
-    component is refused whatever the task's property. An Exception of
-    strategy.execute propagates."""
+    component is refused whatever the task's property, and where BenchExec
+    cannot run the container. An Exception of strategy.execute propagates."""
     strategies = load_strategies(conf, runner.registry)
     root = strategy_for(strategies, runner.property_name)
     names = [name for tree in strategies.values() for name in config.component_names(tree)]
-    problems = runner.installation_problems(list(dict.fromkeys(names)))
+    problems = runner.installation_problems(list(dict.fromkeys(names))) or runner.container_problems()
     if problems:
         raise SetupError(*problems)
     return strategy.execute(root, runner, group)

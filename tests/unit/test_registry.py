@@ -105,7 +105,7 @@ def test_read_component_versions_refuses_another_format(tmp_path, content):
         read_component_versions(str(path))
 
 
-def test_a_component_is_run_with_its_options_before_those_of_its_witness(runner, group, tmp_path, capsys):
+def test_a_component_is_run_with_its_options_before_those_of_its_witness(runner, group, tmp_path, capsys, container):
     script = make_script(tmp_path / "stub", 'echo "args: $*"\necho "STUB-STATUS: true"\n')
     register_stub(runner, "Stub A", script, options=("--from-fm-tools", "x"))
 
@@ -170,7 +170,7 @@ def test_a_tool_info_module_that_cannot_be_imported_is_a_step_without_a_verdict(
 
 
 def test_a_component_is_found_by_its_name_in_the_conf_whatever_the_case_of_the_name_of_its_tool(
-        runner, group, capsys, tmp_path):
+        runner, group, capsys, tmp_path, container):
     """BenchExec's sv-sanitizers module names itself "SV-sanitizers", the entry in
     REGISTRY is "sv-sanitizers": the entry is looked up by the conf's name, and the
     block is printed under the module's name."""

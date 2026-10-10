@@ -80,7 +80,7 @@ def test_the_command_line_is_cmdline_for_run_s(tmp_path, make_runner, monkeypatc
     assert command.cmdline == [tool.script, "-o", "/home/someone"]
 
 
-def test_the_environment_of_the_module_is_applied(tmp_path, make_runner, monkeypatch):
+def test_the_environment_of_the_module_is_applied(tmp_path, make_runner, monkeypatch, container):
     monkeypatch.setenv("COOPERACE_TEST_PATH", "/a")
     tool = PlacedTool(make_script(tmp_path / "tool" / "bin", 'echo "$COOPERACE_TEST_NEW $COOPERACE_TEST_PATH"\n'),
                       environments={"newEnv": {"COOPERACE_TEST_NEW": "new"},
@@ -110,7 +110,7 @@ def test_the_components_of_svcomp26_run_in_their_directory_with_cooperace_s_envi
     assert command.environments == {}
 
 
-def test_a_step_runs_the_component_in_its_working_directory(make_runner, group, tmp_path, capsys):
+def test_a_step_runs_the_component_in_its_working_directory(make_runner, group, tmp_path, capsys, container):
     runner = make_runner()
     register_stub(runner, "Stub A", make_script(tmp_path / "stub", 'echo "cwd: $(pwd)"\necho "STUB-STATUS: true"\n'))
 

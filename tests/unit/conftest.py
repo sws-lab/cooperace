@@ -4,8 +4,19 @@
 
 """Imports the package src/cooperace, and the tool-info module of every
 component in its registry. The package finds the bundled BenchExec (lib/*.whl)
-from its own location, so the tests can be run from any directory."""
+from its own location, so the tests can be run from any directory.
+
+A test that runs a component, as CoOpeRace does, in BenchExec's container
+takes the fixture `container`, which skips it where that container cannot be
+made: outside runexec and benchexec on Ubuntu 24.04, and on macOS. To run
+every test, run pytest under runexec from the checkout:
+
+    runexec --read-only-dir / --overlay-dir . --output /tmp/unit-tests.log -- python3 -m pytest tests/unit
+
+and read the result at the end of /tmp/unit-tests.log."""
+import functools
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -21,6 +32,24 @@ for spec in src.cooperace.components.REGISTRY.values():
 
 from src.cooperace.components import ComponentRunner  # noqa: E402
 from src.cooperace.processes import ComponentGroup  # noqa: E402
+
+
+@functools.cache
+def container_works_here() -> bool:
+    """Whether BenchExec's container can be made here (execution.container_works
+    on tools/), found once per test session."""
+    if sys.platform != "linux":
+        return False
+    from src.cooperace import TOOL_DIR, execution
+
+    return execution.container_works(os.path.join(TOOL_DIR, "tools"))
+
+
+@pytest.fixture
+def container():
+    """Skips the test unless BenchExec's container can be made here."""
+    if not container_works_here():
+        pytest.skip("runs a component in BenchExec's container, which needs runexec here (see conftest.py)")
 
 
 @pytest.fixture

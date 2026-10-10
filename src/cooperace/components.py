@@ -14,11 +14,11 @@ The standard output is read by programs, so its lines are a protocol: for
 each component run, "---<name> logs---", its output, "---end of <name>
 logs---", "Tool name: <name> Status: <status> Exit code: <code>", unless CoOpeRace
 stopped it "Tool name: <name> Result: <verdict>", and for a component that
-started "Tool name: <name> Mode: ..." and "Tool name: <name> Measured: ...";
-"Memory limit of <name>: ..." and "CPU-time limit of <name>: ..." before a
-component with a limit starts. strategy.execute adds "CoOpeRace result from: <name>" and
-"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <result>",
-where <result> is "unknown" or reported_result of the returned status.
+started "Tool name: <name> Measured: ..."; "Memory limit of <name>: ..." and
+"CPU-time limit of <name>: ..." before a component with a limit starts.
+strategy.execute adds "CoOpeRace result from: <name>" and "CoOpeRace stopped
+by signal <n>", cli "CoOpeRace verdict: <result>", where <result> is
+"unknown" or reported_result of the returned status.
 A component that cannot be run or crashes is reported in its block and is a
 step without a verdict (run_step). A component that is not installed, or
 whose installed version is not the one whose options tools-options.json
@@ -48,7 +48,6 @@ import threading
 import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from benchexec import model as bmodel
 from benchexec import result as bresult
@@ -60,9 +59,6 @@ from .config import Step
 from .processes import ComponentGroup, run_memory_limit
 from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
-
-if TYPE_CHECKING:
-    from .execution import Mode
 
 
 @dataclass(frozen=True)
@@ -234,10 +230,9 @@ class ComponentRunner:
     recognizes; no-data-race if not given), the components it can run
     (`registry`), their versions and options (`versions`, by fm-tools name),
     the directory that holds their directories (`tools_dir`, tools/ in
-    TOOL_DIR, wherever the working directory is), the execution.Mode its
-    components run in (`mode`, from run_mode unless given) and, between
-    prepare and cleanup, the work directory with one directory per
-    component run (`work_dir`).
+    TOOL_DIR, wherever the working directory is) and, between prepare and
+    cleanup, the work directory with one directory per component run
+    (`work_dir`).
 
     `data_model` is the value of `--arch`: one of DATA_MODELS, or None when
     the option was not given, which means DEFAULT_DATA_MODEL (reported on
@@ -253,7 +248,7 @@ class ComponentRunner:
     def __init__(self, file: str, property_file: str, data_model: str | None,
                  registry: Mapping[str, ComponentSpec] = REGISTRY,
                  versions: Mapping[str, ComponentVersion] | None = None,
-                 property_name: str = NO_DATA_RACE, mode: Mode | None = None):
+                 property_name: str = NO_DATA_RACE):
         if property_name not in FORMULAS:
             raise ValueError(f"unknown property {property_name!r}, expected one of {', '.join(FORMULAS)}")
         if data_model is None:
@@ -274,7 +269,6 @@ class ComponentRunner:
         self.versions = dict(versions)
         #The directory that holds the components' directories
         self.tools_dir = os.path.join(TOOL_DIR, "tools")
-        self.mode = mode
         self.work_dir = None
 
     def installation_problems(self, names: list[str]) -> list[str]:
@@ -312,21 +306,25 @@ class ComponentRunner:
                                 f"holds the options of {version.doi}; run scripts/download-tools.py")
         return problems
 
-    def prepare(self) -> None:
-        """Removes the witness files an earlier run delivered to the working
-        directory, makes the work directory, which holds one directory per
-        component run, made in run_component, and sets `mode` (run_mode)."""
-        remove_old_witness_files()
-        self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
-        self.run_mode()
-
-    def run_mode(self) -> Mode:
-        """`mode`, set to execution.detect_mode's if it is None."""
+    def container_problems(self) -> list[str]:
+        """One message if BenchExec cannot run a component in its container
+        here (execution.container_works on `tools_dir`), which is the case
+        outside runexec and benchexec on Ubuntu 24.04; else none. Starts no
+        component."""
         from . import execution  # imports benchexec.runexecutor, which needs Linux
 
-        if self.mode is None:
-            self.mode = execution.detect_mode(self.tools_dir)
-        return self.mode
+        if execution.container_works(self.tools_dir):
+            return []
+        return ["BenchExec cannot run a component in its container here; CoOpeRace runs only "
+                "under BenchExec (runexec or benchexec): from a shell, run "
+                f"{os.path.join(TOOL_DIR, 'cooperace-run')}, which calls runexec"]
+
+    def prepare(self) -> None:
+        """Removes the witness files an earlier run delivered to the working
+        directory and makes the work directory, which holds one directory per
+        component run, made in run_component."""
+        remove_old_witness_files()
+        self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
 
     def deliver(self, witness_files: list[str]) -> None:
         """Delivers `witness_files` with witness_files_to_file_root."""
@@ -411,38 +409,27 @@ class ComponentRunner:
         (BenchExec's sv-sanitizers module names itself "SV-sanitizers") does
         not matter. The block is printed under `actor.name()`.
 
-        It runs as `command` says, with execution.execute_run in the Mode
-        `run_mode()` and the limits of announce_limits, with its output in
-        `witness_dir`.log beside `witness_dir`, the directory made for this
-        run. Its witness files end up in `witness_dir`: a component whose
-        WitnessSpec writes there gets it with full access; one that writes
-        under its own directory writes, in the container, into the overlay,
-        from which RunExecutor moves them (result_files_patterns), and,
-        without it, into the directory itself, from which
-        move_new_witness_files moves them."""
+        It runs as `command` says, with execution.execute_run and the limits
+        of announce_limits, with its output in `witness_dir`.log beside
+        `witness_dir`, the directory made for this run. Its witness files end
+        up in `witness_dir`: a component whose WitnessSpec writes there gets
+        it with full access; one that writes under its own directory writes
+        into the overlay, from which RunExecutor moves them
+        (result_files_patterns)."""
         from . import execution  # imports benchexec.runexecutor, which needs Linux
 
         spec = self.registry[step.component]
-        mode = self.run_mode()
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
         command = self.command(actor, spec, witness_dir)
-        memory, cpu = announce_limits(step, mode)
-        in_own_directory = spec.witness.directory == "component"
-        before = None
-        if in_own_directory and not mode.container:
-            before = witness_file_states(spec.witness, command.cwd)
-
+        memory, cpu = announce_limits(step)
         tool_result = execution.execute_run(
-            mode, command.cmdline, command.cwd, command.environments, group,
+            command.cmdline, command.cwd, command.environments, group,
             log_file=witness_dir + ".log",
             dir_modes=execution.container_dir_modes(os.path.join(self.tools_dir, spec.directory),
-                                                    [] if in_own_directory else [witness_dir]),
+                                                    [] if spec.witness.directory == "component" else [witness_dir]),
             memory=memory, cpu_time=cpu, output_dir=witness_dir,
             result_files_patterns=result_files_patterns(spec.witness))
-        if before is not None:
-            #Also for a stopped run, so that no file it wrote stays in its directory
-            move_new_witness_files(spec.witness, command.cwd, witness_dir, before)
         witness_files = witness_files_in(spec.witness, witness_dir)
 
         if group.stopped:
@@ -503,36 +490,6 @@ def witness_files_in(witness: WitnessSpec, witness_dir: str) -> list[str]:
     return [path for path in witness_candidates(witness, witness_dir) if os.path.isfile(path)]
 
 
-def witness_file_states(witness: WitnessSpec, directory: str) -> dict[str, tuple[int, int, int]]:
-    """The inode, size and modification time of each witness_candidates file
-    of `witness` under `directory`, by path."""
-    states = {}
-    for path in witness_candidates(witness, directory):
-        try:
-            stat = os.stat(path)
-        except OSError:
-            continue
-        states[path] = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
-    return states
-
-
-def move_new_witness_files(witness: WitnessSpec, directory: str, witness_dir: str,
-                           before: Mapping[str, tuple[int, int, int]]) -> None:
-    """Moves each witness_candidates file of `witness` under the component's
-    directory `directory` whose witness_file_states differ from `before`,
-    taken before a run without the container, to the same relative path
-    under `witness_dir`. A file left by an earlier run, or shipped with the
-    component (Goblint's smoketests/*witness*.yml), is not touched; a file
-    rewritten with the same inode, size and modification time is not
-    moved."""
-    for path, state in witness_file_states(witness, directory).items():
-        if before.get(path) == state:
-            continue
-        destination = os.path.join(witness_dir, os.path.relpath(path, directory))
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        shutil.move(path, destination)
-
-
 def component_memory_limit(step: Step) -> int | None:
     """Memory limit in bytes for the config.Step `step`, from its
     `memory_limit` (the conf's `memoryLimits`), or None.
@@ -557,34 +514,27 @@ def component_cpu_time_limit(step: Step) -> int | None:
     return None if value is None else int(value)
 
 
-def announce_limits(step: Step, mode: Mode) -> tuple[int | None, int | None]:
+def announce_limits(step: Step) -> tuple[int | None, int | None]:
     """The memory limit in bytes (component_memory_limit) and the CPU-time
-    limit in seconds (component_cpu_time_limit) of `step` that the
-    execution.Mode `mode` has a cgroup for, else None. Prints each limit of
-    the step as "Memory limit of <component>: <n> bytes (memory cgroup of its
-    run)" and "CPU-time limit of <component>: <n> s (cpu cgroup of its run)",
-    or, without that cgroup, with ", not applied: no usable memory cgroup"
-    (or cpu) in place of the parenthesis; and a percentage the run has no
-    memory limit for as "Memory limit of <component>: none (no cgroup memory
-    limit found for "<value>")"."""
-    limits = {"memory": component_memory_limit(step), "cpu": component_cpu_time_limit(step)}
+    limit in seconds (component_cpu_time_limit) of `step`, each None if it
+    has none. Prints each limit as "Memory limit of <component>: <n> bytes"
+    and "CPU-time limit of <component>: <n> s", and a percentage the run has
+    no memory limit for as "Memory limit of <component>: none (no cgroup
+    memory limit found for "<value>")"."""
+    memory, cpu = component_memory_limit(step), component_cpu_time_limit(step)
     lines = []
-    if limits["memory"] is None and isinstance(step.memory_limit, str):
+    if memory is None and isinstance(step.memory_limit, str):
         #A percentage that run_memory_limit could not resolve
         lines.append(f"Memory limit of {step.component}: none "
                      f"(no cgroup memory limit found for \"{step.memory_limit}\")")
-    for cgroup, label, unit, usable in (("memory", "Memory limit", "bytes", mode.memory),
-                                        ("cpu", "CPU-time limit", "s", mode.cpu_time)):
-        prefix = f"{label} of {step.component}: {limits[cgroup]} {unit}"
-        if limits[cgroup] is not None and usable:
-            lines.append(f"{prefix} ({cgroup} cgroup of its run)")
-        elif limits[cgroup] is not None:
-            lines.append(f"{prefix}, not applied: no usable {cgroup} cgroup")
-            limits[cgroup] = None
+    if memory is not None:
+        lines.append(f"Memory limit of {step.component}: {memory} bytes")
+    if cpu is not None:
+        lines.append(f"CPU-time limit of {step.component}: {cpu} s")
     if lines:
         with PRINT_LOCK:
             print("\n".join(lines), flush=True)
-    return limits["memory"], limits["cpu"]
+    return memory, cpu
 
 
 def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subprocess.CompletedProcess,
@@ -745,21 +695,18 @@ def print_component_run(name: str, tool_result: subprocess.CompletedProcess, sta
 
 def run_lines(name: str, tool_result: subprocess.CompletedProcess) -> list[str]:
     """For a run that was started (an execution.FinishedRun with a
-    returncode), the lines "Tool name: <name> Mode: <mode>", the
-    execution.Mode.description of the Mode it ran in, and "Tool name: <name>
-    Measured: cputime=<s>s walltime=<s>s memory=<bytes>B
-    terminationreason=<reason>" with what BenchExec measured, a value it did
-    not measure as "-" and a run that ended by itself as
-    "terminationreason=none"; else none."""
-    if getattr(tool_result, "mode", None) is None or tool_result.returncode is None:
+    returncode), the line "Tool name: <name> Measured: cputime=<s>s
+    walltime=<s>s memory=<bytes>B terminationreason=<reason>" with what
+    BenchExec measured, a value it did not measure as "-" and a run that
+    ended by itself as "terminationreason=none"; else none."""
+    if not hasattr(tool_result, "termination_reason") or tool_result.returncode is None:
         return []
 
     def seconds(value):
         return "-" if value is None else f"{value:.2f}s"
 
     memory = "-" if tool_result.memory is None else f"{tool_result.memory}B"
-    return [f"Tool name: {name} Mode: {tool_result.mode.description()}",
-            f"Tool name: {name} Measured: cputime={seconds(tool_result.cpu_time)} "
+    return [f"Tool name: {name} Measured: cputime={seconds(tool_result.cpu_time)} "
             f"walltime={seconds(tool_result.wall_time)} memory={memory} "
             f"terminationreason={tool_result.termination_reason or 'none'}"]
 

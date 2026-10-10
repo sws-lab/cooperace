@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from support import STUB_DOI, make_script, register_stub
 
-from src.cooperace import cli, components
+from src.cooperace import cli, components, execution
 from src.cooperace.components import ComponentRunner
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -267,7 +267,7 @@ def test_nothing_starts_when_a_later_component_is_not_installed(make_runner, gro
     assert runner.work_dir is None
 
 
-def test_run_runs_the_strategy_for_the_property_of_the_runner_and_no_other(tmp_path, capsys):
+def test_run_runs_the_strategy_for_the_property_of_the_runner_and_no_other(tmp_path, capsys, container):
     marker = tmp_path / "started"
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name="valid-memsafety")
     register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
@@ -333,7 +333,7 @@ def test_a_component_installed_from_another_doi_refuses_the_conf_also_in_another
     assert not marker.exists()
 
 
-def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_path, capsys):
+def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_path, capsys, container):
     runner = make_runner()
     register_stub(runner, "Stub A", make_script(tmp_path / "stub", 'echo "STUB-STATUS: ERROR"\nexit 3\n'))
 
@@ -417,6 +417,23 @@ def test_installation_problems_leaves_other_errors_to_the_step(make_runner):
     runner.registry["Broken"] = components.ComponentSpec("Broken", "no_such_toolinfo_module", "broken")
 
     assert runner.installation_problems(["Broken"]) == []
+
+
+def test_where_benchexec_cannot_make_its_container_nothing_starts_and_the_error_names_the_wrapper(
+        make_runner, group, tmp_path, monkeypatch):
+    marker = tmp_path / "started"
+    runner = make_runner()
+    register_stub(runner, "Stub A", make_script(tmp_path / "stub", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
+    monkeypatch.setattr(execution, "container_works", lambda tools_dir: False)
+
+    with pytest.raises(cli.SetupError) as refusal:
+        cli.run({"runType": "sequential", "tools": [{"Stub A": "all"}]}, runner, group)
+
+    (problem,) = refusal.value.problems
+    assert problem.startswith("BenchExec cannot run a component in its container here; ")
+    assert "runexec" in problem and str(ROOT / "cooperace-run") in problem
+    assert not marker.exists()
+    assert runner.work_dir is None
 
 
 # --- an exception of CoOpeRace's own -------------------------------------------

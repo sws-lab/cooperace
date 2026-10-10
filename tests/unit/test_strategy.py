@@ -15,6 +15,9 @@ from support import run_command
 from src.cooperace import config, strategy
 from src.cooperace.strategy import NO_OUTCOME, Outcome
 
+# Every fake runs `sleep` in BenchExec's container.
+pytestmark = pytest.mark.usefixtures("container")
+
 # Letters for the components, so that a conf reads as a tree. All are names
 # that the registry has.
 NAMES = {

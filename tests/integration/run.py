@@ -670,9 +670,7 @@ def limit_problems(run, r, lines):
     `memoryLimits` and `cpuTimeLimits` of the run's configuration (check 7):
     each component with a limit that started must have its line, every
     such line must give the configured limit, a percentage taken of the
-    memory limit BenchExec records for the run, within 1 %, and none may say
-    that the limit was not applied (under BenchExec every limit has its
-    cgroup)."""
+    memory limit BenchExec records for the run, within 1 %."""
     config = run.get("config") or {}
     if lines is None or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
         return []
@@ -699,8 +697,6 @@ def limit_problems(run, r, lines):
             for n in printed:
                 if abs(n - expected) > 0.01 * expected:
                     problems.append(f"{name}'s limit is printed as {n} {unit}, but {key} gives {wanted}")
-            if any(line_of.match(line) and "not applied" in line for line in lines):
-                problems.append(f"{name}'s {label[0].lower() + label[1:]} is printed as not applied")
     return problems
 
 

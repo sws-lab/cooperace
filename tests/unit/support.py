@@ -35,19 +35,17 @@ def wait_until(predicate, timeout=WAIT_SECONDS, interval=0.05):
     return value
 
 
-def run_command(command, cwd, group, mode=None, environments=None):
+def run_command(command, cwd, group, environments=None):
     """Runs `command` in `cwd` in the ComponentGroup `group` with
-    execution.execute_run, as CoOpeRace runs a component, in the
-    execution.Mode `mode` (None: the one execution.detect_mode finds here),
-    with the environment `environments` makes of CoOpeRace's (None: {}) and
-    no limits, and returns its execution.FinishedRun."""
-    from src.cooperace import TOOL_DIR, execution
+    execution.execute_run, as CoOpeRace runs a component, with the
+    environment `environments` makes of CoOpeRace's (None: {}) and no
+    limits, and returns its execution.FinishedRun. Needs BenchExec's
+    container (the fixture `container`)."""
+    from src.cooperace import execution
 
-    if mode is None:
-        mode = execution.detect_mode(os.path.join(TOOL_DIR, "tools"))
     descriptor, log_file = tempfile.mkstemp(prefix="run-", suffix=".log", dir=cwd)
     os.close(descriptor)
-    return execution.execute_run(mode, command, str(cwd), environments or {}, group, log_file,
+    return execution.execute_run(command, str(cwd), environments or {}, group, log_file,
                                  execution.container_dir_modes(str(cwd)))
 
 

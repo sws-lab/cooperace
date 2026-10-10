@@ -2,23 +2,19 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Per-component resource limits: which limits announce_limits passes on and
-prints for a Mode with and without cgroups, component_memory_limit,
-component_cpu_time_limit and run_memory_limit. That the limits end a run is
-tested with real runs in test_execution.py and test_execute.py."""
+"""Per-component resource limits: what announce_limits passes on and prints,
+component_memory_limit, component_cpu_time_limit and run_memory_limit. That
+the limits end a run is tested with real runs in test_execution.py and
+test_execute.py."""
 import inspect
 
 import pytest
 
 from src.cooperace import components
 from src.cooperace.config import Step
-from src.cooperace.execution import Mode
 from src.cooperace.processes import run_memory_limit
 
 MEBIBYTE = 2**20
-
-WITH_CGROUPS = Mode(container=True, memory=True, cpu_time=True, freezer=True)
-WITHOUT_CGROUPS = Mode(container=False, memory=False, cpu_time=False, freezer=False)
 
 
 def goblint(memory=None, cpu=None):
@@ -29,38 +25,21 @@ def goblint(memory=None, cpu=None):
 # --- announce_limits ----------------------------------------------------------
 
 def test_no_limits_print_nothing(capsys):
-    assert components.announce_limits(goblint(), WITH_CGROUPS) == (None, None)
+    assert components.announce_limits(goblint()) == (None, None)
     assert capsys.readouterr().out == ""
 
 
-def test_limits_the_mode_can_apply_are_returned_and_printed_with_their_cgroup(capsys):
-    assert components.announce_limits(goblint(memory=512 * MEBIBYTE, cpu=7), WITH_CGROUPS) == (512 * MEBIBYTE, 7)
+def test_limits_are_returned_and_printed(capsys):
+    assert components.announce_limits(goblint(memory=512 * MEBIBYTE, cpu=7)) == (512 * MEBIBYTE, 7)
     assert capsys.readouterr().out.splitlines() == [
-        f"Memory limit of Goblint: {512 * MEBIBYTE} bytes (memory cgroup of its run)",
-        "CPU-time limit of Goblint: 7 s (cpu cgroup of its run)"]
-
-
-def test_limits_the_mode_cannot_apply_are_printed_as_not_applied_and_not_returned(capsys):
-    assert components.announce_limits(goblint(memory=512 * MEBIBYTE, cpu=7), WITHOUT_CGROUPS) == (None, None)
-    assert capsys.readouterr().out.splitlines() == [
-        f"Memory limit of Goblint: {512 * MEBIBYTE} bytes, not applied: no usable memory cgroup",
-        "CPU-time limit of Goblint: 7 s, not applied: no usable cpu cgroup"]
-
-
-def test_each_limit_depends_on_its_own_cgroup(capsys):
-    memory_only = Mode(container=True, memory=True, cpu_time=False, freezer=False)
-
-    assert components.announce_limits(goblint(memory=1000, cpu=7), memory_only) == (1000, None)
-    assert capsys.readouterr().out.splitlines()[1] == (
-        "CPU-time limit of Goblint: 7 s, not applied: no usable cpu cgroup")
+        f"Memory limit of Goblint: {512 * MEBIBYTE} bytes", "CPU-time limit of Goblint: 7 s"]
 
 
 def test_a_percentage_resolves_against_the_run_limit(monkeypatch, capsys):
     monkeypatch.setattr(components, "run_memory_limit", lambda: 1000 * MEBIBYTE)
 
-    assert components.announce_limits(goblint(memory="70%"), WITH_CGROUPS) == (700 * MEBIBYTE, None)
-    assert capsys.readouterr().out.splitlines() == [
-        f"Memory limit of Goblint: {700 * MEBIBYTE} bytes (memory cgroup of its run)"]
+    assert components.announce_limits(goblint(memory="70%")) == (700 * MEBIBYTE, None)
+    assert capsys.readouterr().out.splitlines() == [f"Memory limit of Goblint: {700 * MEBIBYTE} bytes"]
 
 
 # --- component_memory_limit and component_cpu_time_limit -------------------------
