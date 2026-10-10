@@ -63,11 +63,23 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
 
 ## SV-COMP Smoketests in Docker
 
-1. Run the automated smoketest inside the SV-COMP competition image:
+1. Run the archive's smoke test as fm-tools' CI runs it before the archive can be registered (job
+   `smoke-test` of its `ci/.gitlab-ci.yml`):
    ```bash
    make svcomp
    ```
-   The smoketest output is streamed to your terminal, and the build returns non-zero if the check fails.
+   This builds the archive, builds the image `cooperace-smoketest` from
+   [`scripts/sv-comp/Dockerfile`](scripts/sv-comp/Dockerfile) (Ubuntu 24.04 with the packages the CI job
+   and CoOpeRace's fm-tools entry install, and the unpacked archive in `/opt/cooperace`), and runs it as
+   root with `docker run --privileged`, which the CI's cgroup setup needs. In the container, the CI's
+   cgroup setup runs and then `./smoketest.sh`, which runs `./cooperace-run`. The output is streamed to
+   your terminal, and `make` returns non-zero if the check fails. `DOCKER_RUN_OPTIONS` passes further
+   options to `docker run`.
+
+   On a host whose AppArmor restricts user namespaces (Ubuntu 24.04), the privileged container is
+   unconfined and the components' containers, nested in `runexec`'s, are refused; `make svcomp` then runs
+   the container under the AppArmor profile `benchexec` of BenchExec's Debian package, which allows them,
+   if the host has it.
 
    The archive is built from the commit `HEAD` (`scripts/svcomp-dist.sh`), which must have no uncommitted
    changes to tracked files; `ALLOW_DIRTY=1` builds a development archive from the working tree instead,
@@ -75,11 +87,14 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    entry will list, as in `FMTOOLS_VERSION=svcomp27 make svcomp`. The archive's file `VERSION` holds that
    name and `git describe --always --dirty`, and `./cooperace --version` prints them.
 
-2. After `make svcomp`, the Docker image `cooperace-smoketest` is available. Launch an interactive shell with:
+2. To work in that container, start a shell in it and run the CI's steps by hand:
    ```bash
-   docker run --rm -it --platform linux/amd64 cooperace-smoketest /bin/bash
+   docker run --rm -it --privileged --platform linux/amd64 cooperace-smoketest /bin/bash
+   ci-smoke-test
    ```
-   The unpacked archive lives in `/opt/cooperace`; from there you can re-run `./smoketest.sh` or execute `./cooperace` manually. The container uses the SV-COMP competition base image, so you interact with the same environment as the automated smoketest.
+   `ci-smoke-test` sets up the cgroups and runs `./smoketest.sh` in `/opt/cooperace`; afterwards
+   `./cooperace-run` can be run there by hand. On Ubuntu 24.04, add `--security-opt apparmor=benchexec`
+   to `docker run`, as `make svcomp` does.
 
 If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
 `docker builder prune --all --force`.

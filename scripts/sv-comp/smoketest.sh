@@ -4,8 +4,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-# Runs CoOpeRace on its own smoke-test task from the root of the unpacked
-# archive, and fails unless the task gets the verdict it is known to have:
+# Runs CoOpeRace through cooperace-run, which calls runexec, on its own
+# smoke-test task from the root of the unpacked archive, and fails unless
+# the task gets the verdict it is known to have:
 # the last line of the output is exactly "CoOpeRace verdict: false" (the line
 # BenchExec's tool-info module reads) and a well-formed witness.graphml is
 # written to the working directory.
@@ -23,11 +24,11 @@ echo
 echo "== Running smoke test scenario =="
 rm -f witness.graphml
 STATUS=0
-OUTPUT="$(./cooperace --prop "${PROPERTY}" "${TASK}")" || STATUS=$?
+OUTPUT="$(./cooperace-run --prop "${PROPERTY}" "${TASK}")" || STATUS=$?
 echo "${OUTPUT}"
 
 if [ "${STATUS}" -ne 0 ]; then
-  echo "Smoke test failed: cooperace exited with status ${STATUS}." >&2
+  echo "Smoke test failed: cooperace-run exited with status ${STATUS}." >&2
   exit 1
 fi
 
