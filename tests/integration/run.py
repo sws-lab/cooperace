@@ -38,7 +38,8 @@ of these checks (see README.md):
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
   8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends a level of Goblint's
-     portfolio and a later stage gives the expected verdict
+     portfolio (with `--component-runner nested`: ends Goblint, TIMEOUT) and
+     a later stage gives the expected verdict
   9  when a component of a parallel stage gives the returned verdict, every
      other component of that stage is stopped or answered unknown; no
      component runs twice
@@ -52,6 +53,7 @@ Every verifier, validator and ./cooperace run goes through `benchexec`.
                  [--tasks SUBSTRING ...] [--allowed-cores 14,15] [-N 1]
                  [--cores 2] [--memlimit 4GB] [--timelimit 100]
                  [--no-validation] [--cross]
+                 [--cooperace-option OPT ...] [--benchexec-args "ARGS"]
     run.py validate --out DIR         # validate and check the verification runs in DIR
     run.py check --out DIR            # redo the table and the checks from DIR
 
@@ -291,6 +293,7 @@ def run_benchexec(definition, workdir, tool_directory, out_dir, name, args, whee
            "--no-compress-results", "--name", name, "-o", str(out_dir) + os.sep]
     if args.allowed_cores:
         cmd += ["--allowedCores", args.allowed_cores]
+    cmd += shlex.split(args.benchexec_args)
     cmd.append(str(definition))
     prefix = f"PYTHONPATH={shlex.quote(str(wheel))} " if wheel is not None else ""
     print("+ (cd", workdir, "&&", prefix + " ".join(shlex.quote(c) for c in cmd), ")", flush=True)
@@ -474,7 +477,8 @@ def verify(args, runs, cdir, out):
     if coop:
         definition = out / "defs" / "cooperace.xml"
         write_definition(definition, "benchexec.tools.cooperace",
-                         {n: [("--conf", str(r["conf"]))] for n, r in coop.items()},
+                         {n: [("--conf", str(r["conf"]))] + option_pairs(args.cooperace_option)
+                          for n, r in coop.items()},
                          limits, {n: r["tasks"] for n, r in coop.items()})
         # ./cooperace looks for tools/ in its working directory.
         run_benchexec(definition, cdir, cdir, vdir, "cooperace", args)
@@ -701,8 +705,10 @@ def goblint_cpu_limit_problems(r, t, lines):
     """What departs, in the run `r` of task `t`, from what a CPU-time limit of
     Goblint that ends a level of its portfolio should cause (check 8): the
     portfolio runner reports `goblint exited with code -24` (SIGXCPU) in
-    Goblint's block, Goblint's stage ends without a verdict, and a component
-    of a later stage gives the expected verdict."""
+    Goblint's block, or, with `--component-runner nested`, whose limit is one
+    of Goblint's cgroup and ends the whole portfolio, Goblint's status is
+    TIMEOUT; Goblint's stage ends without a verdict, and a component of a
+    later stage gives the expected verdict."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
     blocks, _ = component_blocks(lines)
@@ -710,8 +716,10 @@ def goblint_cpu_limit_problems(r, t, lines):
     problems = []
     if not goblint:
         return ["Goblint did not run"]
-    if not any("goblint exited with code -24" in line for line in goblint[0]["output"]):
-        problems.append("no level of Goblint's portfolio ended with `goblint exited with code -24`")
+    if not (any("goblint exited with code -24" in line for line in goblint[0]["output"])
+            or goblint[0]["status"] == "TIMEOUT"):
+        problems.append("no level of Goblint's portfolio ended with `goblint exited with code -24`, "
+                        "and Goblint's status is not TIMEOUT")
     if goblint[0]["result"] != "unknown":
         problems.append(f"Goblint's result is {goblint[0]['result']}, not unknown")
     answered = answering_name(lines)
@@ -1001,6 +1009,12 @@ def main():
     ap.add_argument("--memlimit", default="4 GB")
     ap.add_argument("--timelimit", type=int, default=100, help="CPU seconds per run")
     ap.add_argument("--witness-format", choices=list(WITNESS_FORMATS), default="graphml-1.0")
+    ap.add_argument("--cooperace-option", action="append", default=[], metavar="OPT",
+                    help="an option for every ./cooperace run, e.g. --cooperace-option=--component-runner "
+                         "--cooperace-option=nested")
+    ap.add_argument("--benchexec-args", default="",
+                    help="further arguments for every benchexec call, as one shell-quoted string, e.g. "
+                         "the competition's container: \"--read-only-dir / --overlay-dir ./ --hidden-dir /home/\"")
     args = ap.parse_args()
     args.fmt = WITNESS_FORMATS[args.witness_format]
 
@@ -1023,6 +1037,7 @@ def suite(args):
                     limits=dict(cores=args.cores, memlimit=args.memlimit,
                                 cputime_s=args.timelimit, parallel=args.parallel,
                                 allowed_cores=args.allowed_cores),
+                    cooperace_options=args.cooperace_option, benchexec_args=args.benchexec_args,
                     sv_benchmarks=manifest["sv_benchmarks"],
                     runs={n: dict({k: str(r[k]) for k in ("component", "conf") if k in r},
                                   **({"config": r["config"]} if "config" in r else {}),

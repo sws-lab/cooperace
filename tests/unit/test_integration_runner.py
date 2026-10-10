@@ -67,7 +67,8 @@ def test_components_alone_run_under_the_bundled_wheel(tmp_path, monkeypatch):
     runs = {"alone-goblint": dict(kind="alone", tasks=[task]),
             "only-goblint": dict(kind="only", tasks=[task], conf=cdir / "conf" / "only-goblint.json")}
     monkeypatch.setattr(run, "write_definition", lambda *args, **kwargs: None)
-    args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None)
+    args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
+                           cooperace_option=[], benchexec_args="")
 
     run.verify(args, runs, cdir, tmp_path / "out")
 
@@ -75,3 +76,24 @@ def test_components_alone_run_under_the_bundled_wheel(tmp_path, monkeypatch):
     assert [(cmd[0], cwd, pythonpath) for cmd, cwd, pythonpath in started] == [
         ("benchexec", cdir / "tools" / "goblint", wheel),
         ("benchexec", cdir, None)]
+
+
+def test_cooperace_options_and_benchexec_args_reach_the_cooperace_runs(tmp_path, monkeypatch):
+    cdir = tmp_path / "coop"
+    (cdir / "lib").mkdir(parents=True)
+    (cdir / "lib" / "benchexec-3.35-py3-none-any.whl").touch()
+    started, definitions = [], []
+    monkeypatch.setattr(run.subprocess, "run",
+                        lambda cmd, cwd, env, **kwargs: started.append(cmd) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr(run, "write_definition",
+                        lambda path, module, options, *args, **kwargs: definitions.append(options))
+    runs = {"svcomp26": dict(kind="config", tasks=[{"id": "t"}], conf=cdir / "conf" / "svcomp26.json")}
+    args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
+                           cooperace_option=["--component-runner", "nested"],
+                           benchexec_args="--read-only-dir / --overlay-dir ./ --hidden-dir /home/")
+
+    run.verify(args, runs, cdir, tmp_path / "out")
+
+    assert definitions == [{"svcomp26": [("--conf", str(cdir / "conf" / "svcomp26.json")),
+                                         ("--component-runner", "nested")]}]
+    assert started[0][-7:-1] == ["--read-only-dir", "/", "--overlay-dir", "./", "--hidden-dir", "/home/"]
