@@ -65,6 +65,7 @@ class FakeExecutor:
         self.killed = threading.Event()
         self.stops = 0
         self.stops_before_start = 0
+        self.kills = 0
         self.kwargs = None
         FakeExecutor.instances.append(self)
 
@@ -72,6 +73,7 @@ class FakeExecutor:
         with self.SUB_PROCESS_PIDS_LOCK:
             self.stops += 1
             if self.SUB_PROCESS_PIDS:
+                self.kills += 1
                 self.killed.set()
             else:
                 self.stops_before_start += 1
@@ -165,6 +167,8 @@ def test_stopping_the_group_kills_the_run(fake_executor, tmp_path):
 
     assert results[0].termination_reason == "killed"
     assert FakeExecutor.instances[0].killed.is_set()
+    # One stop() that finds the process: RunExecutor logs one "Killing process"
+    assert FakeExecutor.instances[0].kills == 1
     assert group.processes == set()
 
 
@@ -183,7 +187,7 @@ def test_a_stop_before_the_process_starts_is_repeated_until_it_kills_it(fake_exe
     thread.join(15)
 
     executor = FakeExecutor.instances[0]
-    assert executor.stops_before_start >= 1 and executor.killed.is_set()
+    assert executor.stops_before_start >= 1 and executor.killed.is_set() and executor.kills == 1
     assert results[0].termination_reason == "killed"
 
 

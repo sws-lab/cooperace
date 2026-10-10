@@ -85,27 +85,34 @@ class NestedFinishedProcess(FinishedProcess):
 
 class NestedRun:
     """A component running under a RunExecutor, as a ComponentGroup records
-    it. stop() ends it: it records that the run is to be stopped and calls
-    the executor's stop(), which kills the run's container and so every
-    process in it. run_nested calls the executor's stop() again until a call
-    has found the run's process, since a stop() before the executor has
-    started the process does not keep it from starting."""
+    it. stop() ends it: it records that the run is to be stopped
+    (`stop_requested`) and calls the executor's stop() (kill), which kills
+    the run's container and so every process in it. A stop() before the
+    executor has started the run's process does not keep that process from
+    starting, so run_nested calls kill again until a call has found the
+    process (`killed`)."""
 
     def __init__(self, executor: runexecutor.RunExecutor):
         self.executor = executor
         self.stop_requested = threading.Event()
+        self.killed = False
 
     def stop(self) -> None:
         self.stop_requested.set()
-        self.executor.stop()
+        self.kill()
 
-    def stop_found_process(self) -> bool:
-        """Calls the executor's stop() and returns whether the run's process
-        was running then, so that the call killed it."""
+    def kill(self) -> None:
+        """Calls the executor's stop(), unless an earlier call has found the
+        run's process, and sets `killed` if this call finds it, so that it
+        kills the process. The executor logs "Killing process <pid>
+        forcefully." for each call that finds it."""
         with self.executor.SUB_PROCESS_PIDS_LOCK:
+            if self.killed:
+                return
             running = bool(self.executor.SUB_PROCESS_PIDS)
         self.executor.stop()
-        return running
+        if running:
+            self.killed = True
 
 
 def container_dir_modes(tool_directory: str, writable_dirs: Sequence[str] = ()) -> dict[str, str]:
@@ -167,18 +174,16 @@ def run_nested(command: list[str], cwd: str, environments: Mapping, group: Compo
             outcome["error"] = error
 
     worker = threading.Thread(target=execute, name=f"nested run of {command[0]}")
-    killed = False
     try:
         worker.start()
         while worker.is_alive():
             worker.join(POLL_SECONDS)
-            if run.stop_requested.is_set() and not killed:
-                killed = run.stop_found_process()
+            if run.stop_requested.is_set():
+                run.kill()
     except BaseException:
         run.stop_requested.set()
         while worker.is_alive():
-            if not killed:
-                killed = run.stop_found_process()
+            run.kill()
             worker.join(POLL_SECONDS)
         raise
     finally:
