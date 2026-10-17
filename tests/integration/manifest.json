@@ -141,10 +141,10 @@
    "owners": [
     "dartagnan"
    ],
-   "validator": "dartagnan",
+   "validator": "theta",
    "origin": "c/pthread-divine/ring_1w1r-1.yml",
    "license": "ISC",
-   "purpose": "Dartagnan answers false and the Dartagnan validator confirms its witness; ULTIMATE Automizer's validator rejects it, the others give no answer. Goblint ends in unknown after 2.2 s CPU time.",
+   "purpose": "Dartagnan answers false and Theta's validator confirms its witness (ULTIMATE Automizer's validator reaches the 90 s limit on it); the others give no answer. Goblint ends in unknown after 2.2 s CPU time.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -165,10 +165,10 @@
    "owners": [
     "dartagnan"
    ],
-   "validator": "dartagnan",
+   "validator": "uautomizer",
    "origin": "c/goblint-regression/09-regions_01-list_rc.yml",
    "license": "MIT",
-   "purpose": "Dartagnan answers false on a .c task (preprocessed by the component) and the Dartagnan validator confirms its witness; Goblint ends in unknown after 0.8 s and ULTIMATE Automizer times out. Replaces pthread-divine/ring_1w1r-2, where Goblint's own run needs 169 s CPU time to end in unknown, which with a working Goblint in front of Dartagnan exceeds the suite's 100 s limit.",
+   "purpose": "Dartagnan answers false on a .c task (preprocessed by the component) and ULTIMATE Automizer's validator confirms its witness; Goblint ends in unknown after 0.8 s and ULTIMATE Automizer times out. Replaces pthread-divine/ring_1w1r-2, where Goblint's own run needs 169 s CPU time to end in unknown, which with a working Goblint in front of Dartagnan exceeds the suite's 100 s limit.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -237,10 +237,10 @@
    "owners": [
     "uautomizer"
    ],
-   "validator": "dartagnan",
+   "validator": "theta",
    "origin": "c/goblint-regression/04-mutex_50-funptr_rc.yml",
    "license": "MIT",
-   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component) that calls a function through a pointer; its witness is confirmed by the Dartagnan and the ULTIMATE Automizer validators.",
+   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component) that calls a function through a pointer; Theta's validator confirms its witness.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -261,10 +261,10 @@
    "owners": [
     "uautomizer"
    ],
-   "validator": "dartagnan",
+   "validator": "concurrentwitness2test",
    "origin": "c/goblint-regression/04-mutex_21-sound_base.yml",
    "license": "MIT",
-   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component); its witness is confirmed by the Dartagnan and the ULTIMATE Automizer validators.",
+   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component); ConcurrentWitness2Test confirms its witness.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -286,10 +286,10 @@
     "uautomizer",
     "dartagnan"
    ],
-   "validator": "dartagnan",
+   "validator": "uautomizer",
    "origin": null,
    "license": "MIT (this repository)",
-   "purpose": "A data race only when sizeof(long) == 8: expected false under LP64.  ULTIMATE Automizer answers true if given ILP32, so CoOpeRace must pass the task's data model.",
+   "purpose": "A data race only when sizeof(long) == 8: expected false under LP64.  ULTIMATE Automizer answers true if given ILP32, so CoOpeRace must pass the task's data model. ULTIMATE Automizer's validator confirms the witnesses of both owners.",
    "sv_comp_2026": null
   },
   {
@@ -310,10 +310,10 @@
    "configurations": [
     "svcomp26-goblint-1s"
    ],
-   "validator": "dartagnan",
+   "validator": "uautomizer",
    "origin": "c/goblint-regression/04-mutex_19-call_by_ptr_rc.yml",
    "license": "MIT",
-   "purpose": "Run by svcomp26-goblint-1s only. A level of Goblint's portfolio uses more than 1 s of CPU time, so the 1 s limit ends it (goblint exited with code -24) and the runner gives up the remaining levels; Dartagnan answers false in the next stage and the Dartagnan validator confirms its witness. ULTIMATE Automizer also answers false, with 20.6 s of CPU time against Dartagnan's 8.6 s in SV-COMP 2026, so CoOpeRace normally stops it. Goblint's own run needs 54 s to end in unknown, too long for the other configurations.",
+   "purpose": "Run by svcomp26-goblint-1s only. A level of Goblint's portfolio uses more than 1 s of CPU time, so the 1 s limit ends it (goblint exited with code -24) and the runner gives up the remaining levels; Dartagnan answers false in the next stage and ULTIMATE Automizer's validator confirms its witness. ULTIMATE Automizer also answers false, with 20.6 s of CPU time against Dartagnan's 8.6 s in SV-COMP 2026, so CoOpeRace normally stops it. Goblint's own run needs 54 s to end in unknown, too long for the other configurations.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
