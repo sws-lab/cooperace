@@ -14,7 +14,6 @@ ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
     for it (the `benchexec_toolinfo_options` of its fm-tools version; the
     reference), under the BenchExec of the wheel in the checkout's lib/, the
     version whose tool-info modules CoOpeRace itself imports;
-
   * inside CoOpeRace with a one-component configuration (conf/only-*.json);
   * inside CoOpeRace with each production configuration (conf/svcomp26.json,
     conf/svcomp25.json, and any --config given);
@@ -22,16 +21,19 @@ ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
     in manifest.json, conf/svcomp26-goblint-1s.json), on the tasks that name
     it,
 
-validates the witness of every `false` verdict with a SV-COMP 2026 violation
-witness validator, and prints one table of task x configuration and the result
-of these checks (see README.md):
+validates the witness of every `false` verdict with a violation witness
+validator of the chosen witness format (by default YAML 2.2, with the
+validators proposed for SV-COMP 2027) and checks its format with the format's
+linter, and prints one table of task x configuration and the result of these
+checks (see README.md):
 
   1  no run gives a wrong verdict
   2  each component alone gives the expected verdict on its own tasks, and a
      validator confirms its witness (otherwise the task is a bad pick)
   3  CoOpeRace with one component gives the verdict that component gives alone
-  4  every `false` of CoOpeRace delivers a witness file that the validator
-     named in manifest.json confirms, produced by the component that answered
+  4  every `false` of CoOpeRace delivers a witness file of the format that
+     the validator named in manifest.json confirms and the format's linter
+     accepts, produced by the component that answered
   5  each production configuration and configuration of the suite gives the
      expected verdict on every task it runs
   6  every output of CoOpeRace follows the protocol: the verdict line last,
@@ -46,14 +48,14 @@ of these checks (see README.md):
      component runs twice
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
-`validate` and `check` take the runs and tasks recorded in DIR/meta.json by
-`run`, and ignore the options that choose them.
+`validate` and `check` take the runs, the tasks and the witness format
+recorded in DIR/meta.json by `run`, and ignore the options that choose them.
 
     run.py [run] [--out DIR] [--cooperace-dir DIR] [--validators DIR]
                  [--config conf/x.json ...] [--components goblint,dartagnan,...]
                  [--tasks SUBSTRING ...] [--allowed-cores 14,15] [-N 1]
                  [--cores 2] [--memlimit 4GB] [--timelimit 100]
-                 [--no-validation] [--cross]
+                 [--no-validation] [--cross] [--witness-format yaml-2.2]
                  [--cooperace-option OPT ...] [--benchexec-args "ARGS"]
     run.py validate --out DIR         # validate and check the verification runs in DIR
     run.py check --out DIR            # redo the table and the checks from DIR
@@ -102,15 +104,22 @@ TOOL_DIRS = {
 }
 
 # Witness formats.  A format names the file a verifier writes (collected from
-# the verification run's result files), the validators that read it, and how
-# to read the producer out of it.  Per validator: directory under the
+# the verification run's result files), the validators that read it, the
+# linter that checks its syntax (None if there is none), and how to read the
+# producer out of it.  Per validator and linter: directory under the
 # validators directory (as scripts/download-validators.py names it), BenchExec
-# tool-info module, the options of the validator's bench-defs definition in
-# front of the witness option, and the name of the option that takes the
-# witness.  The manifest names, per task, a validator of the chosen format.
-# SV-COMP 2026 validates no-data-race violation witnesses as graphml 1.0
-# (`*-validate-violation-witnesses-v1.xml` of bench-defs, tag svcomp26); a
-# further format is a further entry here and validators fetched for it.
+# tool-info module, the options in front of the witness option, and the name
+# of the option that takes the witness.  The manifest names, per task, a
+# validator of the chosen format.
+#
+# yaml-2.2 is what SV-COMP 2027 requires for no-data-race (a violation witness
+# in YAML format 2.2 in witness.yml).  Its validators and linter are the
+# versions proposed for the track "Validation of Violation Witnesses v2"
+# (fm-tools merge requests !1172, !1196, !1198 and !1173, open on
+# 2026-10-17), with the `benchexec_toolinfo_options` of those versions.
+# graphml-1.0 is what SV-COMP 2026 validated, with the options of the
+# validators' bench-defs definitions `*-validate-violation-witnesses-v1.xml`
+# at tag svcomp26.
 def graphml_producer(witness):
     """The `producer` named in a graphml witness, or None."""
     try:
@@ -125,10 +134,43 @@ def graphml_producer(witness):
     return None
 
 
+def yaml_producer(witness):
+    """The `metadata.producer.name` of the first entry of a YAML witness, or
+    None."""
+    try:
+        import yaml  # a BenchExec dependency
+        entries = yaml.safe_load(Path(witness).read_text())
+        return str(entries[0]["metadata"]["producer"]["name"]).strip()
+    except Exception:
+        return None
+
+
 WITNESS_FORMATS = {
+    "yaml-2.2": dict(
+        file="witness.yml",
+        producer=yaml_producer,
+        validators={
+            "uautomizer": dict(dir="uautomizer-svcomp27-violation",
+                               module="benchexec.tools.ultimateautomizer",
+                               options=["--full-output", "--witness-type", "violation_witness"],
+                               witness_option="--validate"),
+            "theta": dict(dir="theta-svcomp27-validator",
+                          module="benchexec.tools.theta",
+                          options=["--svcomp", "--portfolio", "STABLE", "--loglevel", "RESULT"],
+                          witness_option="--witness"),
+            "concurrentwitness2test": dict(dir="concurrentwitness2test-svcomp27",
+                                           module="benchexec.tools.concurrentwitness2test",
+                                           options=[], witness_option="--witness"),
+        },
+        linter=dict(name="witnesslint", dir="witnesslint-2.3-violation-witnesses-v2",
+                    module="benchexec.tools.witnesslint",
+                    options=["--expectViolationWitness", "--ignoreSelfLoops",
+                             "--expectedWitnessVersion", "2"],
+                    witness_option="--witness")),
     "graphml-1.0": dict(
         file="witness.graphml",
         producer=graphml_producer,
+        linter=None,
         validators={
             "dartagnan": dict(dir="dartagnan-svcomp26-validation",
                               module="benchexec.tools.dartagnan",
@@ -505,13 +547,23 @@ def verify(args, runs, cdir, out):
         run_benchexec(definition, cdir, cdir, vdir, "cooperace", args)
 
 
-def collect_witnesses(results, fmt, out):
-    """Copy the witness file of the format (witness.graphml) of every run with a `false` verdict from the
-    verification run's result files to out/witnesses/<run definition>/<task>/."""
+def collect_witnesses(results, runs, fmt, out):
+    """Copy the witness file of the format (fmt["file"]) of every run with a
+    `false` verdict from the verification run's result files to
+    out/witnesses/<run definition>/<task>/.  For CoOpeRace that is the file
+    at the top of the result files, where CoOpeRace delivers it; a component
+    run alone may write it into a directory of its own (Dartagnan's
+    output/), so for such a run it is the first file of that name anywhere
+    in the result files."""
     for (rundef, task), r in results.items():
         r["witness"] = None
-        # A component run alone writes the witness into its own output directory.
-        src = next(iter(sorted(r["files"].rglob(fmt["file"]))), None)
+        top = r["files"] / fmt["file"]
+        if top.is_file():
+            src = top
+        elif runs.get(rundef, {}).get("kind") == "alone":
+            src = next(iter(sorted(r["files"].rglob(fmt["file"]))), None)
+        else:
+            src = None
         if r["verdict"] is False and src:
             # BenchExec's ${taskdef_name} is the task file's name, with .yml
             dst = out / "witnesses" / rundef / f"{task}.yml" / fmt["file"]
@@ -522,10 +574,19 @@ def collect_witnesses(results, fmt, out):
 
 # ----------------------------------------------------------- validators
 
+def validation_of(r):
+    """The outcome of a validator's or linter's BenchExec run `r`, as stored
+    in a verification run's results."""
+    return dict(status=r["status"], cpu=r["cpu"],
+                verdict="confirmed" if r["verdict"] is False else
+                        "rejected" if r["verdict"] is True else "unknown")
+
+
 def validate(args, results, tasks, out):
     """Run the validator named in the manifest on every `false` witness of a
     run whose task is expected `false`, one BenchExec benchmark per validator,
-    reading the witness from the verification run's result files."""
+    reading the witness from the collected witnesses; then run the format's
+    linter, if it has one, on every collected witness (lint)."""
     by_id = {t["id"]: t for t in tasks}
     vdir = out / "validate"
     shutil.rmtree(vdir, ignore_errors=True)
@@ -538,6 +599,9 @@ def validate(args, results, tasks, out):
     limits = dict(VALIDATION_LIMITS, memlimit=args.memlimit)
     validators = Path(args.validators).resolve()
     for v, per_rundef in todo.items():
+        if v not in args.fmt["validators"]:
+            raise CouldNotRun(f"manifest.json names the validator {v}, which the witness format "
+                              f"{args.witness_format} does not have")
         spec = args.fmt["validators"][v]
         tool_dir = validators / spec["dir"]
         if not tool_dir.is_dir():
@@ -555,10 +619,47 @@ def validate(args, results, tasks, out):
         for (rundef, task), r in read_results(vdir).items():
             if (rundef, task) in results and (results[(rundef, task)].get("validator") in (None, v)):
                 results[(rundef, task)]["validator"] = v
-                results[(rundef, task)]["validation"] = dict(
-                    status=r["status"], cpu=r["cpu"],
-                    verdict="confirmed" if r["verdict"] is False else
-                            "rejected" if r["verdict"] is True else "unknown")
+                results[(rundef, task)]["validation"] = validation_of(r)
+    lint(args, results, by_id, out)
+
+
+def lint(args, results, by_id, out):
+    """Run the linter of the witness format on the collected witness of every
+    run whose task is in `by_id`, one BenchExec benchmark in out/lint/, and
+    record its status as the run's `lint`; nothing if the format has no
+    linter."""
+    spec = args.fmt.get("linter")
+    ldir = out / "lint"
+    shutil.rmtree(ldir, ignore_errors=True)
+    if not spec:
+        return
+    tasks_of = {}
+    for (rundef, task), r in sorted(results.items()):
+        if r.get("witness") and task in by_id:
+            tasks_of.setdefault(rundef, []).append(by_id[task])
+    if not tasks_of:
+        return
+    tool_dir = Path(args.validators).resolve() / spec["dir"]
+    if not tool_dir.is_dir():
+        raise CouldNotRun(f"linter {spec['name']} not found in {tool_dir.parent}; "
+                          "run scripts/download-validators.py")
+    definition = out / "defs" / f"lint-{spec['name']}.xml"
+    witness = out / "witnesses" / "${rundefinition_name}" / "${taskdef_name}" / args.fmt["file"]
+    write_definition(
+        definition, spec["module"], {rd: [(spec["witness_option"], str(witness))] for rd in tasks_of},
+        dict(VALIDATION_LIMITS, memlimit=args.memlimit), tasks_of,
+        bench_options=option_pairs(spec["options"]), required_files={rd: [witness] for rd in tasks_of})
+    run_benchexec(definition, tool_dir, tool_dir, ldir, f"lint-{spec['name']}", args)
+    read_lint(results, out)
+
+
+def read_lint(results, out):
+    """Record, as `lint` of each run in `results`, the status of the linter's
+    run on its witness in out/lint/ (`done` when the linter accepts it)."""
+    if (out / "lint").is_dir():
+        for key, r in read_results(out / "lint").items():
+            if key in results:
+                results[key]["lint"] = r["status"]
 
 
 def component_of_producer(producer):
@@ -860,6 +961,9 @@ def check(results, runs, tasks, skipped, fmt):
                     if not v or v["verdict"] != "confirmed":
                         problems.append(f"{who} does not confirm it: "
                                         + (f"{v['verdict']} ({v['status']})" if v else "not validated"))
+                    if fmt.get("linter") and r.get("lint") != "done":
+                        problems.append(f"{fmt['linter']['name']} does not accept it: "
+                                        + (r["lint"] if r.get("lint") else "not checked"))
                     producer = fmt["producer"](r["witness"])
                     answered = run["component"] if run["kind"] == "only" else answered_by(r)
                     if producer and component_of_producer(producer) not in (None, answered):
@@ -950,7 +1054,10 @@ def cell(r, t):
         s += " WRONG"
     v = r.get("validation")
     if r["verdict"] is False and not t["expected"]:
-        s += " [" + ("no witness" if not r.get("witness") else v["verdict"] if v else "not validated") + "]"
+        s += " [" + ("no witness" if not r.get("witness") else v["verdict"] if v else "not validated")
+        if r.get("witness") and r.get("lint") not in (None, "done"):
+            s += ", lint " + r["lint"]
+        s += "]"
     return f"{s} {r['cpu']:.0f}s"
 
 
@@ -978,7 +1085,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              8: "Goblint's CPU-time limit ends it (TIMEOUT) and a later stage answers",
              9: "a parallel stage stops its other components once one answers"}
     lines = [table(results, runs, tasks, skipped), "",
-             "cells: verdict, [validation of a false witness], CPU time; "
+             "cells: verdict, [validation of a false witness, and the linter's status where "
+             "it does not accept the witness], CPU time; "
              "WRONG = verdict differs from the expected one", ""]
     failed = False
     for n in sorted(names):
@@ -1025,7 +1133,7 @@ def main():
     ap.add_argument("--cores", type=int, default=2, help="cores per run")
     ap.add_argument("--memlimit", default="4 GB")
     ap.add_argument("--timelimit", type=int, default=100, help="CPU seconds per run")
-    ap.add_argument("--witness-format", choices=list(WITNESS_FORMATS), default="graphml-1.0")
+    ap.add_argument("--witness-format", choices=list(WITNESS_FORMATS), default="yaml-2.2")
     ap.add_argument("--cooperace-option", action="append", default=[], metavar="OPT",
                     help="an option for every ./cooperace run, e.g. --cooperace-option=--arch "
                          "--cooperace-option=LP64")
@@ -1056,6 +1164,7 @@ def suite(args):
                                 allowed_cores=args.allowed_cores),
                     cooperace_options=args.cooperace_option, benchexec_args=args.benchexec_args,
                     sv_benchmarks=manifest["sv_benchmarks"],
+                    witness_format=args.witness_format,
                     runs={n: dict({k: str(r[k]) for k in ("component", "conf") if k in r},
                                   **({"config": r["config"]} if "config" in r else {}),
                                   **({"options": r["options"]} if "options" in r else {}),
@@ -1072,21 +1181,22 @@ def suite(args):
         except ValueError as e:
             raise CouldNotRun(f"{out / 'meta.json'} is not JSON: {e}") from e
         tasks, runs, skipped, cdir = plan_from_meta(meta)
+        # The witnesses in DIR are of the format `run` collected.
+        args.witness_format = meta.get("witness_format", "graphml-1.0")
+        args.fmt = WITNESS_FORMATS[args.witness_format]
     # Only the runs of this plan; out/verify may hold results of an earlier run.
     ids = {t["id"] for t in tasks}
     results = {(rundef, task): r for (rundef, task), r in read_results(out / "verify").items()
                if rundef in runs and task in ids}
-    collect_witnesses(results, args.fmt, out)
+    collect_witnesses(results, runs, args.fmt, out)
     if args.command in ("run", "validate") and not args.no_validation:
         validate(args, results, tasks, out)
     elif args.command == "check":
         previous = read_results(out / "validate") if (out / "validate").exists() else {}
         for (rundef, task), r in previous.items():
             if (rundef, task) in results:
-                results[(rundef, task)]["validation"] = dict(
-                    status=r["status"], cpu=r["cpu"],
-                    verdict="confirmed" if r["verdict"] is False else
-                            "rejected" if r["verdict"] is True else "unknown")
+                results[(rundef, task)]["validation"] = validation_of(r)
+        read_lint(results, out)
     checks = check(results, runs, tasks, skipped, args.fmt)
     return report(checks, results, runs, tasks, skipped, out, meta)
 

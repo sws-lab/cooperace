@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 """tests/integration/run.py: which BenchExec and which options the runs of a
-component alone use.  subprocess.run is replaced by a stub, so no BenchExec
-is started."""
+component alone use, how the producer of a YAML witness is read, and which
+witness file is collected.  subprocess.run is replaced by a stub, so no
+BenchExec is started."""
 import importlib.util
 import json
 import os
@@ -119,3 +120,30 @@ def test_options_of_another_doi_are_refused(tmp_path):
     write_options(cdir, "10.5281/zenodo.2", "10.5281/zenodo.1")
     with pytest.raises(run.CouldNotRun, match="records the options of 10.5281/zenodo.1"):
         run.reference_options(cdir, "goblint")
+
+
+YAML = "- entry_type: violation_sequence\n  metadata:\n    producer:\n      name: Dartagnan\n"
+
+YAML_FORMAT = run.WITNESS_FORMATS["yaml-2.2"]
+
+
+def test_the_producer_of_a_yaml_witness(tmp_path):
+    (tmp_path / "witness.yml").write_text(YAML)
+    assert run.yaml_producer(tmp_path / "witness.yml") == "Dartagnan"
+    (tmp_path / "witness.yml").write_text("not: a list")
+    assert run.yaml_producer(tmp_path / "witness.yml") is None
+
+
+def test_cooperace_s_witness_is_the_one_at_the_top_of_its_result_files(tmp_path):
+    """A file of the same name deeper in CoOpeRace's result files (a component's
+    own output directory) is not what CoOpeRace delivered; a component alone
+    may write its witness into such a directory."""
+    for rundef in ("only-dartagnan", "alone-dartagnan"):
+        (tmp_path / rundef / "tools" / "dartagnan" / "output").mkdir(parents=True)
+        (tmp_path / rundef / "tools" / "dartagnan" / "output" / "witness.yml").write_text(YAML)
+    results = {(rd, "t"): dict(verdict=False, files=tmp_path / rd) for rd in ("only-dartagnan", "alone-dartagnan")}
+    runs = {"only-dartagnan": dict(kind="only"), "alone-dartagnan": dict(kind="alone")}
+    run.collect_witnesses(results, runs, YAML_FORMAT, tmp_path / "out")
+    assert results[("only-dartagnan", "t")]["witness"] is None
+    collected = tmp_path / "out" / "witnesses" / "alone-dartagnan" / "t.yml" / "witness.yml"
+    assert results[("alone-dartagnan", "t")]["witness"] == collected
