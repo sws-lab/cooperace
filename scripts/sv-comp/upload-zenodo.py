@@ -52,6 +52,11 @@ PRODUCTION_API = "https://zenodo.org/api"
 SANDBOX_API = "https://sandbox.zenodo.org/api"
 
 
+# States in which the deposit API accepts file changes: a new draft is
+# "unsubmitted", one with uploaded files "inprogress"; a published record is "done".
+EDITABLE_STATES = {"draft", "unsubmitted", "inprogress"}
+
+
 class ZenodoError(RuntimeError):
     """Wrapper for API failures with helpful context."""
 
@@ -106,7 +111,7 @@ def ensure_draft(
 ) -> dict[str, Any]:
     deposition_url = f"{base_url}/deposit/depositions/{record_id}"
     deposition = fetch_json(session, deposition_url)
-    if deposition.get("state") == "draft":
+    if deposition.get("state") in EDITABLE_STATES:
         return deposition
 
     latest_draft = deposition.get("links", {}).get("latest_draft")
@@ -117,7 +122,7 @@ def ensure_draft(
         )
 
     draft = fetch_json(session, latest_draft)
-    if draft.get("state") != "draft":
+    if draft.get("state") not in EDITABLE_STATES:
         raise ZenodoError(
             f"Unable to obtain an editable draft from latest_draft link. State: {draft.get('state')}"
         )
