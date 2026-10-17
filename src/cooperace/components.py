@@ -317,7 +317,8 @@ class ComponentRunner:
             return []
         return ["BenchExec cannot run a component in its container here (its messages above say why); "
                 "CoOpeRace runs components only in that container, which it can make under runexec or "
-                f"benchexec: from a shell, run {os.path.join(TOOL_DIR, 'cooperace-run')}, which calls runexec"]
+                "benchexec: from a shell, run it under runexec as "
+                f"{os.path.join(TOOL_DIR, 'README.md')}, \"Running CoOpeRace by hand\", says"]
 
     def prepare(self) -> None:
         """Removes the witness files an earlier run delivered to the working

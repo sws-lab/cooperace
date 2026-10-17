@@ -431,7 +431,7 @@ def test_where_benchexec_cannot_make_its_container_nothing_starts_and_the_error_
 
     (problem,) = refusal.value.problems
     assert problem.startswith("BenchExec cannot run a component in its container here ")
-    assert "runexec" in problem and str(ROOT / "cooperace-run") in problem
+    assert "runexec" in problem and str(ROOT / "README.md") in problem
     assert not marker.exists()
     assert runner.work_dir is None
 

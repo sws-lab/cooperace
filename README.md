@@ -25,21 +25,34 @@ as the `dev` dependency group. The project is not installed as a package; the la
 
 ## Running CoOpeRace by hand
 
-CoOpeRace runs under BenchExec, as in the competition, where `benchexec` runs `./cooperace` through
-BenchExec's tool-info module. From a shell, run it through `./cooperace-run`, which calls BenchExec's
-`runexec` with the competition's options (`/` read-only, `/home` hidden, CoOpeRace's directory an overlay,
-`pids.max=5000`, 900 s of CPU time, 15 GB of memory):
+CoOpeRace runs each component in a BenchExec container, which needs user namespaces. In the competition,
+`benchexec` runs `./cooperace` through BenchExec's tool-info module, and CoOpeRace makes the components'
+containers inside its own. From a shell, run it under BenchExec's `runexec` with the competition's options
+(`/` read-only, `/home` hidden, CoOpeRace's directory an overlay, `pids.max=5000`, 900 s of CPU time,
+15 GB of memory), from CoOpeRace's directory:
+
+```bash
+TMPDIR=/tmp runexec --container --read-only-dir / --hidden-dir /home --overlay-dir . \
+  --set-cgroup-value pids.max=5000 --timelimit 900s --memlimit 15GB \
+  --output-directory out --result-files 'witness*' \
+  -- ./cooperace --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i
+```
+
+CoOpeRace's output is in `output.log`, whose last line is `CoOpeRace verdict: false`, and the witness is
+`out/witness.graphml`; `runexec` prints its report (CPU time, wall time, memory) and exits 0 whether or not
+CoOpeRace succeeded. A task under `/home` is hidden: add `--read-only-dir` with its directory. As root in a
+container, as in fm-tools' CI, BenchExec can make the components' containers without `runexec`, and
+`./cooperace` runs directly; `scripts/sv-comp/smoketest.sh` does that.
+
+The repository also has `./cooperace-run`, which is not in the SV-COMP archive. It runs the same `runexec`
+command from any directory, with the task's directory readable, prints CoOpeRace's output on stdout and
+`runexec`'s report on stderr, copies the witness files into the working directory, and exits with
+CoOpeRace's exit status. `runexec` options go before a `--` and replace the competition's limits:
 
 ```bash
 ./cooperace-run --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i
 ./cooperace-run --timelimit 60s --memlimit 4GB -- --prop task.prp task.i
 ```
-
-The first prints `CoOpeRace verdict: false` as its last line and writes `witness.graphml` into the working
-directory; `scripts/sv-comp/smoketest.sh` checks exactly that, and the archive carries both files at these
-paths. `runexec` options go before a `--` and replace the competition's limits. `cooperace-run` prints
-CoOpeRace's output on stdout and `runexec`'s report (CPU time, wall time, memory) on stderr, copies the
-witness files into the working directory, and exits with CoOpeRace's exit status.
 
 The machine needs:
 
@@ -50,12 +63,15 @@ The machine needs:
   `python3-pystemd` and `fuse-overlayfs`), whose `/usr/bin/runexec` has one and which `cooperace-run` uses
   when it exists, or set `sysctl kernel.apparmor_restrict_unprivileged_userns=0`. Without
   `/usr/bin/runexec`, `cooperace-run` runs the `runexec` of the bundled wheel in `lib/`.
+- `fuse-overlayfs` where CoOpeRace's directory lies on an overlay file system (in a container) and is
+  itself an overlay of `runexec`: the components' overlays are then a third level, which the kernel's
+  overlayfs refuses.
 - What the components need, the `required_ubuntu_packages` of their fm-tools entries (Java 21 for Dartagnan
   and ULTIMATE Automizer).
 
 CoOpeRace can be started from any working directory: it finds its `lib/`, `conf/` and `tools/` from the location of the launcher. `--prop` is required. CoOpeRace recognizes the property from the formulas in the property file (unreach-call, no-overflow, valid-memsafety or no-data-race, as sv-benchmarks writes them) and runs the conf's strategy for that property; a conf can give each property its own strategy ([`conf/README.md`](conf/README.md)). A property the conf has no strategy for, and a property file of none of these four properties, are refused. Every conf in `conf/`, `conf/svcomp26.json` included, has a strategy for no-data-race only, so CoOpeRace answers only no-data-race. The last line of the output is `CoOpeRace verdict: true`, `false` or `unknown` for no-data-race; for the other properties a `false` names the property, as BenchExec's result for the accepted component does: `false(unreach-call)`, `false(no-overflow)`, or `false(valid-deref)`, `false(valid-free)` or `false(valid-memtrack)` for valid-memsafety. A component's status counts as a verdict only if it belongs to the task's property: `false(unreach-call)` is no verdict on a no-data-race task, and a plain `false` is none on a valid-memsafety task, whose expected `false` names the violated sub-property. A defect of the command line, the property, the conf or the installation ends CoOpeRace with status 1 (2 for a command line that argparse refuses), one line `CoOpeRace: error: ...` on stderr and no verdict line, which BenchExec records as ERROR. A component that runs and fails is not such a defect: its status is printed and the next step runs.
 
-CoOpeRace runs every component through BenchExec's `RunExecutor` in its container (`src/cooperace/execution.py`), as CoVeriTeam runs its actors: the component's directory is an overlay, from which its witness files are collected, the conf's limits are limits of the cgroup of the component's run ([`conf/README.md`](conf/README.md)), and stopping a component kills its container with every process in it. Each component's block ends with a line `Tool name: X Measured: ...` with the CPU time, wall time and memory BenchExec measured. The container needs user namespaces and the limits need cgroups v2, which CoOpeRace has inside the container of `runexec` or `benchexec`. Before any component starts, CoOpeRace checks that BenchExec can make the container; where it cannot, as from a plain shell on Ubuntu 24.04, it ends with status 1, a line `CoOpeRace: error: ...` that names `cooperace-run`, and no verdict line. It has no way of running a component without the container.
+CoOpeRace runs every component through BenchExec's `RunExecutor` in its container (`src/cooperace/execution.py`), as CoVeriTeam runs its actors: the component's directory is an overlay, from which its witness files are collected, the conf's limits are limits of the cgroup of the component's run ([`conf/README.md`](conf/README.md)), and stopping a component kills its container with every process in it. Each component's block ends with a line `Tool name: X Measured: ...` with the CPU time, wall time and memory BenchExec measured. The container needs user namespaces and the limits need cgroups v2, which CoOpeRace has inside the container of `runexec` or `benchexec`. Before any component starts, CoOpeRace checks that BenchExec can make the container; where it cannot, as from a plain shell on Ubuntu 24.04, it ends with status 1, a line `CoOpeRace: error: ...` that points to "Running CoOpeRace by hand" in this README, and no verdict line. It has no way of running a component without the container.
 
 [How to download SV-COMP results logs](/src/tool_combinations)  
 [How to get tool combinations and their theoretical scores](/src/tool_combinations)  
@@ -72,14 +88,10 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    [`scripts/sv-comp/Dockerfile`](scripts/sv-comp/Dockerfile) (Ubuntu 24.04 with the packages the CI job
    and CoOpeRace's fm-tools entry install, and the unpacked archive in `/opt/cooperace`), and runs it as
    root with `docker run --privileged`, which the CI's cgroup setup needs. In the container, the CI's
-   cgroup setup runs and then `./smoketest.sh`, which runs `./cooperace-run`. The output is streamed to
-   your terminal, and `make` returns non-zero if the check fails. `DOCKER_RUN_OPTIONS` passes further
-   options to `docker run`.
-
-   On a host whose AppArmor restricts user namespaces (Ubuntu 24.04), the privileged container is
-   unconfined and the components' containers, nested in `runexec`'s, are refused; `make svcomp` then runs
-   the container under the AppArmor profile `benchexec` of BenchExec's Debian package, which allows them,
-   if the host has it.
+   cgroup setup runs and then `./smoketest.sh`, which runs `./cooperace` directly: as root, BenchExec
+   makes each component's container without `runexec`. The output is streamed to your terminal, and
+   `make` returns non-zero if the check fails. `DOCKER_RUN_OPTIONS` passes further options to
+   `docker run`.
 
    The archive is built from the commit `HEAD` (`scripts/svcomp-dist.sh`), which must have no uncommitted
    changes to tracked files; `ALLOW_DIRTY=1` builds a development archive from the working tree instead,
@@ -93,8 +105,7 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    ci-smoke-test
    ```
    `ci-smoke-test` sets up the cgroups and runs `./smoketest.sh` in `/opt/cooperace`; afterwards
-   `./cooperace-run` can be run there by hand. On Ubuntu 24.04, add `--security-opt apparmor=benchexec`
-   to `docker run`, as `make svcomp` does.
+   `./cooperace` can be run there by hand.
 
 If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
 `docker builder prune --all --force`.
