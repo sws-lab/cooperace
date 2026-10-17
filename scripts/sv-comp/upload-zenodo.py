@@ -20,6 +20,11 @@ script prints both and exits 1.
 Usage example:
     python scripts/sv-comp/upload-zenodo.py --record-id 123456
 
+The draft's metadata (title, creators, version, license, ...) is replaced by the
+contents of --metadata before the file is uploaded; the default is
+zenodo-metadata.json next to this script.  Pass --no-metadata to leave the
+draft's metadata as it is.
+
 Configuration defaults to environment variables for the token so you can export
 ZENODO_TOKEN once and run the script without flags. The record ID must be
 provided explicitly via --record-id.
@@ -29,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import sys
 import time
@@ -48,6 +54,7 @@ except ImportError:  # pragma: no cover - import guard
 
 
 DEFAULT_ARCHIVE = Path("dist/cooperace.zip")
+DEFAULT_METADATA = Path(__file__).with_name("zenodo-metadata.json")
 PRODUCTION_API = "https://zenodo.org/api"
 SANDBOX_API = "https://sandbox.zenodo.org/api"
 
@@ -79,6 +86,17 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_ARCHIVE,
         help=f"Archive to upload (default: {DEFAULT_ARCHIVE})",
+    )
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        default=DEFAULT_METADATA,
+        help=f'JSON file {{"metadata": {{...}}}} for the draft (default: {DEFAULT_METADATA.name} next to this script)',
+    )
+    parser.add_argument(
+        "--no-metadata",
+        action="store_true",
+        help="Do not touch the draft's metadata",
     )
     parser.add_argument(
         "--sandbox",
@@ -127,6 +145,27 @@ def ensure_draft(
             f"Unable to obtain an editable draft from latest_draft link. State: {draft.get('state')}"
         )
     return draft
+
+
+def update_metadata(
+    session: requests.Session,
+    base_url: str,
+    draft: Dict[str, Any],
+    metadata_path: Path,
+) -> Dict[str, Any]:
+    """Replace the draft's metadata with the "metadata" object in metadata_path.
+
+    The deposit API's PUT replaces all metadata, so fields missing from the
+    file are cleared.  Zenodo's validation errors are reported in ZenodoError.
+    """
+    payload = json.loads(metadata_path.read_text())
+    url = f"{base_url}/deposit/depositions/{draft['id']}"
+    response = session.put(url, json=payload, timeout=60)
+    if response.status_code >= 400:
+        raise ZenodoError(f"PUT {url} failed with {response.status_code}: {response.text}")
+    updated = response.json()
+    print(f"Updated metadata of record {draft['id']} from {metadata_path.name}.")
+    return updated
 
 
 def delete_existing(
@@ -299,6 +338,8 @@ def main() -> None:
 
     try:
         draft = ensure_draft(session, base_url, int(args.record_id))
+        if not args.no_metadata:
+            update_metadata(session, base_url, draft, args.metadata)
         delete_existing(session, base_url, draft, archive_path.name)
         uploaded = upload_file(session, draft, archive_path)
         remote_md5 = reported_checksum(session, base_url, draft["id"], uploaded, archive_path.name)
