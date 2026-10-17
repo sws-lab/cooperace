@@ -38,7 +38,8 @@ checks (see README.md):
      expected verdict on every task it runs
   6  every output of CoOpeRace follows the protocol: the verdict line last,
      `CoOpeRace result from: X` before it, each component block closed, no
-     `CoOpeRace: error:`, one witness file for a `false`
+     `CoOpeRace: error:`; a `false` delivers the format's witness file and
+     no two files of one format
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
   8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends Goblint (status
@@ -891,10 +892,12 @@ def parallel_stop_problems(run, lines):
     return problems
 
 
-def protocol_problems(r, lines):
+def protocol_problems(r, lines, fmt):
     """What in the run `r` of CoOpeRace, whose output is `lines`, departs from
     the protocol that benchexec.tools.cooperace and this suite rely on (check
-    6); empty if nothing does."""
+    6); empty if nothing does.  For a `false`, the result files may hold one
+    file per format of DELIVERED_WITNESSES, each in the format its name says,
+    and must hold the file of the witness format `fmt`."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
     problems = []
@@ -918,12 +921,23 @@ def protocol_problems(r, lines):
     if r["verdict"] is False:
         files = sorted(p for p in Path(r["files"]).rglob("*") if p.is_file()) if Path(r["files"]).is_dir() else []
         names = [p.relative_to(r["files"]).as_posix() for p in files]
-        if len(files) != 1:
-            problems.append(f"{len(files)} witness files in the result files ({', '.join(names) or 'none'}), not 1")
-        elif names[0] not in DELIVERED_WITNESSES:
-            problems.append(f"the witness file is {names[0]}, not one of {', '.join(DELIVERED_WITNESSES)}")
-        elif not DELIVERED_WITNESSES[names[0]](files[0]):
-            problems.append(f"{names[0]} does not have the format its name says")
+        of_format = {}
+        for path, name in zip(files, names, strict=True):
+            if name in DELIVERED_WITNESSES and not DELIVERED_WITNESSES[name](path):
+                problems.append(f"{name} does not have the format its name says")
+                continue
+            # The format by content, so that a further file of a format is
+            # counted whatever it is called.
+            kind = next((k for k, test in DELIVERED_WITNESSES.items() if test(path)), None)
+            if kind is None:
+                problems.append(f"{name} is in none of the formats {', '.join(DELIVERED_WITNESSES)}")
+            else:
+                of_format.setdefault(kind, []).append(name)
+        for kind, with_it in of_format.items():
+            if len(with_it) > 1:
+                problems.append(f"{len(with_it)} files in the format of {kind}: {', '.join(with_it)}")
+        if fmt["file"] not in names:
+            problems.append(f"no {fmt['file']} in the result files ({', '.join(names) or 'none'})")
     return problems
 
 
@@ -997,7 +1011,7 @@ def check(results, runs, tasks, skipped, fmt):
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
             if r:
-                problems = protocol_problems(r, cooperace_output(r))
+                problems = protocol_problems(r, cooperace_output(r), fmt)
                 add(6, rundef, t["id"], not problems, "protocol", "; ".join(problems))
     # Check 7.
     for rundef, run in runs.items():
