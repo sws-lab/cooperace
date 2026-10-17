@@ -10,9 +10,11 @@ For every component that is installed under tools/ (Goblint, Dartagnan,
 ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
 
   * with the component alone, through the component's own BenchExec tool-info
-    module and the options of its fm-tools entry for SV-COMP 2026 (the
+    module and the options that tools-options.json of the checkout records
+    for it (the `benchexec_toolinfo_options` of its fm-tools version; the
     reference), under the BenchExec of the wheel in the checkout's lib/, the
     version whose tool-info modules CoOpeRace itself imports;
+
   * inside CoOpeRace with a one-component configuration (conf/only-*.json);
   * inside CoOpeRace with each production configuration (conf/svcomp26.json,
     conf/svcomp25.json, and any --config given);
@@ -78,17 +80,14 @@ REPO = HERE.parents[1]
 TASKS = HERE / "c"
 PROPERTY = TASKS / "properties" / "no-data-race.prp"
 
-# The components of CoOpeRace: the BenchExec tool-info module, the directory
-# under tools/, the name in conf/*.json, and the options of the component's
-# fm-tools entry for SV-COMP 2026 (`benchexec_toolinfo_options` of the version
-# named in `competition_participations`, track Verification).
+# The components of CoOpeRace: the directory under tools/ (the key), the
+# BenchExec tool-info module and the name in conf/*.json.  The options of a
+# component run alone are those tools-options.json records for it
+# (reference_options).
 COMPONENTS = {
-    "goblint": dict(module="benchexec.tools.goblint", name="Goblint",
-                    options=["--portfolio-conf", "conf/svcomp26/seq.txt"]),
-    "dartagnan": dict(module="benchexec.tools.dartagnan", name="Dartagnan",
-                      options=[]),
-    "uautomizer": dict(module="benchexec.tools.ultimateautomizer",
-                       name="ULTIMATE Automizer", options=["--full-output"]),
+    "goblint": dict(module="benchexec.tools.goblint", name="Goblint"),
+    "dartagnan": dict(module="benchexec.tools.dartagnan", name="Dartagnan"),
+    "uautomizer": dict(module="benchexec.tools.ultimateautomizer", name="ULTIMATE Automizer"),
 }
 
 # Tool directories under tools/ of the names that conf/*.json may use
@@ -267,6 +266,28 @@ def bundled_benchexec(cdir):
     return wheels[0]
 
 
+def reference_options(cdir, component):
+    """The options of `component` run alone: its `options` in
+    tools-options.json of the checkout `cdir`, which scripts/download-tools.py
+    writes from the `benchexec_toolinfo_options` of the component's fm-tools
+    version, and which CoOpeRace passes to the component.  Raises CouldNotRun
+    if the file cannot be read, has no entry for the component, or records
+    another DOI than tools/<component>/.doi."""
+    path = cdir / "tools-options.json"
+    try:
+        record = json.loads(path.read_text()).get(component)
+    except (OSError, ValueError) as e:
+        raise CouldNotRun(f"cannot read {path}: {e}") from e
+    if record is None:
+        raise CouldNotRun(f"{path} has no entry for {component}")
+    doi_file = cdir / "tools" / component / ".doi"
+    installed = doi_file.read_text().strip() if doi_file.exists() else None
+    if installed != record["doi"]:
+        raise CouldNotRun(f"tools/{component} is {installed or 'of no recorded DOI'}, "
+                          f"but {path.name} records the options of {record['doi']}")
+    return list(record["options"])
+
+
 def benchexec_environment(wheel=None):
     """The environment `benchexec` is started with.  BenchExec writes the
     environment of its own process into every result XML, so variables whose
@@ -365,7 +386,8 @@ def plan(args):
     for c in present:
         own = [t for t in regular if c in t["owners"]] if not args.cross else regular
         if own:
-            runs[f"alone-{c}"] = dict(kind="alone", component=c, tasks=own)
+            runs[f"alone-{c}"] = dict(kind="alone", component=c, tasks=own,
+                                      options=reference_options(cdir, c))
             conf = HERE / "conf" / f"only-{c}.json"
             runs[f"only-{c}"] = dict(kind="only", component=c, tasks=own,
                                      conf=conf, config=read_conf(conf))
@@ -466,7 +488,7 @@ def verify(args, runs, cdir, out):
             continue
         tool_dir = cdir / "tools" / c
         definition = out / "defs" / f"{name}.xml"
-        write_definition(definition, comp["module"], {name: option_pairs(comp["options"])},
+        write_definition(definition, comp["module"], {name: option_pairs(runs[name]["options"])},
                          limits, {name: runs[name]["tasks"]})
         run_benchexec(definition, tool_dir, tool_dir, vdir, name, args,
                       wheel=bundled_benchexec(cdir))
@@ -1026,6 +1048,7 @@ def suite(args):
                     sv_benchmarks=manifest["sv_benchmarks"],
                     runs={n: dict({k: str(r[k]) for k in ("component", "conf") if k in r},
                                   **({"config": r["config"]} if "config" in r else {}),
+                                  **({"options": r["options"]} if "options" in r else {}),
                                   kind=r["kind"], tasks=[t["id"] for t in r["tasks"]])
                           for n, r in runs.items()},
                     skipped=skipped)
