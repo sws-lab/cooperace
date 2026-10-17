@@ -2,9 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""tests/integration/run.py: which BenchExec the runs of a component alone
-use. subprocess.run is replaced by a stub, so no BenchExec is started."""
+"""tests/integration/run.py: which BenchExec and which options the runs of a
+component alone use.  subprocess.run is replaced by a stub, so no BenchExec
+is started."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -64,7 +66,7 @@ def test_components_alone_run_under_the_bundled_wheel(tmp_path, monkeypatch):
     monkeypatch.setattr(run.subprocess, "run", fake_run)
     monkeypatch.delenv("PYTHONPATH", raising=False)
     task = {"id": "t"}
-    runs = {"alone-goblint": dict(kind="alone", tasks=[task]),
+    runs = {"alone-goblint": dict(kind="alone", tasks=[task], options=[]),
             "only-goblint": dict(kind="only", tasks=[task], conf=cdir / "conf" / "only-goblint.json")}
     monkeypatch.setattr(run, "write_definition", lambda *args, **kwargs: None)
     args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
@@ -97,3 +99,23 @@ def test_cooperace_options_and_benchexec_args_reach_the_cooperace_runs(tmp_path,
     assert definitions == [{"svcomp26": [("--conf", str(cdir / "conf" / "svcomp26.json")),
                                          ("--arch", "LP64")]}]
     assert started[0][-7:-1] == ["--read-only-dir", "/", "--overlay-dir", "./", "--hidden-dir", "/home/"]
+
+
+def write_options(cdir, doi_installed, doi_recorded):
+    (cdir / "tools" / "goblint" / ".doi").write_text(doi_installed + "\n")
+    (cdir / "tools-options.json").write_text(json.dumps(
+        {"goblint": {"doi": doi_recorded, "version": "svcomp27",
+                     "options": ["--portfolio-conf", "conf/svcomp27/seq.txt"]}}))
+
+
+def test_a_component_alone_gets_the_options_of_tools_options_json(tmp_path):
+    cdir = make_checkout(tmp_path)
+    write_options(cdir, "10.5281/zenodo.1", "10.5281/zenodo.1")
+    assert run.reference_options(cdir, "goblint") == ["--portfolio-conf", "conf/svcomp27/seq.txt"]
+
+
+def test_options_of_another_doi_are_refused(tmp_path):
+    cdir = make_checkout(tmp_path)
+    write_options(cdir, "10.5281/zenodo.2", "10.5281/zenodo.1")
+    with pytest.raises(run.CouldNotRun, match="records the options of 10.5281/zenodo.1"):
+        run.reference_options(cdir, "goblint")
