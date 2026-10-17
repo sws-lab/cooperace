@@ -4,10 +4,10 @@
 #
 # SPDX-License-Identifier: MIT
 
-# The competition image, by tag and by digest (read 2026-10-09 with `docker
+# The competition image, by tag and by digest (read 2026-10-17 with `docker
 # buildx imagetools inspect`). Docker pulls by the digest, so a later push to
 # the tag does not change the image; to move to a new image, change both.
-ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2026@sha256:cf838d8305e42cecdbecd6158e90d1e9a58239c162f7c96ed3f80574676bc6da
+ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2027@sha256:68c6a39d06fe0842d0a65a068663b36ed67f5d87f70ec079fbf84272a378ac2b
 FROM scratch AS archive
 COPY cooperace.zip /tmp/cooperace.zip
 
