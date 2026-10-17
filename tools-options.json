@@ -1,20 +1,20 @@
 {
   "goblint": {
-    "doi": "10.5281/zenodo.17642247",
-    "version": "svcomp26",
+    "doi": "10.5281/zenodo.23361000",
+    "version": "svcomp27",
     "options": [
       "--portfolio-conf",
-      "conf/svcomp26/seq.txt"
+      "conf/svcomp27/seq.txt"
     ]
   },
   "dartagnan": {
-    "doi": "10.5281/zenodo.17723884",
-    "version": "svcomp26",
+    "doi": "10.5281/zenodo.23263361",
+    "version": "svcomp27",
     "options": []
   },
   "uautomizer": {
-    "doi": "10.5281/zenodo.17735224",
-    "version": "svcomp26",
+    "doi": "10.5281/zenodo.23295622",
+    "version": "svcomp27",
     "options": [
       "--full-output"
     ]
