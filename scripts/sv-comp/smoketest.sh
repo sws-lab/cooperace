@@ -9,8 +9,9 @@
 # each component's container without runexec), and fails unless
 # the task gets the verdict it is known to have:
 # the last line of the output is exactly "CoOpeRace verdict: false" (the line
-# BenchExec's tool-info module reads) and a well-formed witness.graphml is
-# written to the working directory.
+# BenchExec's tool-info module reads) and a witness is written to the working
+# directory: a well-formed witness.graphml, or a witness.yml that parses as
+# YAML (Dartagnan svcomp27 writes YAML violation witnesses).
 
 set -euo pipefail
 
@@ -23,7 +24,7 @@ echo "== CoOpeRace version =="
 
 echo
 echo "== Running smoke test scenario =="
-rm -f witness.graphml
+rm -f witness.graphml witness.yml
 STATUS=0
 OUTPUT="$(./cooperace --prop "${PROPERTY}" "${TASK}")" || STATUS=$?
 echo "${OUTPUT}"
@@ -39,13 +40,18 @@ if [ "${LAST_LINE}" != "${EXPECTED}" ]; then
   exit 1
 fi
 
-if [ ! -s witness.graphml ]; then
-  echo "Smoke test failed: witness.graphml was not written." >&2
-  exit 1
-fi
-
-if ! python3 -c 'import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])' witness.graphml; then
-  echo "Smoke test failed: witness.graphml is not well-formed XML." >&2
+if [ -s witness.graphml ]; then
+  if ! python3 -c 'import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])' witness.graphml; then
+    echo "Smoke test failed: witness.graphml is not well-formed XML." >&2
+    exit 1
+  fi
+elif [ -s witness.yml ]; then
+  if ! python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' witness.yml; then
+    echo "Smoke test failed: witness.yml is not well-formed YAML." >&2
+    exit 1
+  fi
+else
+  echo "Smoke test failed: neither witness.graphml nor witness.yml was written." >&2
   exit 1
 fi
 

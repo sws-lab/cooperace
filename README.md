@@ -38,11 +38,12 @@ TMPDIR=/tmp runexec --container --read-only-dir / --hidden-dir /home --overlay-d
   -- ./cooperace --prop tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i
 ```
 
-CoOpeRace's output is in `output.log`, whose last line is `CoOpeRace verdict: false`, and the witness is
-`out/witness.graphml`; `runexec` prints its report (CPU time, wall time, memory) and exits 0 whether or not
-CoOpeRace succeeded. A task under `/home` is hidden: add `--read-only-dir` with its directory. As root in a
-container, as in fm-tools' CI, BenchExec can make the components' containers without `runexec`, and
-`./cooperace` runs directly; `scripts/sv-comp/smoketest.sh` does that.
+CoOpeRace's output is in `output.log`, whose last line is `CoOpeRace verdict: false`, and the witness of the
+component that answered is `out/witness.graphml` or `out/witness.yml`; `runexec` prints its report (CPU time,
+wall time, memory) and exits 0 whether or not CoOpeRace succeeded. A task under `/home` is hidden: add
+`--read-only-dir` with its directory. As root in a container, as in fm-tools' CI, BenchExec can make the
+components' containers without `runexec`, and `./cooperace` runs directly; `scripts/sv-comp/smoketest.sh` does
+that.
 
 The repository also has `./cooperace-run`, which is not in the SV-COMP archive. It runs the same `runexec`
 command from any directory, with the task's directory readable, prints CoOpeRace's output on stdout and

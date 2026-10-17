@@ -68,7 +68,8 @@ def test_a_spec_without_names_collects_by_name_pattern(run_dirs):
 
 def test_result_files_patterns():
     assert components.result_files_patterns(WitnessSpec("run", ("--w", "{dir}"), ("witness.yml",))) == []
-    assert components.result_files_patterns(witness_of("Dartagnan")) == ["output/witness.graphml"]
+    assert components.result_files_patterns(witness_of("Dartagnan")) == ["output/witness.graphml",
+                                                                       "output/witness.yml"]
     patterns = components.result_files_patterns(DEFAULT_WITNESS)
     assert len(patterns) == 2 and all(p.startswith("**/") for p in patterns)
 

@@ -123,9 +123,10 @@ REGISTRY = {spec.name: spec for spec in (
                                       ("witness.yml",))),
     ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle"),
     #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
-    #which must be Dartagnan's directory, and has no option for another one
+    #which must be Dartagnan's directory, and has no option for another one.
+    #Version svcomp26 writes output/witness.graphml, svcomp27 output/witness.yml
     ComponentSpec("Dartagnan", "benchexec.tools.dartagnan", "dartagnan",
-                  witness=WitnessSpec("component", (), ("output/witness.graphml",))),
+                  witness=WitnessSpec("component", (), ("output/witness.graphml", "output/witness.yml"))),
     ComponentSpec("ULTIMATE Automizer", "benchexec.tools.ultimateautomizer", "uautomizer",
                   witness=_ULTIMATE_WITNESS),
     ComponentSpec("ULTIMATE GemCutter", "benchexec.tools.ultimategemcutter", "ugemcutter",
