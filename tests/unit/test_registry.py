@@ -58,15 +58,16 @@ def test_every_component_has_its_directory():
     assert {name: spec.directory for name, spec in REGISTRY.items()} == DIRECTORIES
 
 
-def test_the_options_of_the_components_of_svcomp26_are_those_of_their_fm_tools_entries():
-    """The benchexec_toolinfo_options of version svcomp26 of goblint.yml,
-    dartagnan.yml and uautomizer.yml in fm-tools (91acb17e)."""
+def test_the_options_of_the_archive_components_are_those_of_their_fm_tools_entries():
+    """The benchexec_toolinfo_options of version svcomp27 of goblint.yml,
+    dartagnan.yml and uautomizer.yml in fm-tools, as proposed in fm-tools
+    merge requests !1148, !1170 and !1172 (read 2026-10-17)."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.17642247", "svcomp26",
-                                                   ("--portfolio-conf", "conf/svcomp26/seq.txt"))
-    assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.17723884", "svcomp26", ())
-    assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.17735224", "svcomp26", ("--full-output",))
+    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23361000", "svcomp27",
+                                                   ("--portfolio-conf", "conf/svcomp27/seq.txt"))
+    assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.23263361", "svcomp27", ())
+    assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.23295622", "svcomp27", ("--full-output",))
 
 
 def test_every_component_has_options_and_the_options_file_matches_the_lock_files():

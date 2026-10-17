@@ -113,7 +113,7 @@ class ComponentSpec:
 # download-tools.py writes its options into tools-options.json.
 REGISTRY = {spec.name: spec for spec in (
     # Goblint prints "SV-COMP result: ..." only when run through the portfolio
-    # its fm-tools options name (--portfolio-conf conf/svcomp26/seq.txt, a path
+    # its fm-tools options name (--portfolio-conf conf/svcomp27/seq.txt, a path
     # relative to Goblint's directory, the working directory of its run).
     #Witness: witness.yaml.path; the svcomp26 configuration writes no graphml witness
     ComponentSpec("Goblint", "benchexec.tools.goblint", "goblint",
