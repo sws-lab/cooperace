@@ -1,0 +1,19 @@
+{
+  "metadata": {
+    "title": "CoOpeRace: Cooperative Race Freedom Verification",
+    "upload_type": "software",
+    "description": "<p>CoOpeRace metaverifier for SV-COMP 2027.</p>",
+    "version": "svcomp27",
+    "access_right": "open",
+    "license": "mit-license",
+    "creators": [
+      {"name": "Matsiselts, Chris", "affiliation": "University of Tartu", "orcid": "0009-0009-1203-923X"},
+      {"name": "Holter, Karoliine", "affiliation": "University of Tartu", "orcid": "0009-0008-3725-4131"},
+      {"name": "Saan, Simmo", "affiliation": "University of Tartu", "orcid": "0000-0003-4553-1350"},
+      {"name": "Vojdani, Vesal", "affiliation": "University of Tartu", "orcid": "0000-0003-4336-7980"}
+    ],
+    "related_identifiers": [
+      {"relation": "isSupplementTo", "identifier": "https://github.com/sws-lab/cooperace", "scheme": "url"}
+    ]
+  }
+}
