@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 """tests/integration/run.py: which BenchExec and which options the runs of a
-component alone use, how the producer of a YAML witness is read, and which
-witness file is collected.  subprocess.run is replaced by a stub, so no
-BenchExec is started."""
+component alone use, which witness files a `false` of CoOpeRace may deliver
+(check 6), and which witness file is collected.  subprocess.run is replaced
+by a stub, so no BenchExec is started."""
 import importlib.util
 import json
 import os
@@ -100,9 +100,41 @@ def test_options_of_another_doi_are_refused(tmp_path):
         run.reference_options(cdir, "goblint")
 
 
+GRAPHML = ('<graphml xmlns="http://graphml.graphdrawing.org/xmlns">'
+           '<key id="p" attr.name="producer"/><graph><data key="p">X</data></graph></graphml>')
 YAML = "- entry_type: violation_sequence\n  metadata:\n    producer:\n      name: Dartagnan\n"
 
+
+def false_run(tmp_path, files):
+    """A `false` run of CoOpeRace whose result files are `files` ({name: text})."""
+    root = tmp_path / "files"
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text)
+    root.mkdir(exist_ok=True)
+    return dict(verdict=False, reason=None, files=root, log=tmp_path / "log")
+
+
+OUTPUT = ["CoOpeRace result from: Dartagnan", "CoOpeRace verdict: false"]
 YAML_FORMAT = run.WITNESS_FORMATS["yaml-2.2"]
+
+
+@pytest.mark.parametrize("files", [{"witness.yml": YAML}, {"witness.yml": YAML, "witness.graphml": GRAPHML}])
+def test_a_false_may_deliver_one_file_per_format(tmp_path, files):
+    assert run.protocol_problems(false_run(tmp_path, files), OUTPUT, YAML_FORMAT) == []
+
+
+@pytest.mark.parametrize("files, problem", [
+    ({"witness.graphml": GRAPHML}, "no witness.yml in the result files (witness.graphml)"),
+    ({}, "no witness.yml in the result files (none)"),
+    ({"witness.yml": YAML, "tools/dartagnan/output/witness.yml": YAML},
+     "2 files in the format of witness.yml: tools/dartagnan/output/witness.yml, witness.yml"),
+    ({"witness.yml": GRAPHML}, "witness.yml does not have the format its name says"),
+    ({"witness.yml": YAML, "witness.txt": "x"}, "witness.txt is in none of the formats"),
+])
+def test_a_false_without_the_formats_file_or_with_two_of_a_format_fails(tmp_path, files, problem):
+    problems = run.protocol_problems(false_run(tmp_path, files), OUTPUT, YAML_FORMAT)
+    assert any(p.startswith(problem) for p in problems), problems
 
 
 def test_the_producer_of_a_yaml_witness(tmp_path):
