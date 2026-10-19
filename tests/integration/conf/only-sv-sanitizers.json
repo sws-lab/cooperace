@@ -1,0 +1,9 @@
+{
+    "properties": {
+        "valid-memsafety": {
+            "phases":    [["sv-sanitizers"]],
+            "answers":   [["sv-sanitizers"]],
+            "witnesses": ["sv-sanitizers"]
+        }
+    }
+}

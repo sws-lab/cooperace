@@ -1,0 +1,14 @@
+{
+    "properties": {
+        "unreach-call": {
+            "phases":    [["Deagle"]],
+            "answers":   [["Deagle"]],
+            "witnesses": ["Deagle"]
+        },
+        "valid-memsafety": {
+            "phases":    [["Deagle"]],
+            "answers":   [["Deagle"]],
+            "witnesses": ["Deagle"]
+        }
+    }
+}

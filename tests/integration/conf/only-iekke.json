@@ -1,0 +1,9 @@
+{
+    "properties": {
+        "no-overflow": {
+            "phases":    [["iekke"]],
+            "answers":   [["iekke"]],
+            "witnesses": []
+        }
+    }
+}

@@ -291,6 +291,15 @@ def test_check_7_reads_the_limits_from_the_property_strategy():
 
 # --- tasks of other properties ------------------------------------------------
 
+def test_a_task_has_the_property_the_manifest_names_and_no_data_race_otherwise():
+    _manifest, tasks = run.load_tasks(None)
+    by_id = {t["id"]: t for t in tasks}
+
+    assert (by_id["clhlock"]["property"], by_id["clhlock"]["expected"]) == ("valid-memsafety", False)
+    assert (by_id["singleton"]["property"], by_id["singleton"]["expected"]) == ("unreach-call", False)
+    assert (by_id["tls_basic"]["property"], by_id["tls_basic"]["expected"]) == ("no-data-race", True)
+
+
 def test_a_definition_has_one_block_per_property(tmp_path):
     tasks = [dict(yml=Path("/c/a.yml"), property="no-data-race"), dict(yml=Path("/c/b.yml"), property="unreach-call"),
              dict(yml=Path("/c/c.yml"), property="no-data-race")]
