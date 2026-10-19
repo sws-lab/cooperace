@@ -728,7 +728,9 @@ def witness_options(witness: WitnessSpec, witness_dir: str) -> list[str]:
 
 def witness_files_under(tool_dir: str) -> list[str]:
     """The files under `tool_dir` whose name contains "witness" in any case
-    and ends in yml."""
+    and ends in yml, sorted by path, so that which of them
+    witnesses.passing_witness takes first does not depend on the order in
+    which the file system lists them."""
     witness_files = []
 
     for root, _dirs, files in os.walk(tool_dir):
@@ -736,7 +738,7 @@ def witness_files_under(tool_dir: str) -> list[str]:
             if 'witness' in file.lower() and file.endswith("yml"):
                 witness_files.append(os.path.join(root, file))
 
-    return witness_files
+    return sorted(witness_files)
 
 
 def witness_files_to_file_root(witness_files: list[str]) -> None:
