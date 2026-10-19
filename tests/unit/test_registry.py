@@ -47,6 +47,7 @@ DIRECTORIES = {
     "CPAchecker": "cpachecker",
     "sv-sanitizers": "sv-sanitizers",
     "RacerF": "racerf",
+    "iekke": "iekke",
 }
 
 
@@ -61,14 +62,19 @@ def test_every_component_has_its_directory():
 
 def test_the_options_of_the_archive_components_are_those_of_their_fm_tools_entries():
     """The benchexec_toolinfo_options of version svcomp27 of goblint.yml,
-    dartagnan.yml and uautomizer.yml in fm-tools, as proposed in fm-tools
-    merge requests !1148, !1170 and !1172 (read 2026-10-17)."""
+    dartagnan.yml, uautomizer.yml and sv-sanitizers.yml and of version 2.0
+    of iekke.yml in fm-tools main 7a1697a1, and of version svcomp27 of
+    deagle.yml, as proposed in fm-tools merge request !1181 (head
+    a67bf666)."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
     assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23361000", "svcomp27",
                                                    ("--portfolio-conf", "conf/svcomp27/seq.txt"))
     assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.23263361", "svcomp27", ())
     assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.23295622", "svcomp27", ("--full-output",))
+    assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.23342909", "svcomp27", ())
+    assert versions["deagle"] == ComponentVersion("10.5281/zenodo.23462830", "svcomp27", ())
+    assert versions["iekke"] == ComponentVersion("10.5281/zenodo.23243599", "2.0", ())
 
 
 def test_every_component_has_options_and_the_options_file_matches_the_lock_files():
@@ -80,8 +86,8 @@ def test_every_component_has_options_and_the_options_file_matches_the_lock_files
     assert list(versions) == [*archive, *pool]
 
 
-@pytest.mark.xfail(strict=True, reason="conf/svcomp27.json runs sv-sanitizers and Deagle, which tools.txt does not "
-                                       "name, and does not run ULTIMATE Automizer, which tools.txt names")
+@pytest.mark.xfail(strict=True, reason="conf/svcomp27.json runs neither ULTIMATE Automizer nor iekke, which "
+                                       "tools.txt names")
 def test_the_archive_lock_holds_the_components_of_the_default_conf_only():
     archive, _pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
     conf = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
@@ -118,7 +124,7 @@ def test_a_component_is_run_with_its_options_before_those_of_its_witness(runner,
 
 
 def test_components_without_a_witness_spec_of_their_own_use_the_default():
-    for name in ("Deagle", "nacpa", "CPAchecker", "sv-sanitizers", "RacerF"):
+    for name in ("nacpa", "CPAchecker", "RacerF"):
         assert REGISTRY[name].witness == DEFAULT_WITNESS
 
 

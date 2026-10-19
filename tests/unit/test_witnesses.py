@@ -80,9 +80,22 @@ def test_no_witness_spec_names_a_graphml_file():
 def test_the_default_witness_spec_and_the_components_with_their_own():
     assert DEFAULT_WITNESS == WitnessSpec("component", (), None)
     assert {name for name, spec in REGISTRY.items() if spec.witness != DEFAULT_WITNESS} == {
-        "Goblint", "Dartagnan", "ULTIMATE Automizer", "ULTIMATE GemCutter", "ULTIMATE Taipan"}
+        "Goblint", "Dartagnan", "ULTIMATE Automizer", "ULTIMATE GemCutter", "ULTIMATE Taipan",
+        "Deagle", "sv-sanitizers", "iekke"}
     assert REGISTRY["Goblint"].witness.directory == "run"
     assert REGISTRY["Dartagnan"].witness.directory == "component"
+    assert REGISTRY["Deagle"].witness == WitnessSpec("component", (), ("error-witness.yml",))
+    assert REGISTRY["sv-sanitizers"].witness == WitnessSpec("component", (), ("witness.yml",))
+
+
+def test_a_component_that_writes_no_counting_witness_has_no_witness_file(tmp_path):
+    """iekke 2.0 writes only error-witness.graphml: its WitnessSpec names no
+    file, so no file of its run is collected or taken."""
+    write(tmp_path / "error-witness.graphml")
+    write(tmp_path / "witness.yml")
+
+    assert components.result_files_patterns(witness_of("iekke")) == []
+    assert components.witness_files_in(witness_of("iekke"), str(tmp_path)) == []
 
 
 def test_witness_files_under_matches_the_name_pattern(tmp_path):
