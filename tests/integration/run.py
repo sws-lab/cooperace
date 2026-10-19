@@ -37,16 +37,16 @@ checks (see README.md):
   5  each production configuration and configuration of the suite gives the
      expected verdict on every task it runs
   6  every output of CoOpeRace follows the protocol: the verdict line last,
-     `CoOpeRace result from: X` before it, each component block closed, no
-     `CoOpeRace: error:`; a `false` delivers the format's witness file and
-     no two files of one format
+     `CoOpeRace result from: X` before a true or false, each component
+     block closed, no `CoOpeRace: error:`; a `false` delivers the format's
+     witness file and no two files of one format
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
   8  in goblint-1s, the 1 s CPU-time limit ends Goblint (status
      TIMEOUT) and a later phase gives the expected verdict
-  9  when a component gives the returned verdict, every other component of
-     a phase it is in is stopped or answered unknown; no component runs
-     twice
+  9  the verdict is the one the components' answers decide, and no
+     component that could still have changed it was stopped; no component
+     runs twice
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
 `validate` and `check` take the runs, the tasks and the witness format
@@ -674,7 +674,15 @@ def component_of_producer(producer):
 
 # ---------------------------------------------------- CoOpeRace's output
 
-VERDICT_LINE = re.compile(r"CoOpeRace verdict: (true|false|unknown)")
+VERDICT_LINE = re.compile(r"CoOpeRace verdict: (true|false|unknown|ERROR \(contradiction: .+\))")
+# The line strategy.run_strategy of src/cooperace/ prints for each verdict of a
+# component with an entry: its name in the configuration, the verdict, the
+# bracket counting from 1 and, where a witness can count, the witness file or
+# "no witness that passes the check".
+ANSWER_LINE = re.compile(r"CoOpeRace answer: (.+) (true|false), bracket (\d+)"
+                         r"(?:, (witness .+|no witness that passes the check))?")
+# The line it prints when a phase's wall-time limit stops components.
+WALL_TIME_LINE = re.compile(r"CoOpeRace: the wall-time limit of phase \d+, .+ s, has passed: stopping (.+)")
 RESULT_FROM_LINE = re.compile(r"CoOpeRace result from: (.+)")
 BLOCK_START = re.compile(r"---(?!end of )(.+) logs---")
 BLOCK_END = re.compile(r"---end of (.+) logs---")
@@ -849,37 +857,98 @@ def goblint_cpu_limit_problems(r, t, lines):
     return problems
 
 
-def parallel_siblings(config, name):
-    """The other components of the phases of the configuration `config` that
-    the component `name` is in, in the no-data-race strategy, as config.load
-    of src/cooperace/config.py reads it.  Empty if `name` is in no phase or
-    alone in its phases."""
+def data_race_strategy(config):
+    """The no-data-race strategy of the configuration `config`, as conf/README.md
+    describes it: (the brackets of `answers`, each a set of (name, verdict)
+    pairs, highest first; the names of `witnesses`)."""
     strategy = config.get("properties", {}).get("no-data-race", {})
-    phases = [phase_tools(phase) for phase in strategy.get("phases", [])]
-    return list(dict.fromkeys(n for tools in phases if name in tools for n in tools if n != name))
+    brackets = []
+    for bracket in strategy.get("answers", []):
+        pairs = set()
+        for entry in bracket:
+            name, colon, verdict = entry.rpartition(":")
+            pairs |= {(name, verdict)} if colon else {(entry, "true"), (entry, "false")}
+        brackets.append(pairs)
+    return brackets, list(strategy.get("witnesses", []))
 
 
-def parallel_stop_problems(run, lines):
-    """What in CoOpeRace's output `lines` shows that the components of a
-    phase were not stopped when one of them gave the returned verdict
-    (check 9): every other component of a phase it is in must have
-    `Status: stopped by CoOpeRace` or `Result: unknown`; and no component's
-    block may appear twice."""
+def decided(brackets, witnesses, answers):
+    """What CoOpeRace prints for no-data-race by the rules of conf/README.md,
+    given `answers`, each component's (verdict, has a witness) from its
+    `CoOpeRace answer:` line: (verdict, the component the verdict is taken
+    from or None, the index of the deciding bracket or None). The verdict is
+    "true", "false", "unknown" or "ERROR"; a false needs a witness, taken
+    from the first component of `witnesses` with an entry for false, else of
+    the deciding bracket by name, that answered false with one."""
+    for index, bracket in enumerate(brackets):
+        verdicts = {verdict for name, (verdict, _) in answers.items() if (name, verdict) in bracket}
+        if len(verdicts) == 2:
+            return "ERROR", None, index
+        if verdicts:
+            (verdict,) = verdicts
+            break
+    else:
+        return "unknown", None, None
+    agreeing = [name for name, (answer, _) in answers.items()
+                if answer == verdict and (name, verdict) in bracket]
+    if verdict == "true":
+        return "true", sorted(agreeing)[0], index
+    order = [name for name in witnesses if any((name, "false") in b for b in brackets)]
+    order += sorted(name for name, v in bracket if v == "false" and name not in order)
+    supplier = next((name for name in order if answers.get(name) == ("false", True)), None)
+    return ("false", supplier, index) if supplier else ("unknown", None, index)
+
+
+def stop_problems(run, lines):
+    """What in CoOpeRace's output `lines` departs from the rules by which it
+    decides the verdict and stops components (check 9), for its no-data-race
+    strategy: no component's block appears twice; the verdict line is the
+    one `decided` gives from the `CoOpeRace answer:` lines, and a true or
+    false comes from the component `decided` names, where it names one
+    (for a true, any agreeing component of the deciding bracket); and no
+    component that could still have changed the verdict was stopped, unless
+    a phase's wall-time limit stopped it: none with an entry in a bracket
+    above the deciding one, and, for a true or false, none with an entry for
+    the other verdict in the deciding bracket. Components are compared by
+    name without regard to case, since a block names a component as its
+    tool-info module does (SV-sanitizers for sv-sanitizers)."""
     if lines is None:
         return []
     blocks, _ = component_blocks(lines)
     names = [b["name"] for b in blocks]
     problems = [f"{n} has {names.count(n)} blocks" for n in sorted(set(names)) if names.count(n) > 1]
-    answered = answering_name(lines)
-    if answered:
-        by_name = {b["name"]: b for b in blocks}
-        for sibling in parallel_siblings(run.get("config") or {}, answered):
-            b = by_name.get(sibling)
-            if b is None:
-                problems.append(f"{sibling}, beside {answered}, has no block")
-            elif b["status"] != "stopped by CoOpeRace" and b["result"] != "unknown":
-                problems.append(f"{sibling}, beside {answered}, has status {b['status']} "
-                                f"and result {b['result']}")
+    final = VERDICT_LINE.fullmatch(lines[-1]) if lines else None
+    if final is None:
+        return problems  # BenchExec ended the run; check 6 reports a missing verdict line
+    brackets, witnesses = data_race_strategy(run.get("config") or {})
+    answers = {}
+    for line in lines:
+        m = ANSWER_LINE.fullmatch(line)
+        if m:
+            answers[m.group(1)] = (m.group(2), bool(m.group(4)) and m.group(4).startswith("witness "))
+    verdict, source, index = decided(brackets, witnesses, answers)
+    printed = final.group(1)
+    if printed.split(" ")[0] != verdict:
+        problems.append(f"the verdict is {printed}, but the answers {answers or 'none'} decide {verdict}")
+    elif verdict in ("true", "false"):
+        answered = (answering_name(lines) or "").lower()
+        candidates = ([source] if verdict == "false" else
+                      [name for name, (v, _) in answers.items() if v == "true" and (name, "true") in brackets[index]])
+        if answered not in {name.lower() for name in candidates}:
+            problems.append(f"the {verdict} is from {answered or 'no component'}, but the answers give it from "
+                            + " or ".join(candidates))
+    if index is None:
+        return problems
+    timed_out = {name.lower() for line in lines if (m := WALL_TIME_LINE.fullmatch(line))
+                 for name in m.group(1).split(", ")}
+    stopped = {b["name"].lower() for b in blocks if b["status"] == "stopped by CoOpeRace"} - timed_out
+    for name in sorted({name for bracket in brackets for name, _ in bracket}):
+        if name.lower() not in stopped:
+            continue
+        if any(name in {n for n, _ in bracket} for bracket in brackets[:index]):
+            problems.append(f"{name} was stopped, but it has an entry above bracket {index + 1}, which decided")
+        elif verdict in ("true", "false") and (name, "false" if verdict == "true" else "true") in brackets[index]:
+            problems.append(f"{name} was stopped, but it could have contradicted the {verdict} of bracket {index + 1}")
     return problems
 
 
@@ -897,13 +966,13 @@ def protocol_problems(r, lines, fmt):
         pass
     elif not lines or not VERDICT_LINE.fullmatch(lines[-1]):
         problems.append(f"the last line is {lines[-1] if lines else ''!r}, "
-                        "not `CoOpeRace verdict: true|false|unknown`")
+                        "not `CoOpeRace verdict: true|false|unknown|ERROR (contradiction: ...)`")
     else:
         verdict = VERDICT_LINE.fullmatch(lines[-1]).group(1)
         from_lines = [line for line in lines if RESULT_FROM_LINE.fullmatch(line)]
-        if verdict == "unknown" and from_lines:
-            problems.append(f"{from_lines[0]!r} with verdict unknown")
-        elif verdict != "unknown" and (len(from_lines) != 1 or lines[-2] != from_lines[0]):
+        if verdict not in ("true", "false") and from_lines:
+            problems.append(f"{from_lines[0]!r} with verdict {verdict}")
+        elif verdict in ("true", "false") and (len(from_lines) != 1 or lines[-2] != from_lines[0]):
             problems.append("not exactly one `CoOpeRace result from: X`, right before the verdict line")
     blocks, structure = component_blocks(lines)
     problems += structure
@@ -1030,8 +1099,8 @@ def check(results, runs, tasks, skipped, fmt):
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
             if r:
-                problems = parallel_stop_problems(run, cooperace_output(r))
-                add(9, rundef, t["id"], not problems, "parallel stop", "; ".join(problems))
+                problems = stop_problems(run, cooperace_output(r))
+                add(9, rundef, t["id"], not problems, "verdict and stops", "; ".join(problems))
     # Check 5.
     for rundef, run in runs.items():
         if run["kind"] not in ("production", "suite"):

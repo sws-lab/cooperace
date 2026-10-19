@@ -4,8 +4,9 @@
 
 """tests/integration/run.py: which BenchExec and which options the runs of a
 component alone use, which witness files a `false` of CoOpeRace may deliver
-(check 6), and which witness file is collected.  subprocess.run is replaced
-by a stub, so no BenchExec is started."""
+(check 6), which witness file is collected, and what check 9 reads from
+CoOpeRace's output.  subprocess.run is replaced by a stub, so no BenchExec is
+started."""
 import importlib.util
 import json
 import os
@@ -179,3 +180,63 @@ def test_cooperace_s_witness_is_the_one_at_the_top_of_its_result_files(tmp_path)
     assert results[("only-dartagnan", "t")]["witness"] is None
     collected = tmp_path / "out" / "witnesses" / "alone-dartagnan" / "t.yml" / "witness.yml"
     assert results[("alone-dartagnan", "t")]["witness"] == collected
+
+
+# --- check 9: the verdict and the stops ----------------------------------------
+
+GOBLINT_1S = {"properties": {"no-data-race": {
+    "phases": [["Goblint"], ["Dartagnan", "ULTIMATE Automizer"]],
+    "answers": [["Goblint:true"], ["Dartagnan"], ["ULTIMATE Automizer"]],
+    "witnesses": ["Dartagnan", "ULTIMATE Automizer"]}}}
+
+
+def block(name, status, result=None):
+    """The lines of a component's block as print_component_run prints them."""
+    lines = [f"---{name} logs---", f"---end of {name} logs---", f"Tool name: {name} Status: {status} Exit code: 0"]
+    return lines + ([f"Tool name: {name} Result: {result}"] if result else [])
+
+
+def test_check_9_accepts_a_higher_bracket_overriding_a_lower_false():
+    # The case the earlier check 9 reported: Goblint's true decides above
+    # sv-sanitizers' false, which ran beside it.
+    config = {"properties": {"no-data-race": {
+        "phases": [["sv-sanitizers", "Goblint"]], "answers": [["Goblint:true"], ["sv-sanitizers:false"]],
+        "witnesses": ["sv-sanitizers"]}}}
+    lines = (block("SV-sanitizers", "false", "false")
+             + ["CoOpeRace answer: sv-sanitizers false, bracket 2, witness /w/witness.yml"]
+             + block("Goblint", "true", "true") + ["CoOpeRace answer: Goblint true, bracket 1",
+                                                   "CoOpeRace result from: Goblint", "CoOpeRace verdict: true"])
+
+    assert run.stop_problems({"config": config}, lines) == []
+
+
+def test_check_9_accepts_a_stopped_lower_bracket():
+    lines = (block("Goblint", "TIMEOUT", "unknown") + block("Dartagnan", "false", "false")
+             + ["CoOpeRace answer: Dartagnan false, bracket 2, witness /w/witness.yml"]
+             + block("ULTIMATE Automizer", "stopped by CoOpeRace")
+             + ["CoOpeRace result from: Dartagnan", "CoOpeRace verdict: false"])
+
+    assert run.stop_problems({"config": GOBLINT_1S}, lines) == []
+
+
+def test_check_9_reports_a_stopped_higher_bracket_and_a_wrong_verdict():
+    lines = (block("Goblint", "stopped by CoOpeRace") + block("Dartagnan", "false", "false")
+             + ["CoOpeRace answer: Dartagnan false, bracket 2, no witness that passes the check"]
+             + ["CoOpeRace result from: Dartagnan", "CoOpeRace verdict: false"])
+
+    assert run.stop_problems({"config": GOBLINT_1S}, lines) == [
+        "the verdict is false, but the answers {'Dartagnan': ('false', False)} decide unknown",
+        "Goblint was stopped, but it has an entry above bracket 2, which decided"]
+
+
+def test_check_9_accepts_a_contradiction_and_a_wall_time_stop():
+    config = {"properties": {"no-data-race": {
+        "phases": [{"tools": ["A", "B", "C"], "wallTimeLimit": 5}], "answers": [["C:true"], ["A", "B"]],
+        "witnesses": []}}}
+    lines = (block("A", "true", "true") + ["CoOpeRace answer: A true, bracket 2"]
+             + block("B", "false", "false") + ["CoOpeRace answer: B false, bracket 2, witness /w/w.yml"]
+             + ["CoOpeRace: the wall-time limit of phase 1, 5 s, has passed: stopping C"]
+             + block("C", "stopped by CoOpeRace") + ["CoOpeRace verdict: ERROR (contradiction: A true, B false)"])
+
+    assert run.stop_problems({"config": config}, lines) == []
+    assert run.VERDICT_LINE.fullmatch(lines[-1])
