@@ -12,9 +12,10 @@ fm-tools entry of the component (data/<name>.yml of the fm-tools repository)
 and <doi> is the DOI of one of the versions that entry lists. There are two,
 both tracked:
 
-- tools.txt names the components of the SV-COMP archive, the ones the
-  strategy conf/svcomp26.json runs; scripts/svcomp-dist.sh packs exactly
-  these. They are always installed.
+- tools.txt names the components of the SV-COMP archive;
+  scripts/svcomp-dist.sh packs exactly these. They are always installed.
+  The default conf, conf/svcomp27.json, also runs sv-sanitizers and Deagle,
+  which are in tools-pool.txt and so not in the archive.
 - tools-pool.txt names the further components that CoOpeRace's registry can
   run (src/cooperace/components.py, REGISTRY) and that are not in the
   archive. They are installed only with `--pool`.

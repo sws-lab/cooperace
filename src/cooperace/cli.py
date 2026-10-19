@@ -15,12 +15,11 @@ other properties the status with its property, as "false(unreach-call)",
 "false(valid-free)" or "false(valid-memtrack)".
 
 The task, the property file and `--conf` are paths relative to the working
-directory; without `--conf`, conf/svcomp26.json of TOOL_DIR is read. The
-property is recognized from the formulas in the property file
-(properties.recognize), never from a file name or path. A property file with
-formulas of no property in properties.FORMULAS, and a property the conf gives
-no strategy for (config.load_strategies: a conf that is one strategy has one
-for no-data-race only), are refused as a defect of the property below.
+directory; without `--conf`, DEFAULT_CONF of TOOL_DIR is read. The property
+is recognized from the formulas in the property file (properties.recognize),
+never from a file name or path. A property file with formulas of no property
+in properties.FORMULAS, and a property the conf gives no strategy for
+(config.load_strategies), are refused as a defect of the property below.
 
 Exit status and output. A verdict line is printed only for a run that was
 carried out, and then the status is 0; the result is "unknown" when no
@@ -36,7 +35,9 @@ argparse refuses a command line with status 2. BenchExec's tool-info module
 reads a run without a verdict line as ERROR, not UNKNOWN. No component is
 started in these cases, except that an exception while they run first stops
 every component. After SIGTERM, SIGINT or SIGHUP, CoOpeRace ends by that
-signal (strategy.execute)."""
+signal (strategy.execute). strategy.run_strategy is not written, so every run
+that passes the checks ends with its NotImplementedError in this way, with
+status 1 and no verdict line."""
 from __future__ import annotations
 
 import argparse
@@ -51,8 +52,11 @@ from typing import NoReturn
 
 from . import TOOL_DIR, config, properties, strategy
 from .components import DATA_MODELS, REGISTRY, ComponentRunner, OptionsFileError
-from .config import Node
+from .config import Strategy
 from .processes import ComponentGroup
+
+# The conf read without --conf, relative to TOOL_DIR.
+DEFAULT_CONF = os.path.join("conf", "svcomp27.json")
 
 
 class SetupError(Exception):
@@ -131,7 +135,7 @@ def main() -> None:
     parser.add_argument('--prop', required=True,
                         help='property file; its property must have a strategy in the conf')
     parser.add_argument('--conf', required=False,
-                        help='conf file (default: conf/svcomp26.json of the tool directory)')
+                        help=f'conf file (default: {DEFAULT_CONF} of the tool directory)')
     parser.add_argument('--version', action='version', version='CoOpeRace ' + version_string(Path(TOOL_DIR)))
     parser.add_argument('filepath')
 
@@ -143,7 +147,7 @@ def main() -> None:
         property_name = read_property(args.prop)
         if not os.path.isfile(abs_path):
             raise SetupError(f"the task {args.filepath} is not a file")
-        conf = read_conf(args.conf or os.path.join(TOOL_DIR, "conf", "svcomp26.json"))
+        conf = read_conf(args.conf or os.path.join(TOOL_DIR, DEFAULT_CONF))
         #Before the runner is made, which reports a missing --arch on stderr,
         #so that a refused conf or property gives one line there
         strategy_for(load_strategies(conf, REGISTRY), property_name)
@@ -162,7 +166,7 @@ def main() -> None:
     print("CoOpeRace verdict: " + verdict)
 
 
-def load_strategies(conf: dict, known: Container[str]) -> dict[str, Node]:
+def load_strategies(conf: dict, known: Container[str]) -> dict[str, Strategy]:
     """The strategies of the conf `conf` by property, from
     config.load_strategies against the component names `known`. Raises
     SetupError for a conf that config.load_strategies refuses."""
@@ -172,7 +176,7 @@ def load_strategies(conf: dict, known: Container[str]) -> dict[str, Node]:
         raise SetupError(str(error)) from error
 
 
-def strategy_for(strategies: dict[str, Node], property_name: str) -> Node:
+def strategy_for(strategies: dict[str, Strategy], property_name: str) -> Strategy:
     """The strategy for the property `property_name` in `strategies` (from
     load_strategies). Raises SetupError if there is none: CoOpeRace then
     checks no other property's strategy on the task, since that strategy's
@@ -202,7 +206,7 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     cannot run the container. An Exception of strategy.execute propagates."""
     strategies = load_strategies(conf, runner.registry)
     root = strategy_for(strategies, runner.property_name)
-    names = [name for tree in strategies.values() for name in config.component_names(tree)]
+    names = [name for loaded in strategies.values() for name in loaded.tools]
     problems = runner.installation_problems(list(dict.fromkeys(names))) or runner.container_problems()
     if problems:
         raise SetupError(*problems)

@@ -5,7 +5,11 @@
 """cli.run and strategy.execute end to end with stub components: shell scripts
 run through the real run_component, execution.execute_run and
 component_status in BenchExec's container (the fixture `container`), and the
-stop on a signal in a separate process."""
+stop on a signal in a separate process.
+
+Every test that runs a strategy is marked NEEDS_EXECUTOR: strategy.run_strategy
+is not written. A "sequential" conf here runs its stubs one_after_another, a
+"parallel" one side_by_side (support.py)."""
 import os
 import shlex
 import signal
@@ -16,7 +20,15 @@ import time
 from pathlib import Path
 
 import pytest
-from support import PASSING_WITNESS, make_script, register_stub
+from support import (
+    NEEDS_EXECUTOR,
+    PASSING_WITNESS,
+    data_race_conf,
+    make_script,
+    one_after_another,
+    register_stub,
+    side_by_side,
+)
 
 from src.cooperace import cli
 from src.cooperace.components import ComponentRunner
@@ -51,10 +63,13 @@ class Run:
 
 def stubbed_run(make_runner, tmp_path, run_type, **stubs):
     """A Run whose conf runs the stub components in `stubs` (name to
-    script body, in the order given, each accepting "all"), registered with
-    register_stub. Returns it with the directory of each stub's script."""
+    script body, in the order given, each trusted for both verdicts),
+    registered with register_stub, one_after_another for `run_type`
+    "sequential" and side_by_side for "parallel". Returns it with the
+    directory of each stub's script."""
     names = {key.replace("_", " "): body for key, body in stubs.items()}
-    run = Run(make_runner(), {"runType": run_type, "tools": [{name: "all"} for name in names]})
+    strategy = (one_after_another if run_type == "sequential" else side_by_side)(*names)
+    run = Run(make_runner(), data_race_conf(strategy))
     directories = {}
     for name, body in names.items():
         directories[name] = tmp_path / "stubs" / name.replace(" ", "_")
@@ -70,6 +85,7 @@ def lines_of(captured):
             if not (line.startswith("Tool name: ") and " Measured: " in line)]
 
 
+@NEEDS_EXECUTOR
 def test_the_block_of_a_started_run_ends_with_its_measurements(make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential", Stub_A='echo "STUB-STATUS: true"\n')
 
@@ -81,6 +97,7 @@ def test_the_block_of_a_started_run_ends_with_its_measurements(make_runner, tmp_
     assert lines[result + 1].endswith(" terminationreason=none")
 
 
+@NEEDS_EXECUTOR
 def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verdict(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
@@ -98,6 +115,7 @@ def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verd
     assert "CoOpeRace result from: Stub B" in lines
 
 
+@NEEDS_EXECUTOR
 def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
@@ -132,6 +150,7 @@ def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
     assert not any("Stub C" in line for line in lines)
 
 
+@NEEDS_EXECUTOR
 def test_exit_code_and_signal_appear_in_status_lines(make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
         make_runner, tmp_path, "sequential",
@@ -152,10 +171,11 @@ def test_exit_code_and_signal_appear_in_status_lines(make_runner, tmp_path, run_
     assert "Tool name: Stub C Result: false" in lines
 
 
+@NEEDS_EXECUTOR
 def test_a_verdict_the_conf_does_not_accept_is_unknown(make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: false"\n')
-    run.conf["tools"] = [{"Stub A": "true"}]
+    run.conf["properties"]["no-data-race"]["answers"] = [["Stub A:true"]]
 
     verdict = run.execute()
     lines = lines_of(capsys.readouterr())
@@ -165,6 +185,7 @@ def test_a_verdict_the_conf_does_not_accept_is_unknown(make_runner, tmp_path, ru
     assert "Tool name: Stub A Result: unknown" in lines
 
 
+@NEEDS_EXECUTOR
 def test_the_witness_of_the_returned_component_is_delivered_to_the_working_directory(
         make_runner, tmp_path, run_dir):
     run, directories = stubbed_run(
@@ -194,6 +215,7 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
     assert not (directories["Stub A"] / "witness.yml").exists()
 
 
+@NEEDS_EXECUTOR
 def test_a_stale_witness_in_the_working_directory_is_removed_when_there_is_no_verdict(
         make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
@@ -204,12 +226,13 @@ def test_a_stale_witness_in_the_working_directory_is_removed_when_there_is_no_ve
     assert not (run_dir / "witness.graphml").exists()
 
 
+@NEEDS_EXECUTOR
 def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
         make_runner, tmp_path, "parallel",
-        Stub_Slow='echo "slow started"\nexec sleep 60\n',
         Stub_Fast='sleep 0.5\necho "STUB-STATUS: true"\n',
+        Stub_Slow='echo "slow started"\nexec sleep 60\n',
     )
 
     verdict = run.execute()
@@ -221,6 +244,7 @@ def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
     assert not any(line.startswith("Tool name: Stub Slow Result:") for line in lines)
 
 
+@NEEDS_EXECUTOR
 def test_the_work_directory_is_removed_and_no_component_is_left(
         make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
@@ -232,17 +256,18 @@ def test_the_work_directory_is_removed_and_no_component_is_left(
     assert run.group.processes == set()
 
 
-def test_an_unknown_run_type_is_refused_before_anything_runs(make_runner, capsys):
+def test_a_conf_in_the_tree_format_is_refused_before_anything_runs(make_runner, capsys):
     run = Run(make_runner(), {"runType": "interleaved", "tools": []})
 
-    with pytest.raises(cli.SetupError, match="runType is 'interleaved'"):
+    with pytest.raises(cli.SetupError, match="the conf has 'runType', a key of the tree format"):
         run.execute()
 
     assert capsys.readouterr().out == ""
     assert run.runner.work_dir is None
 
 
-def test_an_exception_while_the_tree_runs_stops_the_components_and_propagates(
+@NEEDS_EXECUTOR
+def test_an_exception_while_the_strategy_runs_stops_the_components_and_propagates(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                          Stub_A='echo "STUB-STATUS: true"\n')
@@ -262,6 +287,7 @@ def test_an_exception_while_the_tree_runs_stops_the_components_and_propagates(
     assert run.group.processes == set()
 
 
+@NEEDS_EXECUTOR
 def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: true"\n')
@@ -274,6 +300,7 @@ def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
 
 # --- the result per property ---------------------------------------------------
 
+@NEEDS_EXECUTOR
 @pytest.mark.parametrize("property_name, statuses, expected", [
     ("no-data-race", ["false(no-data-race)"], "false"),
     ("no-data-race", ["false"], "false"),
@@ -298,9 +325,7 @@ def test_run_returns_the_result_of_the_accepted_status_for_the_property(
     for name, status in zip(names, statuses, strict=True):
         register_stub(runner, name, make_script(tmp_path / "stubs" / name.replace(" ", "_"),
                                                 f'echo "STUB-STATUS: {status}"\n'))
-    strategy = {"runType": "sequential", "tools": [{name: "all"} for name in names]}
-
-    result = cli.run({"properties": {property_name: strategy}}, runner)
+    result = cli.run({"properties": {property_name: one_after_another(*names)}}, runner)
     lines = lines_of(capsys.readouterr())
 
     assert result == expected
@@ -322,26 +347,24 @@ BUSY_STUB = f"exec {shlex.quote(sys.executable)} -c 'while True: pass'\n"
 ALLOCATING_STUB = f"exec {shlex.quote(sys.executable)} -c 'bytearray(2**30)'\n"
 
 
-def limited_run(make_runner, tmp_path, property_name, per_property, limits):
+def limited_run(make_runner, tmp_path, property_name, limits):
     """A Run of the stubs "Stub A" (BUSY_STUB or ALLOCATING_STUB, by the key of
     `limits`) and "Stub B" (answers true) in sequence, with the limits
     `limits` (a conf's "cpuTimeLimits" or "memoryLimits" for Stub A), for a
-    runner of the property `property_name`. The conf is one strategy, or, if
-    `per_property`, the strategy for `property_name` in a conf of properties."""
+    runner of the property `property_name`, in a conf whose only strategy is
+    for `property_name`."""
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=property_name)
     body = BUSY_STUB if "cpuTimeLimits" in limits else ALLOCATING_STUB
     register_stub(runner, "Stub A", make_script(tmp_path / "stubs" / "A", body))
     register_stub(runner, "Stub B", make_script(tmp_path / "stubs" / "B", 'echo "STUB-STATUS: true"\n'))
-    strategy = {"runType": "sequential", "tools": [{"Stub A": "all"}, {"Stub B": "all"}], **limits}
-    return Run(runner, {"properties": {property_name: strategy}} if per_property else strategy)
+    return Run(runner, {"properties": {property_name: one_after_another("Stub A", "Stub B", **limits)}})
 
 
-@pytest.mark.parametrize("property_name, per_property", [
-    ("no-data-race", False), ("no-data-race", True), ("valid-memsafety", True)],
-    ids=["one-strategy", "per-property-no-data-race", "per-property-valid-memsafety"])
+@NEEDS_EXECUTOR
+@pytest.mark.parametrize("property_name", ["no-data-race", "valid-memsafety"])
 def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_next(
-        make_runner, tmp_path, run_dir, capsys, property_name, per_property):
-    run = limited_run(make_runner, tmp_path, property_name, per_property, {"cpuTimeLimits": {"Stub A": 1}})
+        make_runner, tmp_path, run_dir, capsys, property_name):
+    run = limited_run(make_runner, tmp_path, property_name, {"cpuTimeLimits": {"Stub A": 1}})
 
     verdict = run.execute()
     lines = lines_of(capsys.readouterr())
@@ -354,10 +377,11 @@ def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_n
     assert lines[-1] == "CoOpeRace result from: Stub B"
 
 
+@NEEDS_EXECUTOR
 def test_a_component_stopped_at_its_memory_limit_leaves_cooperace_to_run_the_next(
         make_runner, tmp_path, run_dir, capsys):
     limit = 256 * 2**20
-    run = limited_run(make_runner, tmp_path, "unreach-call", True, {"memoryLimits": {"Stub A": limit}})
+    run = limited_run(make_runner, tmp_path, "unreach-call", {"memoryLimits": {"Stub A": limit}})
 
     verdict = run.execute()
     lines = lines_of(capsys.readouterr())
@@ -384,7 +408,8 @@ DRIVER = textwrap.dedent('''
     from support import register_stub
 
     os.chdir(run_dir)
-    conf = {"runType": "parallel", "tools": [{"Stub A": "all"}, {"Stub B": "all"}]}
+    conf = {"properties": {"no-data-race": {"phases": [["Stub A", "Stub B"]], "answers": [["Stub A"], ["Stub B"]],
+                                            "witnesses": []}}}
     run = ComponentRunner("/dev/null", "/dev/null", "ILP32")
     for letter in "AB":
         register_stub(run, f"Stub {letter}", Path(stub_dir) / letter / "stub.sh")
@@ -397,6 +422,7 @@ SLEEPING_STUB = ('dir="$(dirname "$0")"\n(sleep 3; touch "$dir/escaped") &\n'
                  'touch "$dir/started"\necho "stub started"\nexec sleep 60\n')
 
 
+@NEEDS_EXECUTOR
 @pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
 def test_a_stop_signal_ends_cooperace_and_every_component(tmp_path, container, signum):
     stub_dir, run_dir = tmp_path / "stubs", tmp_path / "cwd"

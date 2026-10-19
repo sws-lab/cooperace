@@ -16,7 +16,16 @@ from pathlib import Path
 import pytest
 from benchexec import util as butil
 from benchexec.container import DIR_FULL_ACCESS, DIR_HIDDEN, DIR_OVERLAY, DIR_READ_ONLY
-from support import OTHER_PASSING_WITNESS, PASSING_WITNESS, make_script, register_stub
+from support import (
+    NEEDS_EXECUTOR,
+    OTHER_PASSING_WITNESS,
+    PASSING_WITNESS,
+    data_race_conf,
+    make_script,
+    one_after_another,
+    register_stub,
+    side_by_side,
+)
 from test_execute import Run
 
 from src.cooperace import execution
@@ -253,9 +262,9 @@ def run_dir(tmp_path, monkeypatch, container):
     return directory
 
 
+@NEEDS_EXECUTOR
 def test_a_cpu_time_limit_gives_timeout_and_the_next_component_answers(tmp_path, run_dir, capsys):
-    run = stub_run(tmp_path, {"runType": "sequential", "tools": [{"Stub A": "all"}, {"Stub B": "all"}],
-                                "cpuTimeLimits": {"Stub A": 1}},
+    run = stub_run(tmp_path, data_race_conf(one_after_another("Stub A", "Stub B", cpuTimeLimits={"Stub A": 1})),
                      Stub_A=BUSY_STUB, Stub_B='echo "STUB-STATUS: true"\n')
 
     verdict = run.execute()
@@ -269,10 +278,10 @@ def test_a_cpu_time_limit_gives_timeout_and_the_next_component_answers(tmp_path,
     assert lines[-1] == "CoOpeRace result from: Stub B"
 
 
+@NEEDS_EXECUTOR
 def test_a_memory_limit_gives_out_of_memory(tmp_path, run_dir, capsys):
     limit = 128 * 2**20
-    run = stub_run(tmp_path, {"runType": "sequential", "tools": [{"Stub A": "all"}, {"Stub B": "all"}],
-                                "memoryLimits": {"Stub A": limit}},
+    run = stub_run(tmp_path, data_race_conf(one_after_another("Stub A", "Stub B", memoryLimits={"Stub A": limit})),
                      Stub_A=ALLOCATING_STUB, Stub_B='echo "STUB-STATUS: true"\n')
 
     verdict = run.execute()
@@ -283,10 +292,11 @@ def test_a_memory_limit_gives_out_of_memory(tmp_path, run_dir, capsys):
     assert "Tool name: Stub A Status: OUT OF MEMORY Exit code: signal 9" in lines
 
 
+@NEEDS_EXECUTOR
 def test_a_parallel_loser_is_stopped_with_a_process_in_a_session_of_its_own(tmp_path, run_dir, capsys):
     marker = tmp_path / "escaped"
     run = stub_run(
-        tmp_path, {"runType": "parallel", "tools": [{"Stub Slow": "all"}, {"Stub Fast": "all"}]},
+        tmp_path, data_race_conf(side_by_side("Stub Fast", "Stub Slow")),
         # A descendant in a session of its own, which killpg would not reach;
         # it would write the marker after 3 s.
         Stub_Slow=f"setsid sh -c 'sleep 3; touch {shlex.quote(str(marker))}' &\nexec sleep 60\n",
@@ -305,6 +315,7 @@ def test_a_parallel_loser_is_stopped_with_a_process_in_a_session_of_its_own(tmp_
     assert run.group.processes == set()
 
 
+@NEEDS_EXECUTOR
 def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale_one_is_not(
         tmp_path, run_dir, capsys):
     # A stale witness in the component's directory is neither collected nor
@@ -312,7 +323,7 @@ def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale
     # itself keeps only what was there, since the run wrote into the overlay.
     body = (f'cp {shlex.quote(str(PASSING_WITNESS))} "$(dirname "$0")/fresh-witness.yml"\n'
             'echo "STUB-STATUS: false"\n')
-    run = stub_run(tmp_path, {"runType": "sequential", "tools": [{"Stub A": "all"}]}, Stub_A=body)
+    run = stub_run(tmp_path, data_race_conf(one_after_another("Stub A")), Stub_A=body)
     stale = tmp_path / "stubs" / "Stub_A" / "old-witness.yml"
     stale.write_text(OTHER_PASSING_WITNESS.read_text())
     os.utime(stale, (time.time() + 3600, time.time() + 3600))  # newer than the run: no start time tells it apart

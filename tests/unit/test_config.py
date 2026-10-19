@@ -2,8 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Loading a conf: config.load_strategies and config.load, the trees they build
-and the confs they refuse."""
+"""Loading a conf: config.load_strategies and config.load, the Strategy they
+build, the questions a Strategy answers, and the confs they refuse."""
+import copy
 import dataclasses
 import json
 import re
@@ -13,12 +14,27 @@ import pytest
 
 from src.cooperace import config
 from src.cooperace.components import REGISTRY
-from src.cooperace.config import Parallel, Sequence, Step
+from src.cooperace.config import Entry, Phase, Step, Strategy
 
 ROOT = Path(__file__).resolve().parents[2]
-SHIPPED_CONFS = sorted(
-    [*ROOT.glob("conf/*.json"), *ROOT.glob("conf/combinations*/*.json"),
-     *ROOT.glob("tests/integration/conf/*.json")])
+SHIPPED_CONFS = sorted([*ROOT.glob("conf/*.json"), *ROOT.glob("tests/integration/conf/*.json")])
+
+# The two examples of conf/README.md, "Two examples".
+NO_DATA_RACE = {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 60}, ["Goblint", "Dartagnan"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30},
+    "answers": [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
+    "witnesses": ["sv-sanitizers", "Dartagnan"],
+}
+VALID_MEMSAFETY = {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 60}, ["Deagle"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
+    "witnesses": ["Deagle", "sv-sanitizers"],
+}
+
+# One component in one phase, trusted for both verdicts.
+GOBLINT = {"phases": [["Goblint"]], "answers": [["Goblint"]], "witnesses": []}
 
 
 @pytest.fixture
@@ -27,269 +43,347 @@ def known(runner):
     return runner.registry
 
 
-def steps_of(node):
-    """The Steps of the tree `node`, in the order of the conf."""
-    if isinstance(node, Step):
-        return [node]
-    return [step for child in node.steps for step in steps_of(child)]
+def with_changes(strategy, **changes):
+    """A deep copy of the strategy `strategy` with the keys of `changes` set;
+    a value of None deletes the key."""
+    changed = copy.deepcopy(strategy)
+    for key, value in changes.items():
+        if value is None:
+            del changed[key]
+        else:
+            changed[key] = value
+    return changed
 
 
 # --- the confs in the repository ---------------------------------------------
 
 def test_the_repository_has_the_confs_this_file_checks():
     names = {path.relative_to(ROOT).as_posix() for path in SHIPPED_CONFS}
-    assert "conf/svcomp26.json" in names
-    assert "tests/integration/conf/only-goblint.json" in names
-    assert len(names) > 30
+
+    assert {"conf/svcomp27.json", "tests/integration/conf/only-goblint.json",
+            "tests/integration/conf/goblint-1s.json"} <= names
 
 
 @pytest.mark.parametrize("path", SHIPPED_CONFS, ids=lambda path: path.relative_to(ROOT).as_posix())
 def test_every_shipped_conf_loads(path, known):
-    conf = json.loads(path.read_text())
+    strategies = config.load_strategies(json.loads(path.read_text()), known)
 
-    root = config.load(conf, known)
-
-    expected = Sequence if conf["runType"] == "sequential" else Parallel
-    assert isinstance(root, expected)
-    assert steps_of(root)
+    assert strategies
+    assert all(isinstance(strategy, Strategy) for strategy in strategies.values())
 
 
-@pytest.mark.parametrize("path", SHIPPED_CONFS, ids=lambda path: path.relative_to(ROOT).as_posix())
-def test_every_shipped_conf_is_the_strategy_for_no_data_race_only(path, known):
-    conf = json.loads(path.read_text())
+def test_the_examples_of_the_conf_readme_are_the_examples_this_file_loads():
+    text = (ROOT / "conf" / "README.md").read_text()
+    block = re.search(r"## Two examples\n\n```json\n(.*?)```", text, re.DOTALL).group(1)
 
-    assert config.load_strategies(conf, known) == {"no-data-race": config.load(conf, known)}
-
-
-def test_svcomp26_loads_to_its_tree(known):
-    conf = json.loads((ROOT / "conf/svcomp26.json").read_text())
-
-    assert config.load(conf, known) == Sequence((
-        Step("Goblint", "true", None, 30),
-        Parallel((Step("Dartagnan", "all"), Step("ULTIMATE Automizer", "all", "70%"))),
-    ))
+    assert json.loads(block) == {"properties": {"no-data-race": NO_DATA_RACE, "valid-memsafety": VALID_MEMSAFETY}}
 
 
-# --- the tree ----------------------------------------------------------------
+# --- the two examples ----------------------------------------------------------
 
-@pytest.mark.parametrize("run_type, outer, inner", [
-    ("sequential", Sequence, Parallel),
-    ("parallel", Parallel, Sequence),
-])
-def test_load_takes_the_kind_from_the_run_type_and_alternates_it_with_depth(
-        known, run_type, outer, inner):
-    conf = {"runType": run_type,
-            "tools": [{"Goblint": "all"}, [{"Deagle": "all"}, [{"Dartagnan": "all"}]]]}
+def test_the_no_data_race_example_loads(known):
+    strategy = config.load(NO_DATA_RACE, known)
 
-    root = config.load(conf, known)
-
-    assert root == outer((Step("Goblint", "all"),
-                          inner((Step("Deagle", "all"), outer((Step("Dartagnan", "all"),))))))
-
-
-def test_load_records_the_acceptance_of_every_component(known):
-    conf = {"runType": "sequential",
-            "tools": [{"Goblint": "true"}, [{"Dartagnan": "false"}, {"Deagle": "all"}]]}
-
-    root = config.load(conf, known)
-
-    assert {step.component: step.accept for step in steps_of(root)} == {
-        "Goblint": "true", "Dartagnan": "false", "Deagle": "all"}
+    assert strategy == Strategy(
+        phases=(Phase(("sv-sanitizers", "Goblint"), 60), Phase(("Goblint", "Dartagnan"))),
+        answers=(frozenset({Entry("Goblint", "true")}),
+                 frozenset({Entry("sv-sanitizers", "false")}),
+                 frozenset({Entry("Dartagnan", "true"), Entry("Dartagnan", "false")})),
+        witnesses=("sv-sanitizers", "Dartagnan"),
+        cpu_time_limits={"sv-sanitizers": 30},
+        memory_limits={},
+    )
 
 
-def test_an_object_with_several_keys_gives_one_step_per_key_in_order(known):
-    conf = {"runType": "parallel", "tools": [{"Goblint": "all", "Deagle": "true"}]}
+def test_the_valid_memsafety_example_loads(known):
+    strategy = config.load(VALID_MEMSAFETY, known)
 
-    assert config.load(conf, known) == Parallel((Step("Goblint", "all"), Step("Deagle", "true")))
+    assert strategy == Strategy(
+        phases=(Phase(("sv-sanitizers", "Goblint"), 60), Phase(("Deagle",))),
+        answers=(frozenset({Entry("Goblint", "true")}),
+                 frozenset({Entry("Deagle", "false"), Entry("sv-sanitizers", "false")}),
+                 frozenset({Entry("Deagle", "true")})),
+        witnesses=("Deagle", "sv-sanitizers"),
+        cpu_time_limits={"sv-sanitizers": 30, "Goblint": 30},
+        memory_limits={},
+    )
 
 
-def test_empty_lists_load(known):
-    conf = {"runType": "sequential", "tools": [[]]}
+def test_load_strategies_loads_the_strategy_of_each_property(known):
+    conf = {"properties": {"no-data-race": NO_DATA_RACE, "valid-memsafety": VALID_MEMSAFETY}}
 
-    assert config.load(conf, known) == Sequence((Parallel(()),))
+    assert config.load_strategies(conf, known) == {
+        "no-data-race": config.load(NO_DATA_RACE, known),
+        "valid-memsafety": config.load(VALID_MEMSAFETY, known),
+    }
 
 
-def test_load_gives_each_step_only_its_own_limits(known):
-    conf = {"runType": "sequential", "tools": [{"Goblint": "all"}, {"Dartagnan": "all"}],
-            "cpuTimeLimits": {"Dartagnan": 5}, "memoryLimits": {"Dartagnan": 2**20}}
+# --- what a Strategy answers -----------------------------------------------------
 
-    goblint, dartagnan = config.load(conf, known).steps
+def test_tools_lists_each_component_once_in_the_order_of_the_phases(known):
+    assert config.load(NO_DATA_RACE, known).tools == ("sv-sanitizers", "Goblint", "Dartagnan")
 
-    assert (goblint.memory_limit, goblint.cpu_time_limit) == (None, None)
-    assert (dartagnan.memory_limit, dartagnan.cpu_time_limit) == (2**20, 5)
+
+def test_phases_of_and_in_phase_give_the_phases_of_a_component(known):
+    strategy = config.load(NO_DATA_RACE, known)
+
+    assert strategy.phases_of("Goblint") == range(0, 2)
+    assert strategy.phases_of("sv-sanitizers") == range(0, 1)
+    assert strategy.phases_of("Dartagnan") == range(1, 2)
+    assert strategy.phases_of("Deagle") == range(0)
+    assert [strategy.in_phase("Goblint", index) for index in (-1, 0, 1, 2)] == [False, True, True, False]
+    assert strategy.in_phase("Dartagnan", 1) and not strategy.in_phase("sv-sanitizers", 1)
+
+
+def test_bracket_of_gives_the_bracket_of_a_verdict_of_a_component(known):
+    strategy = config.load(VALID_MEMSAFETY, known)
+
+    assert strategy.bracket_of("Goblint", "true") == 0
+    assert strategy.bracket_of("Goblint", "false") is None
+    assert strategy.bracket_of("Deagle", "false") == 1
+    assert strategy.bracket_of("sv-sanitizers", "false") == 1
+    assert strategy.bracket_of("Deagle", "true") == 2
+
+
+def test_witness_rank_gives_the_place_in_witnesses(known):
+    strategy = config.load(NO_DATA_RACE, known)
+
+    assert [strategy.witness_rank(name) for name in ("sv-sanitizers", "Dartagnan", "Goblint")] == [0, 1, None]
+
+
+def test_step_gives_a_component_its_own_limits_and_accepts_both_verdicts(known):
+    strategy = config.load(with_changes(NO_DATA_RACE, memoryLimits={"Dartagnan": "70%"}), known)
+
+    assert strategy.step("sv-sanitizers") == Step("sv-sanitizers", "all", None, 30)
+    assert strategy.step("Dartagnan") == Step("Dartagnan", "all", "70%", None)
+    assert strategy.step("Goblint") == Step("Goblint", "all", None, None)
+
+
+def test_an_entry_without_a_verdict_is_an_entry_for_both(known):
+    strategy = config.load(with_changes(GOBLINT, answers=[["Goblint"]]), known)
+
+    assert strategy.answers == (frozenset({Entry("Goblint", "true"), Entry("Goblint", "false")}),)
+
+
+def test_a_component_may_have_its_two_verdicts_in_two_brackets(known):
+    strategy = config.load(with_changes(GOBLINT, answers=[["Goblint:false"], ["Goblint:true"]]), known)
+
+    assert (strategy.bracket_of("Goblint", "false"), strategy.bracket_of("Goblint", "true")) == (0, 1)
+
+
+def test_a_component_with_a_space_in_its_name_can_have_an_entry(known):
+    strategy = {"phases": [["ULTIMATE Automizer"]], "answers": [["ULTIMATE Automizer:false"]], "witnesses": []}
+
+    assert config.load(strategy, known).bracket_of("ULTIMATE Automizer", "false") == 0
+
+
+def test_witnesses_may_be_empty_and_limits_may_be_absent(known):
+    strategy = config.load(GOBLINT, known)
+
+    assert (strategy.witnesses, strategy.cpu_time_limits, strategy.memory_limits) == ((), {}, {})
+    assert strategy.phases == (Phase(("Goblint",), None),)
 
 
 def test_load_keeps_the_limits_as_the_conf_gives_them(known):
-    conf = {"runType": "sequential", "tools": [{"Goblint": "all"}, {"Deagle": "all"}],
-            "memoryLimits": {"Goblint": "70%", "Deagle": "123456"}, "cpuTimeLimits": {"Goblint": 30}}
+    strategy = config.load(with_changes(GOBLINT, memoryLimits={"Goblint": "12.5%"}, cpuTimeLimits={"Goblint": 0.5}),
+                           known)
 
-    goblint, deagle = config.load(conf, known).steps
-
-    assert (goblint.memory_limit, goblint.cpu_time_limit) == ("70%", 30)
-    assert deagle.memory_limit == "123456"
+    assert strategy.step("Goblint") == Step("Goblint", "all", "12.5%", 0.5)
 
 
-def test_a_step_is_frozen():
-    step = Step("Goblint", "all")
+def test_a_strategy_is_frozen(known):
+    strategy = config.load(GOBLINT, known)
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        step.accept = "true"
+        strategy.witnesses = ("Goblint",)
 
 
 def test_load_prints_nothing(known, capsys):
-    """The standard output of a run starts with the first component's lines;
-    parseConf once printed the list of tool objects, with their addresses."""
-    conf = {"runType": "sequential", "tools": [{"Goblint": "all"}, [{"Deagle": "all"}]]}
-
-    config.load(conf, known)
+    config.load(NO_DATA_RACE, known)
 
     assert capsys.readouterr().out == ""
 
 
-# --- confs that load refuses ---------------------------------------------------
+@pytest.mark.parametrize("name", sorted(REGISTRY), ids=lambda name: name.replace(" ", "_"))
+def test_every_component_can_be_in_a_strategy_with_both_limits(known, name):
+    strategy = {"phases": [[name]], "answers": [[name]], "witnesses": [name],
+                "cpuTimeLimits": {name: 60}, "memoryLimits": {name: "70%"}}
 
-@pytest.mark.parametrize("tools", [
-    [{"Goblint": "all"}, {"Goblint": "true"}],
-    [{"Goblint": "all"}, [{"Deagle": "all"}, {"Goblint": "all"}]],
-    [[{"Goblint": "all"}, [{"Deagle": "all"}]], [{"Deagle": "all"}]],
-    [{"Goblint": "all", "Deagle": "all"}, {"Deagle": "false"}],
-], ids=["flat", "list-in-list", "two-lists", "one-element-two-keys"])
-def test_load_refuses_a_component_named_twice(known, tools):
-    conf = {"runType": "parallel", "tools": tools}
-
-    with pytest.raises(config.ConfError, match=r"'(Goblint|Deagle)' is named more than once"):
-        config.load(conf, known)
+    assert config.load(strategy, known).step(name) == Step(name, "all", "70%", 60)
 
 
-@pytest.mark.parametrize("limits", ["memoryLimits", "cpuTimeLimits"])
-def test_load_refuses_a_limit_for_a_component_that_is_not_in_the_tree(known, limits):
-    conf = {"runType": "sequential", "tools": [{"Goblint": "all"}],
-            limits: {"Goblint": 1000, "Deagle": 1000}}
+# --- the refusals of the format, one test each ----------------------------------
 
-    with pytest.raises(config.ConfError, match=f"{limits} has a limit for 'Deagle'"):
-        config.load(conf, known)
-
-
-def test_load_accepts_limits_for_components_in_nested_lists(known):
-    conf = {"runType": "sequential",
-            "tools": [{"Goblint": "all"}, [{"Deagle": "all"}]],
-            "memoryLimits": {"Deagle": "70%"}, "cpuTimeLimits": {"Goblint": 30}}
-
-    config.load(conf, known)
+def refuses(strategy, known, message):
+    """Asserts that load refuses `strategy` with a ConfError whose message
+    contains `message`."""
+    with pytest.raises(config.ConfError, match=re.escape(message)):
+        config.load(strategy, known)
 
 
-def test_load_refuses_a_component_it_does_not_know(known):
-    conf = {"runType": "sequential", "tools": [{"Goblint": "all"}, [{"Goblin": "all"}]]}
-
-    with pytest.raises(config.ConfError, match="'Goblin' in the conf's tools is not a component"):
-        config.load(conf, known)
-
-
-@pytest.mark.parametrize("acceptance", ["unknown", "TRUE", "", None])
-def test_load_refuses_an_acceptance_other_than_true_false_or_all(known, acceptance):
-    conf = {"runType": "sequential", "tools": [{"Goblint": acceptance}]}
-
-    with pytest.raises(config.ConfError, match="'Goblint' has acceptance"):
-        config.load(conf, known)
+def test_an_entry_naming_a_component_in_no_phase_is_refused(known):
+    refuses(with_changes(NO_DATA_RACE, answers=[["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"],
+                                                ["Deagle:false"]]),
+            known, "answers has an entry for 'Deagle', which is in no phase")
 
 
-def test_load_refuses_an_unknown_run_type(known):
-    conf = {"runType": "interleaved", "tools": [{"Goblint": "all"}]}
+def test_a_component_of_a_phase_without_an_entry_is_refused(known):
+    refuses(with_changes(NO_DATA_RACE, answers=[["Goblint:true"], ["sv-sanitizers:false"]], witnesses=[]),
+            known, "component 'Dartagnan' is in a phase but has no entry in answers")
 
-    with pytest.raises(config.ConfError, match="runType is 'interleaved', expected 'sequential' or 'parallel'"):
-        config.load(conf, known)
+
+def test_a_component_in_two_phases_that_are_not_consecutive_is_refused(known):
+    refuses(with_changes(GOBLINT, phases=[["Goblint"], ["Dartagnan"], ["Goblint"]],
+                         answers=[["Goblint"], ["Dartagnan"]]),
+            known, "component 'Goblint' is in phases 1, 3, which are not consecutive")
+
+
+@pytest.mark.parametrize("answers, where", [
+    ([["Goblint:true"], ["Goblint:true"]], "Goblint:true in bracket 1 and in bracket 2"),
+    ([["Goblint"], ["Goblint:false"]], "Goblint:false in bracket 1 and in bracket 2"),
+    ([["Goblint:true", "Goblint"]], "Goblint:true again in bracket 1"),
+], ids=["two-brackets", "both-and-one", "one-bracket"])
+def test_one_verdict_of_a_component_in_two_entries_is_refused(known, answers, where):
+    refuses(with_changes(GOBLINT, answers=answers), known, f"answers has an entry for {where}")
+
+
+def test_a_witnesses_component_without_an_entry_is_refused(known):
+    refuses(with_changes(NO_DATA_RACE, witnesses=["sv-sanitizers", "Deagle"]),
+            known, "witnesses names 'Deagle', which has no entry in answers")
+
+
+@pytest.mark.parametrize("changes, message", [
+    ({"cpuTimeLimits": {"Goblint": 0}}, "cpuTimeLimits gives 'Goblint' the limit 0"),
+    ({"cpuTimeLimits": {"Goblint": -5}}, "cpuTimeLimits gives 'Goblint' the limit -5"),
+    ({"cpuTimeLimits": {"Goblint": "30"}}, "cpuTimeLimits gives 'Goblint' the limit '30'"),
+    ({"cpuTimeLimits": {"Goblint": True}}, "cpuTimeLimits gives 'Goblint' the limit True"),
+    ({"cpuTimeLimits": {"Goblint": float("inf")}}, "cpuTimeLimits gives 'Goblint' the limit inf"),
+    ({"cpuTimeLimits": {"Goblint": None}}, "cpuTimeLimits gives 'Goblint' the limit None"),
+    ({"memoryLimits": {"Goblint": 0}}, "memoryLimits gives 'Goblint' the limit 0"),
+    ({"memoryLimits": {"Goblint": "4GB"}}, "memoryLimits gives 'Goblint' the limit '4GB'"),
+    ({"memoryLimits": {"Goblint": "0%"}}, "memoryLimits gives 'Goblint' the limit '0%'"),
+    ({"memoryLimits": {"Goblint": "150%"}}, "memoryLimits gives 'Goblint' the limit '150%'"),
+    ({"memoryLimits": {"Goblint": "-5%"}}, "memoryLimits gives 'Goblint' the limit '-5%'"),
+    ({"phases": [{"tools": ["Goblint"], "wallTimeLimit": 0}]}, "phase 1 has the wallTimeLimit 0"),
+    ({"phases": [{"tools": ["Goblint"], "wallTimeLimit": "60"}]}, "phase 1 has the wallTimeLimit '60'"),
+    ({"phases": [{"tools": ["Goblint"], "wallTimeLimit": None}]}, "phase 1 has the wallTimeLimit None"),
+], ids=["cpu-zero", "cpu-negative", "cpu-string", "cpu-bool", "cpu-infinite", "cpu-null", "memory-zero",
+        "memory-unit", "memory-zero-percent", "memory-over-100-percent", "memory-negative-percent",
+        "wall-zero", "wall-string", "wall-null"])
+def test_a_limit_that_is_not_a_positive_number_is_refused(known, changes, message):
+    refuses(with_changes(GOBLINT, **changes), known, message)
+
+
+@pytest.mark.parametrize("phase", [
+    {"tools": ["Goblint"], "cpuTimeLimit": 30},
+    {"tools": ["Goblint"], "wallTimeLimit": 60, "name": "blitz"},
+], ids=["cpu-time-limit", "name"])
+def test_a_phase_object_with_another_key_is_refused(known, phase):
+    other = next(key for key in phase if key not in ("tools", "wallTimeLimit"))
+
+    refuses(with_changes(GOBLINT, phases=[phase]), known,
+            f"phase 1 has the key '{other}'; a phase object has only 'tools' and 'wallTimeLimit'")
+
+
+@pytest.mark.parametrize("strategy, key", [
+    ({"runType": "sequential", "tools": [{"Goblint": "all"}]}, "runType"),
+    ({"tools": [{"Goblint": "all"}]}, "tools"),
+    ({**GOBLINT, "runType": "parallel"}, "runType"),
+], ids=["tree", "tools-only", "mixed"])
+def test_a_strategy_in_the_tree_format_is_refused_with_a_message_naming_the_new_format(known, strategy, key):
+    refuses(strategy, known, f"the strategy has '{key}', a key of the tree format, which CoOpeRace does not read; "
+                             "a strategy has 'phases', 'answers' and 'witnesses'")
+
+
+def test_a_conf_in_the_tree_format_is_refused_with_a_message_naming_the_new_format(known):
+    conf = {"runType": "sequential", "tools": [{"Goblint": "true"}, [{"Dartagnan": "all"}]]}
+
+    with pytest.raises(config.ConfError, match=re.escape(
+            "the conf has 'runType', a key of the tree format, which CoOpeRace does not read; "
+            "a strategy has 'phases', 'answers' and 'witnesses', as conf/README.md says")):
+        config.load_strategies(conf, known)
+
+
+def test_a_tree_strategy_inside_properties_is_refused_naming_the_property_and_the_new_format(known):
+    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Goblint": "all"}]}}}
+
+    with pytest.raises(config.ConfError, match=re.escape(
+            "in the strategy for no-data-race: the strategy has 'runType', a key of the tree format")):
+        config.load_strategies(conf, known)
+
+
+# --- further refusals of load ---------------------------------------------------------
+
+@pytest.mark.parametrize("strategy, message", [
+    ([], "the strategy must be a JSON object"),
+    ({**GOBLINT, "verdicts": []}, "the strategy has the key 'verdicts', expected only 'phases', 'answers', "
+                                  "'witnesses', 'cpuTimeLimits', 'memoryLimits'"),
+    (with_changes(GOBLINT, phases=None), "the strategy has no 'phases'"),
+    (with_changes(GOBLINT, answers=None), "the strategy has no 'answers'"),
+    (with_changes(GOBLINT, witnesses=None), "the strategy has no 'witnesses'"),
+    (with_changes(GOBLINT, phases=[]), "phases must be a non-empty list of phases"),
+    (with_changes(GOBLINT, phases={"tools": ["Goblint"]}), "phases must be a non-empty list of phases"),
+    (with_changes(GOBLINT, phases=["Goblint"]), "phase 1 must be a list of component names or an object"),
+    (with_changes(GOBLINT, phases=[["Goblint"], []]), "phase 2 has no component"),
+    (with_changes(GOBLINT, phases=[{"tools": []}]), "phase 1 has no component"),
+    (with_changes(GOBLINT, phases=[{"wallTimeLimit": 60}]), "phase 1 has no 'tools'"),
+    (with_changes(GOBLINT, phases=[["Goblint", "Goblint"]]), "phase 1 names 'Goblint' more than once"),
+    (with_changes(GOBLINT, phases=[[{"Goblint": "all"}]]), "phase 1 must be a list of component names"),
+    (with_changes(GOBLINT, phases=[["Goblnt"]]), "component 'Goblnt' in phases is not a component CoOpeRace can run"),
+    (with_changes(GOBLINT, answers={"Goblint": "true"}), "answers must be a list of brackets"),
+    (with_changes(GOBLINT, answers=[["Goblint"], []]), "bracket 2 of answers must be a non-empty list of entries"),
+    (with_changes(GOBLINT, answers=["Goblint"]), "bracket 1 of answers must be a non-empty list of entries"),
+    (with_changes(GOBLINT, answers=[["Goblint:all"]]), "bracket 1 of answers has the entry 'Goblint:all'"),
+    (with_changes(GOBLINT, answers=[["Goblint:True"]]), "bracket 1 of answers has the entry 'Goblint:True'"),
+    (with_changes(GOBLINT, answers=[["Goblint:"]]), "bracket 1 of answers has the entry 'Goblint:'"),
+    (with_changes(GOBLINT, answers=[[":true"]]), "bracket 1 of answers has the entry ':true'"),
+    (with_changes(GOBLINT, answers=[[""]]), "bracket 1 of answers has the entry ''"),
+    (with_changes(GOBLINT, answers=[[{"Goblint": "all"}]]), "bracket 1 of answers has the entry {'Goblint': 'all'}"),
+    (with_changes(GOBLINT, witnesses="Goblint"), "witnesses must be a list of component names"),
+    (with_changes(GOBLINT, witnesses=["Goblint", "Goblint"]), "witnesses names 'Goblint' more than once"),
+    (with_changes(GOBLINT, cpuTimeLimits={"Deagle": 5}),
+     "cpuTimeLimits has a limit for 'Deagle', which is in no phase"),
+    (with_changes(GOBLINT, memoryLimits={"Deagle": "70%"}),
+     "memoryLimits has a limit for 'Deagle', which is in no phase"),
+    (with_changes(GOBLINT, memoryLimits=[1]), "the strategy's memoryLimits must be an object"),
+], ids=["array", "unknown-key", "no-phases", "no-answers", "no-witnesses", "empty-phases", "phases-object",
+        "phase-string", "empty-phase", "empty-phase-object", "phase-object-without-tools", "twice-in-a-phase",
+        "phase-of-objects", "unknown-component", "answers-object", "empty-bracket", "bracket-string",
+        "verdict-all", "verdict-capital", "verdict-empty", "name-empty", "entry-empty", "entry-object",
+        "witnesses-string", "witnesses-twice", "cpu-limit-key", "memory-limit-key", "limits-array"])
+def test_load_refuses(known, strategy, message):
+    refuses(strategy, known, message)
 
 
 def test_every_refusal_of_load_is_a_ConfError_and_so_a_ValueError():
     assert issubclass(config.ConfError, ValueError)
 
 
-def test_a_conf_error_in_the_tools_comes_before_the_run_type(known):
-    conf = {"runType": "interleaved", "tools": [{"Goblint": "all"}, {"Goblint": "all"}]}
-
-    with pytest.raises(config.ConfError, match="named more than once"):
-        config.load(conf, known)
-
-
-@pytest.mark.parametrize("key", ["runType", "tools"])
-def test_load_refuses_a_conf_without_run_type_or_tools(known, key):
-    conf = {"runType": "sequential", "tools": [{"Goblint": "all"}]}
-    del conf[key]
-
-    with pytest.raises(config.ConfError, match=f"the conf has no '{key}'"):
-        config.load(conf, known)
-
-
-@pytest.mark.parametrize("conf, message", [
-    ([], "the conf must be a JSON object"),
-    ({"runType": "sequential", "tools": {"Goblint": "all"}}, "the conf's tools must be a list"),
-    ({"runType": "sequential", "tools": [[{"Goblint": "all"}], "Goblint"]},
-     "neither an object nor a list: 'Goblint'"),
-    ({"runType": "sequential", "tools": ["Goblint"]}, "neither an object nor a list"),
-    ({"runType": "sequential", "tools": [{"Goblint": "all"}], "memoryLimits": [1]},
-     "memoryLimits must be an object"),
-], ids=["array", "tools-object", "nested-string", "string", "limits-array"])
-def test_load_refuses_a_conf_of_the_wrong_shape(known, conf, message):
-    with pytest.raises(config.ConfError, match=message):
-        config.load(conf, known)
-
-
-def test_component_names_lists_the_components_in_the_order_of_the_conf(known):
-    conf = {"runType": "sequential",
-            "tools": [{"Goblint": "all"}, [{"Deagle": "all"}, [{"Dartagnan": "all", "nacpa": "true"}]]]}
-
-    assert config.component_names(config.load(conf, known)) == ["Goblint", "Deagle", "Dartagnan", "nacpa"]
-
-
 # --- a strategy per property ---------------------------------------------------
-
-SEQUENTIAL_GOBLINT = {"runType": "sequential", "tools": [{"Goblint": "all"}]}
-
-
-def test_load_strategies_loads_the_strategy_of_each_property(known):
-    conf = {"properties": {
-        "valid-memsafety": {"runType": "parallel", "tools": [{"Goblint": "true"}, {"Dartagnan": "all"}],
-                            "memoryLimits": {"Dartagnan": "70%"}},
-        "no-data-race": {"runType": "sequential", "tools": [{"Goblint": "true"}, [{"Dartagnan": "all"}]],
-                         "cpuTimeLimits": {"Goblint": 30}},
-    }}
-
-    assert config.load_strategies(conf, known) == {
-        "valid-memsafety": Parallel((Step("Goblint", "true"), Step("Dartagnan", "all", "70%"))),
-        "no-data-race": Sequence((Step("Goblint", "true", None, 30), Parallel((Step("Dartagnan", "all"),)))),
-    }
-
 
 def test_load_strategies_accepts_every_property_and_no_property(known):
     names = ["unreach-call", "no-overflow", "valid-memsafety", "no-data-race"]
 
-    assert list(config.load_strategies({"properties": {name: SEQUENTIAL_GOBLINT for name in names}}, known)) == names
+    assert list(config.load_strategies({"properties": {name: GOBLINT for name in names}}, known)) == names
     assert config.load_strategies({"properties": {}}, known) == {}
-
-
-def test_a_component_may_be_in_the_strategies_of_several_properties(known):
-    conf = {"properties": {"unreach-call": SEQUENTIAL_GOBLINT, "no-overflow": SEQUENTIAL_GOBLINT}}
-
-    assert set(config.load_strategies(conf, known)) == {"unreach-call", "no-overflow"}
 
 
 @pytest.mark.parametrize("conf, message", [
     ([], "the conf must be a JSON object"),
-    ({"properties": [SEQUENTIAL_GOBLINT]}, "the conf's properties must be an object"),
-    ({"properties": {"no-data-race": SEQUENTIAL_GOBLINT}, **SEQUENTIAL_GOBLINT},
-     "a conf with 'properties' has no other key, but this one has 'runType', 'tools'"),
-    ({"properties": {"data-race": SEQUENTIAL_GOBLINT}},
+    (GOBLINT, "the conf has no 'properties', the object that maps each property to its strategy"),
+    ({"properties": [GOBLINT]}, "the conf's properties must be an object"),
+    ({"properties": {"no-data-race": GOBLINT}, "phases": [["Goblint"]]},
+     "a conf has no key but 'properties', but this one has 'phases'"),
+    ({"properties": {"data-race": GOBLINT}},
      "the conf's properties has a strategy for 'data-race', expected one of unreach-call, no-overflow, "
      "valid-memsafety, no-data-race"),
-    ({"properties": {"no-data-race.prp": SEQUENTIAL_GOBLINT}}, "strategy for 'no-data-race.prp'"),
-    ({"properties": {"no-overflow": {"runType": "sequential"}}},
-     "in the strategy for no-overflow: the conf has no 'tools'"),
-    ({"properties": {"no-overflow": SEQUENTIAL_GOBLINT, "unreach-call": {"tools": [], "runType": "x"}}},
-     "in the strategy for unreach-call: runType is 'x'"),
-    ({"properties": {"no-overflow": [SEQUENTIAL_GOBLINT]}},
-     "in the strategy for no-overflow: the conf must be a JSON object"),
-], ids=["array", "properties-array", "properties-and-strategy", "unknown-property", "file-name",
-        "strategy-without-tools", "second-strategy", "strategy-array"])
+    ({"properties": {"no-data-race.prp": GOBLINT}}, "strategy for 'no-data-race.prp'"),
+    ({"properties": {"no-overflow": GOBLINT, "unreach-call": with_changes(GOBLINT, witnesses=None)}},
+     "in the strategy for unreach-call: the strategy has no 'witnesses'"),
+    ({"properties": {"no-overflow": [GOBLINT]}},
+     "in the strategy for no-overflow: the strategy must be a JSON object"),
+], ids=["array", "bare-strategy", "properties-array", "properties-and-other-key", "unknown-property",
+        "file-name", "second-strategy", "strategy-array"])
 def test_load_strategies_refuses(known, conf, message):
     with pytest.raises(config.ConfError, match=re.escape(message)):
         config.load_strategies(conf, known)
@@ -297,21 +391,10 @@ def test_load_strategies_refuses(known, conf, message):
 
 @pytest.mark.parametrize("limits", ["memoryLimits", "cpuTimeLimits"])
 def test_a_limit_applies_only_inside_the_strategy_that_names_it(known, limits):
-    conf = {"properties": {"unreach-call": SEQUENTIAL_GOBLINT,
-                           "no-overflow": {"runType": "sequential", "tools": [{"Dartagnan": "all"}],
+    conf = {"properties": {"unreach-call": GOBLINT,
+                           "no-overflow": {"phases": [["Dartagnan"]], "answers": [["Dartagnan"]], "witnesses": [],
                                            limits: {"Goblint": 30}}}}
 
-    with pytest.raises(config.ConfError, match=f"in the strategy for no-overflow: {limits} has a limit for 'Goblint'"):
+    with pytest.raises(config.ConfError,
+                       match=f"in the strategy for no-overflow: {limits} has a limit for 'Goblint'"):
         config.load_strategies(conf, known)
-
-
-@pytest.mark.parametrize("name", sorted(REGISTRY), ids=lambda name: name.replace(" ", "_"))
-def test_every_component_can_have_both_limits_inside_a_strategy_for_a_property(known, name):
-    conf = {"properties": {"no-overflow": {"runType": "sequential", "tools": [{"Goblint": "true"}, [{name: "all"}]]
-                                           if name != "Goblint" else [{name: "all"}],
-                                           "cpuTimeLimits": {name: 60}, "memoryLimits": {name: "70%"}}}}
-
-    steps = steps_of(config.load_strategies(conf, known)["no-overflow"])
-
-    assert Step(name, "all", "70%", 60) in steps
-    assert all(step.memory_limit is None and step.cpu_time_limit is None for step in steps if step.component != name)

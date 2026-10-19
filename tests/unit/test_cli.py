@@ -13,19 +13,22 @@ import sys
 from pathlib import Path
 
 import pytest
-from support import STUB_DOI, make_script, register_stub
+from support import NEEDS_EXECUTOR, STUB_DOI, data_race_conf, make_script, one_after_another, register_stub
 
 from src.cooperace import cli, components, execution
 from src.cooperace.components import ComponentRunner
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_RACE = ROOT / "tests" / "properties" / "no-data-race.prp"
-# The properties of C.Concurrency that the default conf, conf/svcomp26.json,
-# has no strategy for, and the property files of sv-benchmarks that hold no
-# property of C.Concurrency
-NO_STRATEGY = ["unreach-call", "no-overflow", "valid-memsafety"]
+# The properties of C.Concurrency, those that the default conf,
+# conf/svcomp27.json, has no strategy for, and the property files of
+# sv-benchmarks that hold no property of C.Concurrency
+PROPERTIES = ["unreach-call", "no-overflow", "valid-memsafety", "no-data-race"]
+NO_STRATEGY = ["no-overflow"]
+OTHER_PROPERTIES = ["unreach-call", "no-overflow", "valid-memsafety"]
 UNKNOWN_PROPERTIES = sorted(path for path in (ROOT / "tests" / "properties").glob("*.prp")
-                            if path.stem not in [*NO_STRATEGY, "no-data-race"])
+                            if path.stem not in PROPERTIES)
+GOBLINT = one_after_another("Goblint")
 FORMULA = "CHECK( init(main()), LTL(G ! data-race) )"
 
 
@@ -128,13 +131,13 @@ def test_a_property_file_of_no_known_property_is_refused_and_no_component_starts
 
 def test_the_property_is_recognized_by_its_content_and_not_by_its_name(run_main, no_run, tmp_path):
     (tmp_path / "anything.txt").write_text("CHECK(init(main()),\n  LTL(G !   data-race))\n\n")
-    (tmp_path / "no-data-race.prp").write_text("CHECK( init(main()), LTL(G ! call(reach_error())) )")
+    (tmp_path / "no-data-race.prp").write_text("CHECK( init(main()), LTL(G ! overflow) )")
 
     accepted = run_main("--prop", "anything.txt")
     refused = run_main("--prop", "no-data-race.prp")
 
     assert accepted[0] == 0
-    assert_refused(refused, "unsupported property unreach-call: the conf has no strategy for it")
+    assert_refused(refused, "unsupported property no-overflow: the conf has no strategy for it")
     assert [name for _, name in no_run] == ["no-data-race"]
 
 
@@ -158,10 +161,9 @@ def test_a_property_file_that_cannot_be_read_is_refused(run_main, no_run):
     assert no_run == []
 
 
-@pytest.mark.parametrize("name", [*NO_STRATEGY, "no-data-race"])
+@pytest.mark.parametrize("name", PROPERTIES)
 def test_a_conf_with_a_strategy_for_the_property_runs_it(run_main, no_run, tmp_path, name):
-    strategy = {"runType": "sequential", "tools": [{"Goblint": "all"}]}
-    conf = {"properties": {name: strategy}}
+    conf = {"properties": {name: GOBLINT}}
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
     status, out, _ = run_main("--prop", str(ROOT / "tests" / "properties" / f"{name}.prp"), "--conf", "conf.json")
@@ -183,7 +185,7 @@ def test_main_prints_the_result_of_run_as_the_verdict_line(run_main, monkeypatch
 
 
 def test_a_conf_of_properties_refuses_a_property_it_has_no_strategy_for(run_main, no_run, tmp_path):
-    conf = {"properties": {"unreach-call": {"runType": "sequential", "tools": [{"Goblint": "all"}]}}}
+    conf = {"properties": {"unreach-call": GOBLINT}}
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
     assert_refused(run_main("--prop", str(DATA_RACE), "--conf", "conf.json"),
@@ -202,23 +204,23 @@ def test_a_conf_that_does_not_exist_or_is_not_json_is_refused(run_main, no_run, 
 
 
 @pytest.mark.parametrize("conf, message", [
-    ({"runType": "sequential", "tools": [{"Goblnt": "true"}]}, "'Goblnt' in the conf's tools is not a component"),
-    ({"runType": "sequential", "tools": [{"Goblint": "True"}]}, "'Goblint' has acceptance 'True'"),
-    ({"runType": "interleaved", "tools": []}, "runType is 'interleaved'"),
-    ({"tools": []}, "the conf has no 'runType'"),
-    ({"runType": "parallel", "tools": [{"Goblint": "all"}], "cpuTimeLimits": {"Deagle": 5}},
-     "cpuTimeLimits has a limit for 'Deagle'"),
-    ({"runType": "parallel", "tools": [{"Goblint": "all"}], "memoryLimits": {"Dartagnan": "70%"}},
-     "memoryLimits has a limit for 'Dartagnan'"),
-    ({"runType": "parallel", "tools": [{"Goblint": "all"}, {"Goblint": "all"}]}, "named more than once"),
-    ({"properties": {"no-data-race": {"runType": "sequential", "tools": []}}, "runType": "sequential"},
-     "a conf with 'properties' has no other key, but this one has 'runType'"),
-    ({"properties": {"data-race": {"runType": "sequential", "tools": []}}},
-     "the conf's properties has a strategy for 'data-race'"),
-    ({"properties": {"unreach-call": {"runType": "sequential", "tools": [{"Goblnt": "all"}]}}},
+    (data_race_conf(one_after_another("Goblnt")),
+     "in the strategy for no-data-race: component 'Goblnt' in phases is not a component"),
+    (data_race_conf({**GOBLINT, "answers": [["Goblint:True"]]}), "has the entry 'Goblint:True'"),
+    ({"runType": "sequential", "tools": [{"Goblint": "all"}]},
+     "the conf has 'runType', a key of the tree format, which CoOpeRace does not read; "
+     "a strategy has 'phases', 'answers' and 'witnesses'"),
+    (GOBLINT, "the conf has no 'properties'"),
+    (data_race_conf({**GOBLINT, "cpuTimeLimits": {"Deagle": 5}}), "cpuTimeLimits has a limit for 'Deagle'"),
+    (data_race_conf({**GOBLINT, "memoryLimits": {"Dartagnan": "70%"}}), "memoryLimits has a limit for 'Dartagnan'"),
+    (data_race_conf({**GOBLINT, "phases": [["Goblint", "Goblint"]]}), "names 'Goblint' more than once"),
+    ({"properties": {"no-data-race": GOBLINT}, "phases": [["Goblint"]]},
+     "a conf has no key but 'properties', but this one has 'phases'"),
+    ({"properties": {"data-race": GOBLINT}}, "the conf's properties has a strategy for 'data-race'"),
+    ({"properties": {"unreach-call": one_after_another("Goblnt")}},
      "in the strategy for unreach-call: component 'Goblnt'"),
-], ids=["unknown-component", "acceptance", "run-type", "no-run-type", "cpu-limit-key", "memory-limit-key", "twice",
-        "properties-and-strategy", "unknown-property", "other-property"])
+], ids=["unknown-component", "verdict", "tree-format", "no-properties", "cpu-limit-key", "memory-limit-key",
+        "twice", "properties-and-other-key", "unknown-property", "other-property"])
 def test_a_conf_that_load_refuses_ends_cooperace_without_a_verdict(run_main, tmp_path, conf, message):
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
@@ -226,13 +228,13 @@ def test_a_conf_that_load_refuses_ends_cooperace_without_a_verdict(run_main, tmp
 
 
 def test_a_refused_conf_gives_one_line_on_stderr_and_nothing_else(run_main, tmp_path):
-    (tmp_path / "conf.json").write_text(json.dumps({"runType": "sequential", "tools": [{"Goblnt": "all"}]}))
+    (tmp_path / "conf.json").write_text(json.dumps(data_race_conf(one_after_another("Goblnt"))))
 
     status, out, err = run_main("--prop", str(DATA_RACE), "--conf", "conf.json")
 
     assert (status, out) == (1, "")
-    assert err.splitlines() == ["CoOpeRace: error: component 'Goblnt' in the conf's tools is not a component "
-                                "CoOpeRace can run"]
+    assert err.splitlines() == ["CoOpeRace: error: in the strategy for no-data-race: component 'Goblnt' in phases "
+                                "is not a component CoOpeRace can run"]
 
 
 # --- the installation ----------------------------------------------------------
@@ -241,7 +243,7 @@ def test_components_that_are_not_installed_are_refused_one_line_each_before_any_
         run_main, tmp_path, monkeypatch):
     monkeypatch.setattr(components, "TOOL_DIR", str(tmp_path))
     shutil.copy(ROOT / components.OPTIONS_FILE, tmp_path)
-    conf = {"runType": "sequential", "tools": [{"Goblint": "true"}, [{"Dartagnan": "all"}]]}
+    conf = data_race_conf(one_after_another("Goblint", "Dartagnan"))
     (tmp_path / "conf.json").write_text(json.dumps(conf))
 
     status, out, err = run_main("--prop", str(DATA_RACE), "--conf", "conf.json")
@@ -258,7 +260,7 @@ def test_nothing_starts_when_a_later_component_is_not_installed(make_runner, gro
     runner = make_runner()
     runner.tools_dir = str(tmp_path / "no-tools")
     register_stub(runner, "Stub A", make_script(tmp_path / "stub", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
-    conf = {"runType": "sequential", "tools": [{"Stub A": "all"}, {"Goblint": "all"}]}
+    conf = data_race_conf(one_after_another("Stub A", "Goblint"))
 
     with pytest.raises(cli.SetupError, match="component 'Goblint'"):
         cli.run(conf, runner, group)
@@ -267,13 +269,14 @@ def test_nothing_starts_when_a_later_component_is_not_installed(make_runner, gro
     assert runner.work_dir is None
 
 
+@NEEDS_EXECUTOR
 def test_run_runs_the_strategy_for_the_property_of_the_runner_and_no_other(tmp_path, capsys, container):
     marker = tmp_path / "started"
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name="valid-memsafety")
     register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
     register_stub(runner, "Stub B", make_script(tmp_path / "b", 'echo "STUB-STATUS: true"\n'))
-    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Stub A": "all"}]},
-                           "valid-memsafety": {"runType": "sequential", "tools": [{"Stub B": "all"}]}}}
+    conf = {"properties": {"no-data-race": one_after_another("Stub A"),
+                           "valid-memsafety": one_after_another("Stub B")}}
 
     verdict = cli.run(conf, runner)
 
@@ -282,14 +285,14 @@ def test_run_runs_the_strategy_for_the_property_of_the_runner_and_no_other(tmp_p
     assert not marker.exists()
 
 
-@pytest.mark.parametrize("name", NO_STRATEGY)
-def test_run_refuses_a_conf_that_is_one_strategy_for_another_property(make_runner, tmp_path, name):
+@pytest.mark.parametrize("name", OTHER_PROPERTIES)
+def test_run_refuses_a_conf_with_a_strategy_for_another_property_only(make_runner, tmp_path, name):
     marker = tmp_path / "started"
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=name)
     register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
 
     with pytest.raises(cli.SetupError, match=f"unsupported property {name}: the conf has no strategy for it"):
-        cli.run({"runType": "sequential", "tools": [{"Stub A": "all"}]}, runner)
+        cli.run(data_race_conf(one_after_another("Stub A")), runner)
 
     assert not marker.exists()
     assert runner.work_dir is None
@@ -301,9 +304,9 @@ def test_a_component_that_is_not_installed_refuses_the_conf_also_in_another_prop
     runner = make_runner()
     runner.tools_dir = str(tmp_path / "no-tools")
     register_stub(runner, "Stub A", make_script(tmp_path / "a", f'touch "{marker}"\necho "STUB-STATUS: true"\n'))
-    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Stub A": "all"}]},
-                           "unreach-call": {"runType": "sequential", "tools": [{"Goblint": "all"}]},
-                           "no-overflow": {"runType": "parallel", "tools": [{"Goblint": "all"}]}}}
+    conf = {"properties": {"no-data-race": one_after_another("Stub A"),
+                           "unreach-call": GOBLINT,
+                           "no-overflow": GOBLINT}}
 
     with pytest.raises(cli.SetupError) as refusal:
         cli.run(conf, runner)
@@ -321,8 +324,8 @@ def test_a_component_installed_from_another_doi_refuses_the_conf_also_in_another
     script = make_script(tmp_path / "b", 'echo "STUB-STATUS: true"\n')
     register_stub(runner, "Stub B", script)
     (script.parent / components.DOI_RECORD).write_text("10.5281/zenodo.99\n")
-    conf = {"properties": {"no-data-race": {"runType": "sequential", "tools": [{"Stub A": "all"}]},
-                           "valid-memsafety": {"runType": "sequential", "tools": [{"Stub B": "all"}]}}}
+    conf = {"properties": {"no-data-race": one_after_another("Stub A"),
+                           "valid-memsafety": one_after_another("Stub B")}}
 
     with pytest.raises(cli.SetupError) as refusal:
         cli.run(conf, runner)
@@ -333,11 +336,12 @@ def test_a_component_installed_from_another_doi_refuses_the_conf_also_in_another
     assert not marker.exists()
 
 
+@NEEDS_EXECUTOR
 def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_path, capsys, container):
     runner = make_runner()
     register_stub(runner, "Stub A", make_script(tmp_path / "stub", 'echo "STUB-STATUS: ERROR"\nexit 3\n'))
 
-    verdict = cli.run({"runType": "sequential", "tools": [{"Stub A": "all"}]}, runner, group)
+    verdict = cli.run(data_race_conf(one_after_another("Stub A")), runner, group)
 
     assert verdict == "unknown"
     assert "Tool name: Stub A Status: ERROR (3) Exit code: 3" in capsys.readouterr().out
@@ -427,7 +431,7 @@ def test_where_benchexec_cannot_make_its_container_nothing_starts_and_the_error_
     monkeypatch.setattr(execution, "container_works", lambda tools_dir: False)
 
     with pytest.raises(cli.SetupError) as refusal:
-        cli.run({"runType": "sequential", "tools": [{"Stub A": "all"}]}, runner, group)
+        cli.run(data_race_conf(one_after_another("Stub A")), runner, group)
 
     (problem,) = refusal.value.problems
     assert problem.startswith("BenchExec cannot run a component in its container here ")
@@ -472,12 +476,12 @@ def test_the_launcher_without_prop_exits_with_status_2(tmp_path):
 def test_the_launcher_refuses_a_property_without_a_strategy_with_status_1_and_no_verdict_line(tmp_path):
     (tmp_path / "foo.c").touch()
 
-    result = launch(tmp_path, "--prop", str(ROOT / "tests/properties/unreach-call.prp"), "foo.c")
+    result = launch(tmp_path, "--prop", str(ROOT / "tests/properties/no-overflow.prp"), "foo.c")
 
     assert result.returncode == 1
     assert result.stdout == ""
     assert result.stderr.splitlines() == [
-        "CoOpeRace: error: unsupported property unreach-call: the conf has no strategy for it"]
+        "CoOpeRace: error: unsupported property no-overflow: the conf has no strategy for it"]
 
 
 def test_the_launcher_refuses_an_unknown_property_with_status_1_and_no_verdict_line(tmp_path):

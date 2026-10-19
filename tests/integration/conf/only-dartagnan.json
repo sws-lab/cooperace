@@ -1,6 +1,9 @@
 {
-    "runType": "sequential",
-    "tools": [
-        {"Dartagnan": "all"}
-    ]
+    "properties": {
+        "no-data-race": {
+            "phases":    [["Dartagnan"]],
+            "answers":   [["Dartagnan"]],
+            "witnesses": ["Dartagnan"]
+        }
+    }
 }

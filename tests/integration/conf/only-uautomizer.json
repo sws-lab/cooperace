@@ -1,6 +1,9 @@
 {
-    "runType": "sequential",
-    "tools": [
-        {"ULTIMATE Automizer": "all"}
-    ]
+    "properties": {
+        "no-data-race": {
+            "phases":    [["ULTIMATE Automizer"]],
+            "answers":   [["ULTIMATE Automizer"]],
+            "witnesses": ["ULTIMATE Automizer"]
+        }
+    }
 }

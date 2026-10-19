@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 """Helpers shared by the unit tests: polling, running a command as CoOpeRace
-runs a component (run_command), and a stub component that CoOpeRace can run
-without anything under tools/."""
+runs a component (run_command), a stub component that CoOpeRace can run
+without anything under tools/, and small strategies and confs."""
 import os
 import stat
 import tempfile
@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
 from benchexec import result as bresult
 from benchexec.tools.template import BaseTool2
 
@@ -119,3 +120,34 @@ def register_stub(runner, tool_name, script, name_of_tool=None, options=()):
     (Path(directory) / DOI_RECORD).write_text(STUB_DOI + "\n")
     runner.registry[tool_name] = StubSpec(tool_name, "", directory, script=str(script), tool_name=name_of_tool)
     runner.versions[directory] = ComponentVersion(STUB_DOI, "stub", tuple(options))
+
+
+def one_after_another(*names, **limits):
+    """A strategy that runs the components `names` one per phase, in order,
+    trusts each one's answers less than those of the one before, and asks
+    them for the witness in the same order. `limits` are further keys of the
+    strategy, such as cpuTimeLimits."""
+    return {"phases": [[name] for name in names], "answers": [[name] for name in names],
+            "witnesses": list(names), **limits}
+
+
+def side_by_side(*names, **limits):
+    """A strategy that runs the components `names` together in one phase,
+    trusts each one's answers less than those of the one before, and asks
+    them for the witness in the same order."""
+    return {"phases": [list(names)], "answers": [[name] for name in names], "witnesses": list(names), **limits}
+
+
+def data_race_conf(strategy):
+    """A conf whose only strategy, for no-data-race, is `strategy`."""
+    return {"properties": {"no-data-race": strategy}}
+
+
+# A test that runs a strategy to its end, and so fails while
+# strategy.run_strategy, the executor of the format of phases, answers and
+# witnesses, is not written and raises NotImplementedError. Its expectations
+# are those of a strategy whose components run as one_after_another and
+# side_by_side describe. strict: the test fails once it passes, so that the
+# mark is removed with the executor.
+NEEDS_EXECUTOR = pytest.mark.xfail(strict=True,
+                                   reason="strategy.run_strategy, the executor of the strategy format, is not written")

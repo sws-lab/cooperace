@@ -162,15 +162,16 @@ def conf_read_by_main(tmp_path, monkeypatch):
 def test_the_default_conf_is_read_from_the_tool_directory(conf_read_by_main):
     conf = conf_read_by_main()
 
-    assert conf == json.loads((ROOT / "conf" / "svcomp26.json").read_text())
+    assert conf == json.loads((ROOT / "conf" / "svcomp27.json").read_text())
 
 
 def test_a_conf_given_with_conf_is_read_relative_to_the_working_directory(conf_read_by_main, tmp_path):
-    (tmp_path / "mine.json").write_text('{"runType": "sequential", "tools": []}')
+    mine = {"properties": {"no-data-race": {"phases": [["Goblint"]], "answers": [["Goblint"]], "witnesses": []}}}
+    (tmp_path / "mine.json").write_text(json.dumps(mine))
 
     conf = conf_read_by_main("--conf", "mine.json")
 
-    assert conf == {"runType": "sequential", "tools": []}
+    assert conf == mine
 
 
 def test_a_witness_is_delivered_into_the_working_directory(tmp_path, monkeypatch):

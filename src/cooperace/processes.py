@@ -13,10 +13,10 @@ import threading
 
 
 class ComponentGroup:
-    """The components started under one call of strategy.run_parallel, and
-    the groups of the calls nested in it. The group that strategy.execute is
-    given holds the components started outside any run_parallel. Once stop()
-    is called, no further component starts in the group or its subgroups.
+    """Components that are stopped together, and the groups nested in it
+    (its subgroups). strategy.execute is given the outermost group. Once
+    stop() is called, no further component starts in the group or its
+    subgroups.
 
     A running component is recorded in `processes` as an object with a
     method stop() that ends it with every process it started, the

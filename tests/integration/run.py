@@ -15,10 +15,10 @@ ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
     reference), under the BenchExec of the wheel in the checkout's lib/, the
     version whose tool-info modules CoOpeRace itself imports;
   * inside CoOpeRace with a one-component configuration (conf/only-*.json);
-  * inside CoOpeRace with each production configuration (conf/svcomp26.json,
-    conf/svcomp25.json, and any --config given);
+  * inside CoOpeRace with each production configuration (conf/svcomp27.json,
+    and any --config given);
   * inside CoOpeRace with each configuration of the suite (`configurations`
-    in manifest.json, conf/svcomp26-goblint-1s.json), on the tasks that name
+    in manifest.json, conf/goblint-1s.json), on the tasks that name
     it,
 
 validates the witness of every `false` verdict with a violation witness
@@ -42,11 +42,11 @@ checks (see README.md):
      no two files of one format
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
-  8  in svcomp26-goblint-1s, the 1 s CPU-time limit ends Goblint (status
-     TIMEOUT) and a later stage gives the expected verdict
-  9  when a component of a parallel stage gives the returned verdict, every
-     other component of that stage is stopped or answered unknown; no
-     component runs twice
+  8  in goblint-1s, the 1 s CPU-time limit ends Goblint (status
+     TIMEOUT) and a later phase gives the expected verdict
+  9  when a component gives the returned verdict, every other component of
+     a phase it is in is stopped or answered unknown; no component runs
+     twice
 
 Every verifier, validator and ./cooperace run goes through `benchexec`.
 `validate` and `check` take the runs, the tasks and the witness format
@@ -396,17 +396,17 @@ def read_results(out_dir):
 
 # ------------------------------------------------------------- planning
 
+def phase_tools(phase):
+    """The component names of `phase`, an element of a strategy's `phases`:
+    a list of names or an object with `tools`."""
+    return phase["tools"] if isinstance(phase, dict) else phase
+
+
 def conf_components(conf):
-    """The component names a CoOpeRace configuration uses."""
-    names = []
-    def walk(node):
-        if isinstance(node, list):
-            for n in node:
-                walk(n)
-        else:
-            names.extend(node)
-    walk(conf["tools"])
-    return names
+    """The component names a CoOpeRace configuration uses, in the phases of
+    any of its strategies."""
+    return list(dict.fromkeys(name for strategy in conf["properties"].values()
+                              for phase in strategy["phases"] for name in phase_tools(phase)))
 
 
 def read_conf(path):
@@ -439,7 +439,7 @@ def plan(args):
     for c in args.components.split(","):
         if c not in present:
             skipped[c] = f"tools/{c} is not installed"
-    configs = args.config or [cdir / "conf" / "svcomp26.json", cdir / "conf" / "svcomp25.json"]
+    configs = args.config or [cdir / "conf" / "svcomp27.json"]
     production = [(Path(p).stem, Path(p), "production", regular, []) for p in configs]
     suite = [(name, HERE / entry["conf"], "suite",
               [t for t in tasks if name in t.get("configurations", ())], entry.get("checks", []))
@@ -828,7 +828,7 @@ def goblint_cpu_limit_problems(r, t, lines):
     """What departs, in the run `r` of task `t`, from what a CPU-time limit of
     Goblint should cause (check 8): the limit, one of the cgroup of Goblint's
     run, ends its whole portfolio, so Goblint's status is TIMEOUT; Goblint's
-    stage ends without a verdict, and a component of a later stage gives the
+    phase ends without a verdict, and a component of a later phase gives the
     expected verdict."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
@@ -843,35 +843,26 @@ def goblint_cpu_limit_problems(r, t, lines):
         problems.append(f"Goblint's result is {goblint[0]['result']}, not unknown")
     answered = answering_name(lines)
     if answered in (None, COMPONENTS["goblint"]["name"]):
-        problems.append(f"the verdict is not from a later stage (answered by {answered})")
+        problems.append(f"the verdict is not from a later phase (answered by {answered})")
     if r["verdict"] != t["expected"]:
         problems.append(f"{r['status']}, expected {str(t['expected']).lower()}")
     return problems
 
 
 def parallel_siblings(config, name):
-    """The other components of the parallel stage of the configuration
-    `config` that holds the component `name` directly, as config.load of
-    src/cooperace/config.py reads it: the list `tools` runs as `runType` says, and each list nested
-    in it the other way.  Empty if `name` is in a sequential list."""
-    def walk(node, parallel):
-        for element in node:
-            if isinstance(element, list):
-                found = walk(element, not parallel)
-                if found is not None:
-                    return found
-            elif name in element:
-                if not parallel:
-                    return []
-                return [n for e in node if isinstance(e, dict) for n in e if n != name]
-        return None
-    return walk(config.get("tools", []), config.get("runType") == "parallel") or []
+    """The other components of the phases of the configuration `config` that
+    the component `name` is in, in the no-data-race strategy, as config.load
+    of src/cooperace/config.py reads it.  Empty if `name` is in no phase or
+    alone in its phases."""
+    strategy = config.get("properties", {}).get("no-data-race", {})
+    phases = [phase_tools(phase) for phase in strategy.get("phases", [])]
+    return list(dict.fromkeys(n for tools in phases if name in tools for n in tools if n != name))
 
 
 def parallel_stop_problems(run, lines):
     """What in CoOpeRace's output `lines` shows that the components of a
-    parallel stage were not stopped when one of them gave the returned
-    verdict (check 9): every other component of that stage must have
+    phase were not stopped when one of them gave the returned verdict
+    (check 9): every other component of a phase it is in must have
     `Status: stopped by CoOpeRace` or `Result: unknown`; and no component's
     block may appear twice."""
     if lines is None:
@@ -1096,8 +1087,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
              7: "CoOpeRace prints the configured component limits",
-             8: "Goblint's CPU-time limit ends it (TIMEOUT) and a later stage answers",
-             9: "a parallel stage stops its other components once one answers"}
+             8: "Goblint's CPU-time limit ends it (TIMEOUT) and a later phase answers",
+             9: "a phase stops its other components once one answers"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of a false witness, and the linter's status where "
              "it does not accept the witness], CPU time; "
@@ -1136,7 +1127,7 @@ def main():
                     help="directory made by scripts/download-validators.py (env COOPERACE_VALIDATORS)")
     ap.add_argument("--config", action="append", type=Path,
                     help="a further production configuration (JSON); "
-                         "default: conf/svcomp26.json and conf/svcomp25.json")
+                         "default: conf/svcomp27.json")
     ap.add_argument("--components", default=",".join(COMPONENTS))
     ap.add_argument("--tasks", action="append", help="only tasks whose name contains this")
     ap.add_argument("--cross", action="store_true",

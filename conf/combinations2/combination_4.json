@@ -1,7 +1,0 @@
-{
-    "runType": "parallel",
-    "tools": [
-        {"ULTIMATE GemCutter": "all"},
-        {"Goblint": "all"}
-    ]
-}

@@ -1,7 +1,0 @@
-{
-    "runType": "parallel",
-    "tools": [
-        {"Dartagnan": "all"},
-        {"Deagle": "all"}
-    ]
-}

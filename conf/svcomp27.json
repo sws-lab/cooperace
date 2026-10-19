@@ -1,0 +1,22 @@
+{
+    "properties": {
+        "no-data-race": {
+            "phases":        [["sv-sanitizers", "Goblint"], ["Goblint", "Dartagnan"]],
+            "cpuTimeLimits": {"sv-sanitizers": 30},
+            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan:false"]],
+            "witnesses":     ["sv-sanitizers", "Dartagnan"]
+        },
+        "unreach-call": {
+            "phases":        [["sv-sanitizers", "Goblint"], ["Deagle", "Dartagnan"]],
+            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Deagle:true", "Dartagnan:false"]],
+            "witnesses":     ["sv-sanitizers", "Dartagnan", "Goblint", "Deagle"]
+        },
+        "valid-memsafety": {
+            "phases":        [["sv-sanitizers", "Goblint"], ["Deagle"]],
+            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Deagle"]],
+            "witnesses":     ["sv-sanitizers", "Deagle"]
+        }
+    }
+}

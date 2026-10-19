@@ -1,6 +1,9 @@
 {
-    "runType": "sequential",
-    "tools": [
-        {"Goblint": "all"}
-    ]
+    "properties": {
+        "no-data-race": {
+            "phases":    [["Goblint"]],
+            "answers":   [["Goblint"]],
+            "witnesses": ["Goblint"]
+        }
+    }
 }
