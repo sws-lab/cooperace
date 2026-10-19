@@ -125,7 +125,13 @@ def test_options_of_another_doi_are_refused(tmp_path):
 
 GRAPHML = ('<graphml xmlns="http://graphml.graphdrawing.org/xmlns">'
            '<key id="p" attr.name="producer"/><graph><data key="p">X</data></graph></graphml>')
-YAML = "- entry_type: violation_sequence\n  metadata:\n    producer:\n      name: Dartagnan\n"
+def yaml_witness(version='"2.2"'):
+    """A YAML violation witness of Dartagnan with the format_version `version`."""
+    return (f"- entry_type: violation_sequence\n  metadata:\n    format_version: {version}\n"
+            "    producer:\n      name: Dartagnan\n")
+
+
+YAML = yaml_witness()
 
 
 def false_run(tmp_path, files):
@@ -158,6 +164,35 @@ def test_a_false_may_deliver_one_file_per_format(tmp_path, files):
 def test_a_false_without_the_formats_file_or_with_two_of_a_format_fails(tmp_path, files, problem):
     problems = run.protocol_problems(false_run(tmp_path, files), OUTPUT, YAML_FORMAT)
     assert any(p.startswith(problem) for p in problems), problems
+
+
+def test_the_suite_reads_the_accepted_versions_from_the_witness_table():
+    assert run.WITNESS_TABLE == Path(run.__file__).resolve().parents[2] / "conf" / "witnesses.json"
+    assert run.accepted_versions("no-data-race", "false") == ((2, 2), (2, 3))
+    assert run.accepted_versions("no-data-race", "true") is None
+    assert run.accepted_versions("unreach-call", "true") == ((2, 1), (2, 3))
+
+
+@pytest.mark.parametrize("version", ['"2.2"', '"2.3"', "2.3"])
+def test_a_yaml_witness_of_an_accepted_version_passes_check_6(tmp_path, version):
+    files = {"witness.yml": yaml_witness(version)}
+    assert run.protocol_problems(false_run(tmp_path, files), OUTPUT, YAML_FORMAT) == []
+
+
+@pytest.mark.parametrize("text, found", [
+    (yaml_witness('"2.1"'), "format_version 2.1"),
+    (yaml_witness('"2.4"'), "format_version 2.4"),
+    (YAML.replace('    format_version: "2.2"\n', ""), "no single violation_sequence entry with a format_version"),
+    (YAML + YAML, "no single violation_sequence entry with a format_version"),
+])
+def test_a_yaml_witness_of_another_version_fails_check_6(tmp_path, text, found):
+    problems = run.protocol_problems(false_run(tmp_path, {"witness.yml": text}), OUTPUT, YAML_FORMAT)
+    assert problems == [f"witness.yml has {found}, but witnesses.json accepts 2.2 to 2.3 for a no-data-race false"]
+
+
+def test_the_graphml_format_does_not_check_the_version_of_a_yaml_file(tmp_path):
+    files = {"witness.graphml": GRAPHML, "witness.yml": yaml_witness('"2.0"')}
+    assert run.protocol_problems(false_run(tmp_path, files), OUTPUT, run.WITNESS_FORMATS["graphml-1.0"]) == []
 
 
 def test_the_producer_of_a_yaml_witness(tmp_path):

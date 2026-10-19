@@ -39,7 +39,8 @@ checks (see README.md):
   6  every output of CoOpeRace follows the protocol: the verdict line last,
      `CoOpeRace result from: X` before a true or false, each component
      block closed, no `CoOpeRace: error:`; a `false` delivers the format's
-     witness file and no two files of one format
+     witness file and no two files of one format, and a YAML witness has a
+     version that conf/witnesses.json accepts
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
   8  in goblint-1s, the 1 s CPU-time limit ends Goblint (status
@@ -796,6 +797,59 @@ def is_yaml_witness(path):
 # src/cooperace/components.py), with a test that the file has that name's format.
 DELIVERED_WITNESSES = {"witness.graphml": is_graphml, "witness.yml": is_yaml_witness}
 
+# CoOpeRace's witness table (conf/README.md, "The witness table"): the YAML
+# format versions SV-COMP accepts for a witness of each property and verdict.
+WITNESS_TABLE = REPO / "conf" / "witnesses.json"
+
+
+def accepted_versions(property_name, verdict, table=WITNESS_TABLE):
+    """The format versions of a witness of `verdict` ("true" or "false") on
+    `property_name` that the witness table in the file `table` accepts, as
+    (lowest, highest), each (major, minor): from the verdict's
+    minimumVersion to the table's highestVersion. None where the table gives
+    null, that is, where no witness counts."""
+    data = json.loads(Path(table).read_text())
+    cell = data["properties"][property_name][verdict]
+    if cell is None:
+        return None
+    def version(text):
+        major, minor = text.split(".")
+        return int(major), int(minor)
+    return version(cell["minimumVersion"]), version(data["highestVersion"])
+
+
+def violation_version(path):
+    """The metadata.format_version, as (major, minor), of the one entry of
+    entry_type violation_sequence in the YAML witness `path`; None if the file
+    has no such entry, more than one, or a format_version that is not
+    "major.minor" (a string, or the number YAML reads an unquoted 2.2 as)."""
+    try:
+        import yaml  # a BenchExec dependency
+        entries = yaml.safe_load(Path(path).read_text())
+        (entry,) = [e for e in entries if isinstance(e, dict) and e.get("entry_type") == "violation_sequence"]
+        value = entry["metadata"]["format_version"]
+        if isinstance(value, bool) or not isinstance(value, (str, float)):
+            return None
+        match = re.fullmatch(r"(\d+)\.(\d+)", str(value).strip())
+        return (int(match.group(1)), int(match.group(2))) if match else None
+    except Exception:
+        return None
+
+
+def version_problem(name, path, table=WITNESS_TABLE):
+    """What is wrong with the version of `path`, the file `name` that a
+    no-data-race `false` of CoOpeRace delivered as its YAML witness: None if
+    its violation_sequence entry has a format_version that the witness table
+    `table` accepts for a no-data-race false (accepted_versions)."""
+    lowest, highest = accepted_versions("no-data-race", "false", table)
+    version = violation_version(path)
+    if version is not None and lowest <= version <= highest:
+        return None
+    found = "no single violation_sequence entry with a format_version" if version is None else \
+        f"format_version {version[0]}.{version[1]}"
+    return (f"{name} has {found}, but {Path(table).name} accepts {lowest[0]}.{lowest[1]} to "
+            f"{highest[0]}.{highest[1]} for a no-data-race false")
+
 
 def data_race_limits(config):
     """The `memoryLimits` and `cpuTimeLimits` of the no-data-race strategy of
@@ -965,7 +1019,9 @@ def protocol_problems(r, lines, fmt):
     the protocol that benchexec.tools.cooperace and this suite rely on (check
     6); empty if nothing does.  For a `false`, the result files may hold one
     file per format of DELIVERED_WITNESSES, each in the format its name says,
-    and must hold the file of the witness format `fmt`."""
+    and must hold the file of the witness format `fmt`; where that format is
+    YAML, each YAML file must have a version that the witness table accepts
+    for a no-data-race false (version_problem)."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
     problems = []
@@ -999,8 +1055,10 @@ def protocol_problems(r, lines, fmt):
             kind = next((k for k, test in DELIVERED_WITNESSES.items() if test(path)), None)
             if kind is None:
                 problems.append(f"{name} is in none of the formats {', '.join(DELIVERED_WITNESSES)}")
-            else:
-                of_format.setdefault(kind, []).append(name)
+                continue
+            of_format.setdefault(kind, []).append(name)
+            if kind == "witness.yml" and fmt["file"] == "witness.yml" and (problem := version_problem(name, path)):
+                problems.append(problem)
         for kind, with_it in of_format.items():
             if len(with_it) > 1:
                 problems.append(f"{len(with_it)} files in the format of {kind}: {', '.join(with_it)}")
