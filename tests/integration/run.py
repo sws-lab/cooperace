@@ -7,7 +7,9 @@
 """Integration suite for the components of CoOpeRace.
 
 For every component that is installed under tools/ (Goblint, Dartagnan,
-ULTIMATE Automizer) the suite runs a handful of small no-data-race tasks
+ULTIMATE Automizer, sv-sanitizers, Deagle, iekke) the suite runs a handful of
+small tasks, each of one property (`property` in manifest.json, no-data-race
+where a task names none)
 
   * with the component alone, through the component's own BenchExec tool-info
     module and the options that tools-options.json of the checkout records
@@ -30,17 +32,20 @@ checks (see README.md):
   1  no run gives a wrong verdict
   2  each component alone gives the expected verdict on its own tasks, and a
      validator confirms its witness (otherwise the task is a bad pick)
-  3  CoOpeRace with one component gives the verdict that component gives alone
-  4  every `false` of CoOpeRace delivers a witness file of the format that
-     the validator named in manifest.json confirms and the format's linter
-     accepts, produced by the component that answered
+  3  inside CoOpeRace with one component, the component gives the verdict it
+     gives alone
+  4  every `false` of CoOpeRace delivers a witness file of the format, where
+     the witness table requires one for the task's property, that the
+     validator named in manifest.json confirms (where it names one) and the
+     format's linter accepts, produced by the component that answered
   5  each production configuration and configuration of the suite gives the
      expected verdict on every task it runs
   6  every output of CoOpeRace follows the protocol: the verdict line last,
      `CoOpeRace result from: X` before a true or false, each component
      block closed, no `CoOpeRace: error:`; a `false` delivers the format's
-     witness file and no two files of one format, and a YAML witness has a
-     version that conf/witnesses.json accepts
+     witness file where the witness table requires one, and no two files of
+     one format, and a YAML witness has a version that conf/witnesses.json
+     accepts for the task's property
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
      is printed with the configured value whenever that component started
   8  in goblint-1s, the 1 s CPU-time limit ends Goblint (status
@@ -83,7 +88,10 @@ from xml.sax.saxutils import escape, quoteattr
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 TASKS = HERE / "c"
-PROPERTY = TASKS / "properties" / "no-data-race.prp"
+# The property files, <property>.prp, and the property of a task of
+# manifest.json that names none.
+PROPERTIES = TASKS / "properties"
+DEFAULT_PROPERTY = "no-data-race"
 
 # The components of CoOpeRace: the directory under tools/ (the key), the
 # BenchExec tool-info module and the name in conf/*.json.  The options of a
@@ -93,6 +101,9 @@ COMPONENTS = {
     "goblint": dict(module="benchexec.tools.goblint", name="Goblint"),
     "dartagnan": dict(module="benchexec.tools.dartagnan", name="Dartagnan"),
     "uautomizer": dict(module="benchexec.tools.ultimateautomizer", name="ULTIMATE Automizer"),
+    "sv-sanitizers": dict(module="benchexec.tools.sv-sanitizers", name="sv-sanitizers"),
+    "deagle": dict(module="benchexec.tools.deagle", name="Deagle"),
+    "iekke": dict(module="benchexec.tools.iekke", name="iekke"),
 }
 
 # Tool directories under tools/ of the names that conf/*.json may use
@@ -102,7 +113,7 @@ TOOL_DIRS = {
     "ULTIMATE Automizer": "uautomizer", "ULTIMATE GemCutter": "ugemcutter",
     "ULTIMATE Taipan": "utaipan", "nacpa": "nacpa",
     "CPAchecker": "cpachecker", "sv-sanitizers": "sv-sanitizers",
-    "RacerF": "racerf",
+    "RacerF": "racerf", "iekke": "iekke",
 }
 
 # Witness formats.  A format names the file a verifier writes (collected from
@@ -211,10 +222,12 @@ class CouldNotRun(Exception):
 
 def load_tasks(selectors):
     """The tasks of manifest.json whose name contains one of `selectors` (all
-    if there are none), with the expected verdict and the data model read from
-    each task's own .yml; a .yml without `data_model` means DEFAULT_DATA_MODEL.
-    Raises CouldNotRun for a missing .yml, a .yml without an expected verdict
-    for no-data-race.prp, or two tasks with the same file name."""
+    if there are none), each with its `property` (DEFAULT_PROPERTY if the
+    manifest names none), and the expected verdict for that property and the
+    data model read from the task's own .yml; a .yml without `data_model`
+    means DEFAULT_DATA_MODEL. Raises CouldNotRun for a missing .yml or
+    property file, a .yml without an expected verdict for the task's
+    property, or two tasks with the same file name."""
     manifest = json.loads((HERE / "manifest.json").read_text())
     tasks = []
     for entry in manifest["tasks"]:
@@ -223,11 +236,14 @@ def load_tasks(selectors):
             text = yml.read_text()
         except OSError as e:
             raise CouldNotRun(f"missing task {yml}: {e.strerror}") from e
-        expected = re.search(r"no-data-race\.prp\s+expected_verdict:\s*(true|false)\b", text)
+        prop = entry.get("property", DEFAULT_PROPERTY)
+        if not property_file(prop).is_file():
+            raise CouldNotRun(f"{entry['name']}: no property file {property_file(prop)}")
+        expected = re.search(rf"{re.escape(prop)}\.prp\s+expected_verdict:\s*(true|false)\b", text)
         if not expected:
-            raise CouldNotRun(f"{yml} has no expected verdict for no-data-race.prp")
+            raise CouldNotRun(f"{yml} has no expected verdict for {prop}.prp")
         data_model = re.search(r"^\s*data_model:\s*(\w+)", text, re.M)
-        tasks.append(dict(entry, yml=yml, expected=expected.group(1) == "true",
+        tasks.append(dict(entry, yml=yml, property=prop, expected=expected.group(1) == "true",
                           data_model=data_model.group(1) if data_model else DEFAULT_DATA_MODEL,
                           id=Path(entry["name"]).name))
     ids = [t["id"] for t in tasks]
@@ -238,6 +254,11 @@ def load_tasks(selectors):
     if selectors:
         tasks = [t for t in tasks if any(s in t["name"] for s in selectors)]
     return manifest, tasks
+
+
+def property_file(name):
+    """The property file of the property `name` among the tasks."""
+    return PROPERTIES / f"{name}.prp"
 
 
 def verdict_of(status):
@@ -251,30 +272,35 @@ def verdict_of(status):
 
 # ------------------------------------------------------------ BenchExec
 
-def write_definition(path, tool, rundefs, limits, tasks_of, bench_options=(), required_files=None):
+def write_definition(path, tool, rundefs, limits, tasks_of, bench_options=(), required_files=None,
+                     result_files="**/witness.*"):
     """Writes a BenchExec benchmark definition to `path`.  `rundefs` is {name:
     [(option, value)]}, `tasks_of[name]` the tasks of that run definition,
     `bench_options` the options of every run definition, and
     `required_files[name]` the patterns of that run definition's
-    <requiredfiles>."""
+    <requiredfiles>.  The tasks of a run definition are one <tasks> block per
+    property, named after it, since BenchExec reads one property file per
+    block.  `result_files` is the pattern of <resultfiles>."""
     lines = ['<?xml version="1.0"?>',
              '<!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 2.3//EN"'
              ' "https://www.sosy-lab.org/benchexec/benchmark-2.3.dtd">',
              f'<benchmark tool={quoteattr(tool)} timelimit={quoteattr(limits["timelimit"])}'
              f' hardtimelimit={quoteattr(limits["hardtimelimit"])}'
              f' memlimit={quoteattr(limits["memlimit"])} cpuCores={quoteattr(limits["cores"])}>',
-             "  <resultfiles>**/witness.*</resultfiles>"]
+             f"  <resultfiles>{escape(result_files)}</resultfiles>"]
     lines += [option_xml(o, v, "  ") for o, v in bench_options]
     for name, options in rundefs.items():
         lines.append(f"  <rundefinition name={quoteattr(name)}>")
         lines += [f"    <requiredfiles>{escape(str(f))}</requiredfiles>"
                   for f in (required_files or {}).get(name, ())]
         lines += [option_xml(o, v, "    ") for o, v in options]
-        lines.append('    <tasks name="t">')
-        for t in tasks_of[name]:
-            lines.append(f"      <include>{escape(str(t['yml']))}</include>")
-        lines.append(f"      <propertyfile>{escape(str(PROPERTY))}</propertyfile>")
-        lines += ["    </tasks>", "  </rundefinition>"]
+        for prop in sorted({t["property"] for t in tasks_of[name]}):
+            lines.append(f"    <tasks name={quoteattr(prop)}>")
+            for t in tasks_of[name]:
+                if t["property"] == prop:
+                    lines.append(f"      <include>{escape(str(t['yml']))}</include>")
+            lines += [f"      <propertyfile>{escape(str(property_file(prop)))}</propertyfile>", "    </tasks>"]
+        lines.append("  </rundefinition>")
     lines.append("</benchmark>")
     Path(path).write_text("\n".join(lines) + "\n")
 
@@ -534,8 +560,9 @@ def verify(args, runs, cdir, out):
             continue
         tool_dir = cdir / "tools" / c
         definition = out / "defs" / f"{name}.xml"
+        # A component alone may name its witness otherwise (Deagle: error-witness.yml)
         write_definition(definition, comp["module"], {name: option_pairs(runs[name]["options"])},
-                         limits, {name: runs[name]["tasks"]})
+                         limits, {name: runs[name]["tasks"]}, result_files="**/*witness.*")
         run_benchexec(definition, tool_dir, tool_dir, vdir, name, args,
                       wheel=bundled_benchexec(cdir))
     coop = {n: r for n, r in runs.items() if r["kind"] != "alone"}
@@ -555,7 +582,8 @@ def collect_witnesses(results, runs, fmt, out):
     out/witnesses/<run definition>/<task>/.  For CoOpeRace that is the file
     at the top of the result files, where CoOpeRace delivers it; a component
     run alone may write it into a directory of its own (Dartagnan's
-    output/), so for such a run it is the first file of that name anywhere
+    output/) and under a name that ends in the format's (Deagle's
+    error-witness.yml), so for such a run it is the first such file anywhere
     in the result files."""
     for (rundef, task), r in results.items():
         r["witness"] = None
@@ -563,7 +591,7 @@ def collect_witnesses(results, runs, fmt, out):
         if top.is_file():
             src = top
         elif runs.get(rundef, {}).get("kind") == "alone":
-            src = next(iter(sorted(r["files"].rglob(fmt["file"]))), None)
+            src = next(iter(sorted(r["files"].rglob("*" + fmt["file"]))), None)
         else:
             src = None
         if r["verdict"] is False and src:
@@ -667,7 +695,8 @@ def read_lint(results, out):
 def component_of_producer(producer):
     p = producer.lower()
     for name, c in (("dartagnan", "dartagnan"), ("goblint", "goblint"),
-                    ("automizer", "uautomizer"), ("ultimate", "uautomizer")):
+                    ("automizer", "uautomizer"), ("ultimate", "uautomizer"),
+                    ("sanitizers", "sv-sanitizers"), ("deagle", "deagle"), ("iekke", "iekke")):
         if name in p:
             return c
     return None
@@ -675,7 +704,7 @@ def component_of_producer(producer):
 
 # ---------------------------------------------------- CoOpeRace's output
 
-VERDICT_LINE = re.compile(r"CoOpeRace verdict: (true|false|unknown|ERROR \(contradiction: .+\))")
+VERDICT_LINE = re.compile(r"CoOpeRace verdict: (true|false(?:\([a-z-]+\))?|unknown|ERROR \(contradiction: .+\))")
 # The line strategy.run_strategy of src/cooperace/ prints for each verdict of a
 # component with an entry: its name in the configuration, the verdict, the
 # bracket counting from 1 and, where a witness can count, the witness file or
@@ -707,6 +736,22 @@ def cooperace_output(r):
     while lines and not lines[-1].strip():
         lines.pop()
     return lines
+
+
+def read_verdict_lines(results, runs):
+    """Gives each run of CoOpeRace in `results` whose BenchExec status is
+    ERROR, but whose output ends in `CoOpeRace verdict: false(<property>)`,
+    that result as its status, as BenchExec's tool-info module for CoOpeRace
+    does with sosy-lab/benchexec#1337: the module of BenchExec 3.35 knows
+    only `true`, `false` and `unknown`, and gives ERROR for the `false` of
+    any property but no-data-race."""
+    for (rundef, _task), r in results.items():
+        if runs.get(rundef, {}).get("kind") in (None, "alone") or r["status"] != "ERROR":
+            continue
+        lines = cooperace_output(r)
+        final = VERDICT_LINE.fullmatch(lines[-1]) if lines else None
+        if final and final.group(1).startswith("false("):
+            r["status"], r["verdict"] = final.group(1), False
 
 
 def component_blocks(lines):
@@ -773,7 +818,8 @@ def answered_by(r):
     COMPONENTS), from answering_name; None if there is none."""
     name = answering_name(cooperace_output(r) or [])
     for c, comp in COMPONENTS.items():
-        if comp["name"] == name:
+        # A block names the component as its tool-info module does (SV-sanitizers)
+        if name is not None and comp["name"].lower() == name.lower():
             return c
     return name
 
@@ -836,36 +882,46 @@ def violation_version(path):
         return None
 
 
-def version_problem(name, path, table=WITNESS_TABLE):
+def version_problem(name, path, table=WITNESS_TABLE, property_name=DEFAULT_PROPERTY):
     """What is wrong with the version of `path`, the file `name` that a
-    no-data-race `false` of CoOpeRace delivered as its YAML witness: None if
-    its violation_sequence entry has a format_version that the witness table
-    `table` accepts for a no-data-race false (accepted_versions)."""
-    lowest, highest = accepted_versions("no-data-race", "false", table)
+    `false` of CoOpeRace on `property_name` delivered as its YAML witness:
+    None if its violation_sequence entry has a format_version that the
+    witness table `table` accepts for a false on that property
+    (accepted_versions)."""
+    lowest, highest = accepted_versions(property_name, "false", table)
     version = violation_version(path)
     if version is not None and lowest <= version <= highest:
         return None
     found = "no single violation_sequence entry with a format_version" if version is None else \
         f"format_version {version[0]}.{version[1]}"
     return (f"{name} has {found}, but {Path(table).name} accepts {lowest[0]}.{lowest[1]} to "
-            f"{highest[0]}.{highest[1]} for a no-data-race false")
+            f"{highest[0]}.{highest[1]} for a {property_name} false")
 
 
-def data_race_limits(config):
-    """The `memoryLimits` and `cpuTimeLimits` of the no-data-race strategy of
-    the configuration `config`, which conf/README.md places in the property's
-    strategy, not at the top of the conf."""
-    strategy = config.get("properties", {}).get("no-data-race", {})
+def witness_needed(property_name, verdict, table=WITNESS_TABLE):
+    """Whether the witness table `table` requires a witness for `verdict`
+    ("true" or "false") on `property_name`: without one, CoOpeRace prints
+    unknown for that verdict."""
+    cell = json.loads(Path(table).read_text())["properties"][property_name][verdict]
+    return bool(cell and cell.get("required"))
+
+
+def strategy_limits(config, property_name=DEFAULT_PROPERTY):
+    """The `memoryLimits` and `cpuTimeLimits` of the strategy for
+    `property_name` of the configuration `config`, which conf/README.md
+    places in the property's strategy, not at the top of the conf."""
+    strategy = config.get("properties", {}).get(property_name, {})
     return {key: strategy[key] for key in ("memoryLimits", "cpuTimeLimits") if key in strategy}
 
 
-def limit_problems(run, r, lines):
+def limit_problems(run, r, lines, property_name=DEFAULT_PROPERTY):
     """What is wrong with the lines in which CoOpeRace announces the limits of
-    `memoryLimits` and `cpuTimeLimits` of the run's no-data-race strategy (check 7):
-    each component with a limit that started must have its line, every
-    such line must give the configured limit, a percentage taken of the
-    memory limit BenchExec records for the run, within 1 %."""
-    config = data_race_limits(run.get("config") or {})
+    `memoryLimits` and `cpuTimeLimits` of the run's strategy for
+    `property_name` (check 7): each component with a limit that started must
+    have its line, every such line must give the configured limit, a
+    percentage taken of the memory limit BenchExec records for the run,
+    within 1 %."""
+    config = strategy_limits(run.get("config") or {}, property_name)
     if lines is None or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
         return []
     blocks, _ = component_blocks(lines)
@@ -919,11 +975,11 @@ def goblint_cpu_limit_problems(r, t, lines):
     return problems
 
 
-def data_race_strategy(config):
-    """The no-data-race strategy of the configuration `config`, as conf/README.md
-    describes it: (the brackets of `answers`, each a set of (name, verdict)
-    pairs, highest first; the names of `witnesses`)."""
-    strategy = config.get("properties", {}).get("no-data-race", {})
+def strategy_answers(config, property_name=DEFAULT_PROPERTY):
+    """The strategy for `property_name` of the configuration `config`, as
+    conf/README.md describes it: (the brackets of `answers`, each a set of
+    (name, verdict) pairs, highest first; the names of `witnesses`)."""
+    strategy = config.get("properties", {}).get(property_name, {})
     brackets = []
     for bracket in strategy.get("answers", []):
         pairs = set()
@@ -934,14 +990,18 @@ def data_race_strategy(config):
     return brackets, list(strategy.get("witnesses", []))
 
 
-def decided(brackets, witnesses, answers):
-    """What CoOpeRace prints for no-data-race by the rules of conf/README.md,
-    given `answers`, each component's (verdict, has a witness) from its
-    `CoOpeRace answer:` line: (verdict, the component the verdict is taken
-    from or None, the index of the deciding bracket or None). The verdict is
-    "true", "false", "unknown" or "ERROR"; a false needs a witness, taken
-    from the first component of `witnesses` with an entry for false, else of
-    the deciding bracket by name, that answered false with one."""
+def decided(brackets, witnesses, answers, property_name=DEFAULT_PROPERTY, table=WITNESS_TABLE):
+    """What CoOpeRace prints for `property_name` by the rules of
+    conf/README.md, given `answers`, each component's (verdict, has a
+    witness) from its `CoOpeRace answer:` line: (verdict, the component that
+    supplies the witness or None, the index of the deciding bracket or None).
+    The verdict is "true", "false", "unknown" or "ERROR". Where a witness can
+    count for the verdict (the witness table `table` has a cell for it), it
+    is taken from the first component of `witnesses` with an entry for the
+    verdict, else of the deciding bracket by name, that answered the verdict
+    with one; a verdict the table requires a witness for is unknown without
+    one. A verdict without a supplier is taken from any agreeing component
+    of the deciding bracket."""
     for index, bracket in enumerate(brackets):
         verdicts = {verdict for name, (verdict, _) in answers.items() if (name, verdict) in bracket}
         if len(verdicts) == 2:
@@ -951,23 +1011,23 @@ def decided(brackets, witnesses, answers):
             break
     else:
         return "unknown", None, None
-    agreeing = [name for name, (answer, _) in answers.items()
-                if answer == verdict and (name, verdict) in bracket]
-    if verdict == "true":
-        return "true", sorted(agreeing)[0], index
-    order = [name for name in witnesses if any((name, "false") in b for b in brackets)]
-    order += sorted(name for name, v in bracket if v == "false" and name not in order)
-    supplier = next((name for name in order if answers.get(name) == ("false", True)), None)
-    return ("false", supplier, index) if supplier else ("unknown", None, index)
+    if accepted_versions(property_name, verdict, table) is None:
+        return verdict, None, index
+    order = [name for name in witnesses if any((name, verdict) in b for b in brackets)]
+    order += sorted(name for name, v in bracket if v == verdict and name not in order)
+    supplier = next((name for name in order if answers.get(name) == (verdict, True)), None)
+    if supplier is None and witness_needed(property_name, verdict, table):
+        return "unknown", None, index
+    return verdict, supplier, index
 
 
-def stop_problems(run, lines):
+def stop_problems(run, lines, property_name=DEFAULT_PROPERTY):
     """What in CoOpeRace's output `lines` departs from the rules by which it
-    decides the verdict and stops components (check 9), for its no-data-race
-    strategy: no component's block appears twice; the verdict line is the
-    one `decided` gives from the `CoOpeRace answer:` lines, and a true or
-    false comes from the component `decided` names, where it names one
-    (for a true, any agreeing component of the deciding bracket); and no
+    decides the verdict and stops components (check 9), for its strategy
+    for `property_name`: no component's block appears twice; the verdict
+    line is the one `decided` gives from the `CoOpeRace answer:` lines, and a
+    true or false comes from the witness supplier `decided` names, where it
+    names one, else from any agreeing component of the deciding bracket; and no
     component that could still have changed the verdict was stopped, unless
     a phase's wall-time limit stopped it: none with an entry in a bracket
     above the deciding one, and, for a true or false, none with an entry for
@@ -982,20 +1042,20 @@ def stop_problems(run, lines):
     final = VERDICT_LINE.fullmatch(lines[-1]) if lines else None
     if final is None:
         return problems  # BenchExec ended the run; check 6 reports a missing verdict line
-    brackets, witnesses = data_race_strategy(run.get("config") or {})
+    brackets, witnesses = strategy_answers(run.get("config") or {}, property_name)
     answers = {}
     for line in lines:
         m = ANSWER_LINE.fullmatch(line)
         if m:
             answers[m.group(1)] = (m.group(2), bool(m.group(4)) and m.group(4).startswith("witness "))
-    verdict, source, index = decided(brackets, witnesses, answers)
+    verdict, source, index = decided(brackets, witnesses, answers, property_name)
     printed = final.group(1)
-    if printed.split(" ")[0] != verdict:
+    if re.split(r"[ (]", printed)[0] != verdict:
         problems.append(f"the verdict is {printed}, but the answers {answers or 'none'} decide {verdict}")
     elif verdict in ("true", "false"):
         answered = (answering_name(lines) or "").lower()
-        candidates = ([source] if verdict == "false" else
-                      [name for name, (v, _) in answers.items() if v == "true" and (name, "true") in brackets[index]])
+        candidates = ([source] if source else
+                      [name for name, (v, _) in answers.items() if v == verdict and (name, verdict) in brackets[index]])
         if answered not in {name.lower() for name in candidates}:
             problems.append(f"the {verdict} is from {answered or 'no component'}, but the answers give it from "
                             + " or ".join(candidates))
@@ -1014,14 +1074,16 @@ def stop_problems(run, lines):
     return problems
 
 
-def protocol_problems(r, lines, fmt):
-    """What in the run `r` of CoOpeRace, whose output is `lines`, departs from
-    the protocol that benchexec.tools.cooperace and this suite rely on (check
-    6); empty if nothing does.  For a `false`, the result files may hold one
-    file per format of DELIVERED_WITNESSES, each in the format its name says,
-    and must hold the file of the witness format `fmt`; where that format is
-    YAML, each YAML file must have a version that the witness table accepts
-    for a no-data-race false (version_problem)."""
+def protocol_problems(r, lines, fmt, property_name=DEFAULT_PROPERTY):
+    """What in the run `r` of CoOpeRace on a task of `property_name`, whose
+    output is `lines`, departs from the protocol that benchexec.tools.cooperace
+    and this suite rely on (check 6); empty if nothing does.  For a `false`,
+    the result files may hold one file per format of DELIVERED_WITNESSES,
+    each in the format its name says, and must hold the file of the witness
+    format `fmt` where the witness table requires a witness for a false on
+    the property (witness_needed); where that format is YAML, each YAML file
+    must have a version that the witness table accepts for a false on the
+    property (version_problem)."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
     problems = []
@@ -1032,7 +1094,7 @@ def protocol_problems(r, lines, fmt):
         problems.append(f"the last line is {lines[-1] if lines else ''!r}, "
                         "not `CoOpeRace verdict: true|false|unknown|ERROR (contradiction: ...)`")
     else:
-        verdict = VERDICT_LINE.fullmatch(lines[-1]).group(1)
+        verdict = re.split(r"[ (]", VERDICT_LINE.fullmatch(lines[-1]).group(1))[0]
         from_lines = [line for line in lines if RESULT_FROM_LINE.fullmatch(line)]
         if verdict not in ("true", "false") and from_lines:
             problems.append(f"{from_lines[0]!r} with verdict {verdict}")
@@ -1057,12 +1119,13 @@ def protocol_problems(r, lines, fmt):
                 problems.append(f"{name} is in none of the formats {', '.join(DELIVERED_WITNESSES)}")
                 continue
             of_format.setdefault(kind, []).append(name)
-            if kind == "witness.yml" and fmt["file"] == "witness.yml" and (problem := version_problem(name, path)):
+            if kind == "witness.yml" and fmt["file"] == "witness.yml" and (
+                    problem := version_problem(name, path, property_name=property_name)):
                 problems.append(problem)
         for kind, with_it in of_format.items():
             if len(with_it) > 1:
                 problems.append(f"{len(with_it)} files in the format of {kind}: {', '.join(with_it)}")
-        if fmt["file"] not in names:
+        if fmt["file"] not in names and witness_needed(property_name, "false"):
             problems.append(f"no {fmt['file']} in the result files ({', '.join(names) or 'none'})")
     return problems
 
@@ -1089,16 +1152,19 @@ def check(results, runs, tasks, skipped, fmt):
             v = r.get("validation")
             who = t["validator"]
             if run["kind"] == "alone":
-                ok = bool(v) and v["verdict"] == "confirmed"
+                # A task without a validator (none of the suite's validators
+                # checks its property) is not validated.
+                ok = who is None or (bool(v) and v["verdict"] == "confirmed")
                 add(2, rundef, task, ok, "bad task pick",
                     "" if ok else f"the witness of {run['component']} alone is not confirmed by "
                                   f"{who}: {v['verdict'] + ' (' + v['status'] + ')' if v else 'not validated'}")
             else:
                 problems = []
                 if not r.get("witness"):
-                    problems.append(f"no {fmt['file']} delivered")
+                    if witness_needed(t["property"], "false"):
+                        problems.append(f"no {fmt['file']} delivered")
                 else:
-                    if not v or v["verdict"] != "confirmed":
+                    if who is not None and (not v or v["verdict"] != "confirmed"):
                         problems.append(f"{who} does not confirm it: "
                                         + (f"{v['verdict']} ({v['status']})" if v else "not validated"))
                     if fmt.get("linter") and r.get("lint") != "done":
@@ -1109,6 +1175,12 @@ def check(results, runs, tasks, skipped, fmt):
                     if producer and component_of_producer(producer) not in (None, answered):
                         problems.append(f"witness producer {producer!r}, answered by {answered}")
                 add(4, rundef, task, not problems, "witness", "; ".join(problems))
+        elif run["kind"] == "only" and not t["expected"] and component_result(r, run) is False:
+            # The component answered the expected false inside CoOpeRace, but
+            # CoOpeRace did not print it: its witness did not pass the check.
+            add(4, rundef, task, False, "witness",
+                f"{run['component']} answers false, but CoOpeRace prints {r['status']}: "
+                "no witness that passes the check")
     # Check 2, verdicts of the references on their own tasks.
     for rundef, run in runs.items():
         if run["kind"] != "alone":
@@ -1127,9 +1199,12 @@ def check(results, runs, tasks, skipped, fmt):
         for t in run["tasks"]:
             a, o = results.get((f"alone-{run['component']}", t["id"])), results.get((rundef, t["id"]))
             if a and o and a["verdict"] is not None:
-                ok = o["verdict"] == a["verdict"]
+                inside = component_result(o, run)
+                ok = inside == a["verdict"]
                 add(3, rundef, t["id"], ok, "differs from the component alone",
-                    "" if ok else f"{run['component']} alone: {a['status']}; in CoOpeRace: {o['status']}")
+                    "" if ok else f"{run['component']} alone: {a['status']}; in CoOpeRace: "
+                                  f"{'no result' if inside is None else str(inside).lower()} "
+                                  f"(CoOpeRace prints {o['status']})")
     # Check 6.
     for rundef, run in runs.items():
         if run["kind"] == "alone":
@@ -1137,17 +1212,17 @@ def check(results, runs, tasks, skipped, fmt):
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
             if r:
-                problems = protocol_problems(r, cooperace_output(r), fmt)
+                problems = protocol_problems(r, cooperace_output(r), fmt, t["property"])
                 add(6, rundef, t["id"], not problems, "protocol", "; ".join(problems))
     # Check 7.
     for rundef, run in runs.items():
-        config = data_race_limits(run.get("config") or {})
-        if run["kind"] == "alone" or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
+        if run["kind"] == "alone":
             continue
         for t in run["tasks"]:
+            config = strategy_limits(run.get("config") or {}, t["property"])
             r = results.get((rundef, t["id"]))
-            if r:
-                problems = limit_problems(run, r, cooperace_output(r))
+            if r and (config.get("memoryLimits") or config.get("cpuTimeLimits")):
+                problems = limit_problems(run, r, cooperace_output(r), t["property"])
                 add(7, rundef, t["id"], not problems, "limit line", "; ".join(problems))
     # Check 8.
     for rundef, run in runs.items():
@@ -1165,7 +1240,7 @@ def check(results, runs, tasks, skipped, fmt):
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
             if r:
-                problems = stop_problems(run, cooperace_output(r))
+                problems = stop_problems(run, cooperace_output(r), t["property"])
                 add(9, rundef, t["id"], not problems, "verdict and stops", "; ".join(problems))
     # Check 5.
     for rundef, run in runs.items():
@@ -1178,6 +1253,21 @@ def check(results, runs, tasks, skipped, fmt):
                 add(5, rundef, t["id"], ok, "missing or wrong verdict",
                     "" if ok else f"{r['status']}, expected {str(t['expected']).lower()}")
     return out
+
+
+def component_result(r, run):
+    """The verdict, True or False, that the one component of the `only-` run
+    definition `run` gave inside CoOpeRace in the run `r`: its `Tool name: X
+    Result: V` line, which is what CoOpeRace computed from the component's
+    output before the strategy and the witness check decided what to print.
+    None if it gave neither or its block cannot be read."""
+    lines = cooperace_output(r)
+    if lines is None:
+        return None
+    name = COMPONENTS[run["component"]]["name"].lower()
+    blocks, _ = component_blocks(lines)
+    results = [b["result"] for b in blocks if b["name"].lower() == name]
+    return {"true": True, "false": False}.get(results[-1] if results else None)
 
 
 def c_owns(run, t):
@@ -1205,7 +1295,7 @@ def table(results, runs, tasks, skipped):
     cols = list(runs)
     rows = [["task (expected)"] + cols]
     for t in tasks:
-        label = f"{t['name']} ({str(t['expected']).lower()}, {t['data_model']})"
+        label = f"{t['name']} ({t['property']} {str(t['expected']).lower()}, {t['data_model']})"
         rows.append([label] + [cell(results.get((c, t["id"])), t) for c in cols])
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     lines = ["  ".join(c.ljust(w) for c, w in zip(row, widths, strict=True)).rstrip() for row in rows]
@@ -1328,6 +1418,7 @@ def suite(args):
     ids = {t["id"] for t in tasks}
     results = {(rundef, task): r for (rundef, task), r in read_results(out / "verify").items()
                if rundef in runs and task in ids}
+    read_verdict_lines(results, runs)
     collect_witnesses(results, runs, args.fmt, out)
     if args.command in ("run", "validate") and not args.no_validation:
         validate(args, results, tasks, out)

@@ -282,8 +282,64 @@ def test_check_7_reads_the_limits_from_the_property_strategy():
         "phases": [["Goblint"], ["Dartagnan"]], "cpuTimeLimits": {"Goblint": 30},
         "answers": [["Goblint:true"], ["Dartagnan"]], "witnesses": ["Dartagnan"]}}}
     run_def = {"config": config}
-    assert run.data_race_limits(config) == {"cpuTimeLimits": {"Goblint": 30}}
-    assert run.data_race_limits({"cpuTimeLimits": {"Goblint": 30}}) == {}
+    assert run.strategy_limits(config) == {"cpuTimeLimits": {"Goblint": 30}}
+    assert run.strategy_limits({"cpuTimeLimits": {"Goblint": 30}}) == {}
     assert run.limit_problems(run_def, {}, ["CPU-time limit of Goblint: 30 s"]) == []
     assert run.limit_problems(run_def, {}, ["CPU-time limit of Goblint: 10 s"]) == [
         "Goblint's limit is printed as 10 s, but cpuTimeLimits gives 30 s"]
+
+
+# --- tasks of other properties ------------------------------------------------
+
+def test_a_definition_has_one_block_per_property(tmp_path):
+    tasks = [dict(yml=Path("/c/a.yml"), property="no-data-race"), dict(yml=Path("/c/b.yml"), property="unreach-call"),
+             dict(yml=Path("/c/c.yml"), property="no-data-race")]
+    limits = dict(timelimit="1 s", hardtimelimit="2 s", memlimit="1 GB", cores="1")
+
+    run.write_definition(tmp_path / "d.xml", "m", {"r": []}, limits, {"r": tasks}, result_files="**/*witness.*")
+
+    text = (tmp_path / "d.xml").read_text()
+    assert "<resultfiles>**/*witness.*</resultfiles>" in text
+    blocks = text.split("<tasks ")[1:]
+    assert [b.split(">")[0] for b in blocks] == ['name="no-data-race"', 'name="unreach-call"']
+    assert "/c/a.yml" in blocks[0] and "/c/c.yml" in blocks[0] and "no-data-race.prp" in blocks[0]
+    assert "/c/b.yml" in blocks[1] and "unreach-call.prp" in blocks[1] and "/c/a.yml" not in blocks[1]
+
+
+def test_decided_requires_a_witness_only_where_the_witness_table_does():
+    brackets = [{("D", "true"), ("D", "false")}]
+    assert run.decided(brackets, ["D"], {"D": ("false", False)}, "valid-memsafety") == ("false", None, 0)
+    assert run.decided(brackets, ["D"], {"D": ("false", True)}, "valid-memsafety") == ("false", "D", 0)
+    assert run.decided(brackets, ["D"], {"D": ("true", False)}, "unreach-call") == ("unknown", None, 0)
+    assert run.decided(brackets, ["D"], {"D": ("true", False)}, "valid-memsafety") == ("true", None, 0)
+
+
+def test_a_valid_memsafety_false_needs_no_witness_file_but_an_unreach_call_false_does(tmp_path):
+    output = ["CoOpeRace result from: SV-sanitizers", "CoOpeRace verdict: false(valid-deref)"]
+    assert run.protocol_problems(false_run(tmp_path, {}), output, YAML_FORMAT, "valid-memsafety") == []
+    output = ["CoOpeRace result from: Deagle", "CoOpeRace verdict: false(unreach-call)"]
+    assert run.protocol_problems(false_run(tmp_path, {}), output, YAML_FORMAT, "unreach-call") == [
+        "no witness.yml in the result files (none)"]
+
+
+def test_the_verdict_line_of_another_property_is_read_as_benchexec_1337_reads_it(tmp_path):
+    log = tmp_path / "log"
+    log.write_text("cmd\n\n" + "-" * 80 + "\n\nCoOpeRace result from: Deagle\nCoOpeRace verdict: false(unreach-call)\n")
+    results = {("only-deagle", "t"): dict(status="ERROR", verdict=None, log=log),
+               ("alone-deagle", "t"): dict(status="ERROR", verdict=None, log=log)}
+    runs = {"only-deagle": dict(kind="only"), "alone-deagle": dict(kind="alone")}
+
+    run.read_verdict_lines(results, runs)
+
+    assert results[("only-deagle", "t")]["status"] == "false(unreach-call)"
+    assert results[("only-deagle", "t")]["verdict"] is False
+    assert results[("alone-deagle", "t")]["status"] == "ERROR"
+
+
+def test_check_3_reads_the_result_of_the_component_inside_cooperace(tmp_path):
+    log = tmp_path / "log"
+    log.write_text("cmd\n\n" + "-" * 80 + "\n" + "\n".join(
+        block("Deagle", "true", "true") + ["CoOpeRace answer: Deagle true, bracket 1, no witness that passes the check",
+                                           "CoOpeRace verdict: unknown"]) + "\n")
+    assert run.component_result(dict(log=log), dict(component="deagle")) is True
+    assert run.component_result(dict(log=tmp_path / "missing"), dict(component="deagle")) is None
