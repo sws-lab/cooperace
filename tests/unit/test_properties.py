@@ -78,3 +78,16 @@ def test_white_space_and_the_order_of_the_formulas_are_ignored(text, name):
         "memsafety-with-memcleanup", "other-entry"])
 def test_a_text_that_is_not_exactly_one_property_is_not_recognized(text):
     assert properties.recognize(text) is None
+
+
+def test_same_formulas_compares_as_recognize_does():
+    formulas = properties.FORMULAS["no-data-race"]
+    assert properties.same_formulas("CHECK(init(main()),LTL(G!data-race))", formulas)
+    assert not properties.same_formulas("CHECK( init(main()), LTL(G ! overflow) )", formulas)
+    assert not properties.same_formulas("", formulas)
+    assert not properties.same_formulas("", ())
+
+
+def test_the_sub_properties_of_valid_memsafety_are_its_three_formulas():
+    assert sorted(properties.SUBPROPERTY_FORMULAS.values()) == sorted(properties.FORMULAS["valid-memsafety"])
+    assert properties.SUBPROPERTY_FORMULAS["valid-deref"] == "CHECK( init(main()), LTL(G valid-deref) )"
