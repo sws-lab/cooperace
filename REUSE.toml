@@ -29,7 +29,6 @@ path = [
     "svcomp2025_results/README.md",
     "tests/Race.set",
     "tests/table-generator.xml",
-    "tests/table-generator_combinations.xml",
     "tests/bench-defs/**",
     "tests/integration/README.md",
     "tests/integration/manifest.json",
