@@ -2,8 +2,6 @@
 
 A conf is a JSON object whose only key is `properties`, which maps a property to its strategy. A strategy says three things for its property: when each tool runs (`phases`), whose verdict wins (`answers`), and whose witness is delivered (`witnesses`). `conf/svcomp27.json` is the default conf, read when CoOpeRace is started without `--conf`.
 
-The executor that runs a strategy is not written at this commit: `run_strategy` in `src/cooperace/strategy.py` raises `NotImplementedError`. CoOpeRace reads and checks a conf as this file describes, and then ends with status 1 and no verdict line.
-
 ## Two examples
 
 ```json
@@ -59,15 +57,30 @@ A property the conf gives no strategy for is refused before any tool starts, so 
 
 ## `witnesses`: whose witness is delivered
 
-`witnesses` is a list of tools, each with an entry in `answers`. Once the verdict is decided, the witness is taken from the first tool of this list that has an entry for the verdict in some bracket, answered that verdict, and wrote a witness in the format the property and verdict need. If no tool of the list qualifies, the witness is that of an answer in the deciding bracket that wrote one. If there is none, and the competition's rules require a witness for the property and verdict, CoOpeRace prints `CoOpeRace verdict: unknown`. `"witnesses": []` is allowed; then only the deciding bracket can supply the witness.
+`witnesses` is a list of tools, each with an entry in `answers`. A witness is delivered only where one can count for the property and verdict: a `false` in all four properties, and a `true` in unreach-call and no-overflow. For a `true` in no-data-race and valid-memsafety nothing is delivered, and `witnesses` does not apply. Where a witness can count, once the verdict is decided, it is taken from the first tool of this list that has an entry for the verdict in some bracket, answered that verdict, and wrote a witness that passes the check of `src/cooperace/witnesses.py` for the property and verdict. If no tool of the list qualifies, it is taken from the first tool by name of the deciding bracket that answered the verdict and wrote one. If there is none, and the competition's rules require a witness for the property and verdict, CoOpeRace prints `CoOpeRace verdict: unknown`, with a line before it saying which verdict it had and that no witness was written. `"witnesses": []` is allowed; then only the deciding bracket can supply the witness.
 
-A witness is required for a `false` in no-data-race, unreach-call and no-overflow, and for a `true` in unreach-call and no-overflow; valid-memsafety requires none. This table is fixed by the rules of SV-COMP 2027 and is not part of the conf.
+| Property | `true` needs | `false` needs |
+| --- | --- | --- |
+| no-data-race | nothing | a YAML 2.2 violation witness |
+| unreach-call | a YAML 2.1+ correctness witness | a YAML 2.2 violation witness |
+| no-overflow | a YAML 2.1+ correctness witness | a YAML 2.2 violation witness |
+| valid-memsafety | nothing | nothing; a YAML 2.2+ violation witness (2.3+ for `valid-memtrack`) is delivered if one is written, and validated without affecting the score |
 
-In valid-memsafety, `false(valid-deref)` and `false(valid-free)` in one bracket are not a contradiction. The sub-property is taken from the tool whose witness is delivered, else from the first agreeing tool in `witnesses`, else from the first agreeing tool by name.
+This table is fixed by the rules of SV-COMP 2027 for `C.*.Concurrency` and is not part of the conf (`FORMATS` in `src/cooperace/witnesses.py`).
+
+In valid-memsafety, `false(valid-deref)` and `false(valid-free)` in one bracket are not a contradiction. The sub-property is taken from the tool whose witness is delivered, else from the first agreeing tool of `witnesses`, else from the first agreeing tool of the deciding bracket by name.
 
 ## When a tool is stopped
 
-A tool is stopped, or not started when its phase comes, only when no answer it could give changes what CoOpeRace prints — the verdict, the error, or the witness delivered — whatever the tools still running or still to start answer. So stopping tools early gives the result that letting every tool run to its end would give. Once a verdict is decided, a tool keeps running only if it has an entry in a higher bracket, if it has an entry for the other verdict in the deciding bracket and has not answered, or if it could supply a witness the verdict needs from a better place in `witnesses`.
+A tool is stopped, or not started when its phase comes, only when no answer it could give changes what CoOpeRace prints — the verdict, the error, the witness delivered or the sub-property — whatever the tools still running or still to start answer. So stopping tools early gives the result that letting every tool run to its end would give; the one difference is that a contradiction names only the entries that answered before the run ended.
+
+Before there is a verdict, every tool runs as `phases` says. Once the deciding bracket `b` has a verdict `v`, let `V*` be `v` together with every verdict that a tool still running or still to start has an entry for in a bracket above `b`: each of these could still become the verdict. A tool keeps running, or is started when its phase comes, if one of these rules holds for some `u` in `V*`, with `b` the bracket that `u` would be decided in:
+
+1. **It could beat `u`**: it has an entry in a bracket above `b`.
+2. **It could contradict `u`**: it has an entry for the other verdict in `b` and has not answered.
+3. **It could supply a witness that comes first**, wherever a witness can count for `u`, whether or not one is required: it has an entry for `u`, and it comes before the current supplier in the order in which suppliers are asked (`witnesses`, then the tools of `b` by name), or anywhere in that order if there is no supplier. For a `u` other than `v`, the current supplier is none.
+
+Every other tool is stopped. The run ends when no tool is running or still to start. A conf that does not want a tool kept running for a witness leaves it out of `witnesses`.
 
 ## Optional: a memory limit per tool
 

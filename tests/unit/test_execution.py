@@ -17,7 +17,6 @@ import pytest
 from benchexec import util as butil
 from benchexec.container import DIR_FULL_ACCESS, DIR_HIDDEN, DIR_OVERLAY, DIR_READ_ONLY
 from support import (
-    NEEDS_EXECUTOR,
     OTHER_PASSING_WITNESS,
     PASSING_WITNESS,
     data_race_conf,
@@ -262,7 +261,6 @@ def run_dir(tmp_path, monkeypatch, container):
     return directory
 
 
-@NEEDS_EXECUTOR
 def test_a_cpu_time_limit_gives_timeout_and_the_next_component_answers(tmp_path, run_dir, capsys):
     run = stub_run(tmp_path, data_race_conf(one_after_another("Stub A", "Stub B", cpuTimeLimits={"Stub A": 1})),
                      Stub_A=BUSY_STUB, Stub_B='echo "STUB-STATUS: true"\n')
@@ -278,7 +276,6 @@ def test_a_cpu_time_limit_gives_timeout_and_the_next_component_answers(tmp_path,
     assert lines[-1] == "CoOpeRace result from: Stub B"
 
 
-@NEEDS_EXECUTOR
 def test_a_memory_limit_gives_out_of_memory(tmp_path, run_dir, capsys):
     limit = 128 * 2**20
     run = stub_run(tmp_path, data_race_conf(one_after_another("Stub A", "Stub B", memoryLimits={"Stub A": limit})),
@@ -292,7 +289,6 @@ def test_a_memory_limit_gives_out_of_memory(tmp_path, run_dir, capsys):
     assert "Tool name: Stub A Status: OUT OF MEMORY Exit code: signal 9" in lines
 
 
-@NEEDS_EXECUTOR
 def test_a_parallel_loser_is_stopped_with_a_process_in_a_session_of_its_own(tmp_path, run_dir, capsys):
     marker = tmp_path / "escaped"
     run = stub_run(
@@ -315,7 +311,6 @@ def test_a_parallel_loser_is_stopped_with_a_process_in_a_session_of_its_own(tmp_
     assert run.group.processes == set()
 
 
-@NEEDS_EXECUTOR
 def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale_one_is_not(
         tmp_path, run_dir, capsys):
     # A stale witness in the component's directory is neither collected nor

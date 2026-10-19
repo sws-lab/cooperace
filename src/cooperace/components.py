@@ -16,9 +16,12 @@ logs---", "Tool name: <name> Status: <status> Exit code: <code>", unless CoOpeRa
 stopped it "Tool name: <name> Result: <verdict>", and for a component that
 started "Tool name: <name> Measured: ..."; "Memory limit of <name>: ..." and
 "CPU-time limit of <name>: ..." before a component with a limit starts.
-strategy.execute adds "CoOpeRace result from: <name>" and "CoOpeRace stopped
-by signal <n>", cli "CoOpeRace verdict: <result>", where <result> is
-"unknown" or reported_result of the returned status.
+strategy.run_strategy adds a line "CoOpeRace answer: ..." for each verdict
+and lines "CoOpeRace: ..." about wall-time limits, overridden answers and a
+missing witness, strategy.execute "CoOpeRace result from: <name>" and
+"CoOpeRace stopped by signal <n>", cli "CoOpeRace verdict: <result>", where
+<result> is "unknown", reported_result of the status of the component the
+verdict is taken from, or "ERROR (contradiction: ...)".
 A component that cannot be run or crashes is reported in its block and is a
 step without a verdict (run_step). A component that is not installed, or
 whose installed version is not the one whose options tools-options.json
@@ -44,7 +47,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import threading
 import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -56,7 +58,7 @@ from benchexec.tools.template import BaseTool2, ToolNotFoundException
 
 from . import TOOL_DIR
 from .config import Step
-from .processes import ComponentGroup, run_memory_limit
+from .processes import PRINT_LOCK, ComponentGroup, run_memory_limit
 from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
 from .witnesses import passing_witness, subproperty_of
@@ -220,11 +222,6 @@ class ComponentCommand:
 DATA_MODELS = ("ILP32", "LP64")
 DEFAULT_DATA_MODEL = "ILP32"
 
-# Held while a protocol line or block is printed, so that the output of
-# components running in parallel is not interleaved.
-PRINT_LOCK = threading.Lock()
-
-
 class ComponentRunner:
     """Runs the components of the steps of a strategy on one task: the
     StepRunner that strategy.execute is given. It holds the task (`file`,
@@ -348,8 +345,8 @@ class ComponentRunner:
         `executable`) or from the run, makes this step a step without a
         verdict: the traceback goes to stderr, the component's block is
         printed with status "ERROR (<exception class>: <message>)" and result
-        "unknown", and NO_OUTCOME is returned, so that the next step of a
-        sequence runs. The block names the component by the tool-info
+        "unknown", and NO_OUTCOME is returned, which the strategy counts as
+        no verdict. The block names the component by the tool-info
         object's name(), or by the conf's name if there is no such object.
         StopSignal is a BaseException and propagates."""
         name = step.component

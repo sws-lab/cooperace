@@ -3,13 +3,17 @@
 # SPDX-License-Identifier: MIT
 
 """The components that run together and are stopped together
-(ComponentGroup), and the memory limit of the run's cgroup
-(run_memory_limit), which a percentage in the conf's memoryLimits is a
-share of. Uses only the standard library."""
+(ComponentGroup), the memory limit of the run's cgroup (run_memory_limit),
+which a percentage in the conf's memoryLimits is a share of, and the lock
+held while CoOpeRace prints (PRINT_LOCK). Uses only the standard library."""
 from __future__ import annotations
 
 import os
 import threading
+
+# Held while a protocol line or block is printed, so that the output of
+# components running in parallel is not interleaved.
+PRINT_LOCK = threading.Lock()
 
 
 class ComponentGroup:

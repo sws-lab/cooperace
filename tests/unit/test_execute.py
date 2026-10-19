@@ -7,9 +7,9 @@ run through the real run_component, execution.execute_run and
 component_status in BenchExec's container (the fixture `container`), and the
 stop on a signal in a separate process.
 
-Every test that runs a strategy is marked NEEDS_EXECUTOR: strategy.run_strategy
-is not written. A "sequential" conf here runs its stubs one_after_another, a
-"parallel" one side_by_side (support.py)."""
+A "sequential" conf here runs its stubs one_after_another, a "parallel" one
+side_by_side (support.py). A stub whose verdict needs a witness writes one
+with write_witness."""
 import os
 import shlex
 import signal
@@ -21,18 +21,19 @@ from pathlib import Path
 
 import pytest
 from support import (
-    NEEDS_EXECUTOR,
     PASSING_WITNESS,
     data_race_conf,
     make_script,
     one_after_another,
     register_stub,
     side_by_side,
+    write_witness,
 )
 
 from src.cooperace import cli
 from src.cooperace.components import ComponentRunner
 from src.cooperace.processes import ComponentGroup
+from src.cooperace.witnesses import subproperty_of, witness_format
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPPORT_DIR = Path(__file__).resolve().parent
@@ -85,7 +86,6 @@ def lines_of(captured):
             if not (line.startswith("Tool name: ") and " Measured: " in line)]
 
 
-@NEEDS_EXECUTOR
 def test_the_block_of_a_started_run_ends_with_its_measurements(make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential", Stub_A='echo "STUB-STATUS: true"\n')
 
@@ -97,13 +97,12 @@ def test_the_block_of_a_started_run_ends_with_its_measurements(make_runner, tmp_
     assert lines[result + 1].endswith(" terminationreason=none")
 
 
-@NEEDS_EXECUTOR
 def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verdict(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
         make_runner, tmp_path, "sequential",
         Stub_A='echo "STUB-STATUS: false(unreach-call)"\n',
-        Stub_B='echo "STUB-STATUS: false(no-data-race)"\n',
+        Stub_B=write_witness("no-data-race", "false") + 'echo "STUB-STATUS: false(no-data-race)"\n',
     )
 
     verdict = run.execute()
@@ -115,7 +114,6 @@ def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verd
     assert "CoOpeRace result from: Stub B" in lines
 
 
-@NEEDS_EXECUTOR
 def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
@@ -145,18 +143,18 @@ def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
     assert lines[start + 10:] == [
         "Tool name: Stub B Status: true Exit code: 0",
         "Tool name: Stub B Result: true",
+        "CoOpeRace answer: Stub B true, bracket 2",
         "CoOpeRace result from: Stub B",
     ]
     assert not any("Stub C" in line for line in lines)
 
 
-@NEEDS_EXECUTOR
 def test_exit_code_and_signal_appear_in_status_lines(make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
         make_runner, tmp_path, "sequential",
         Stub_A='echo "STUB-STATUS: ERROR"\nexit 3\n',
         Stub_B='kill -TERM $$\nsleep 5\n',
-        Stub_C='echo "STUB-STATUS: false"\n',
+        Stub_C=write_witness("no-data-race", "false") + 'echo "STUB-STATUS: false"\n',
     )
 
     verdict = run.execute()
@@ -171,10 +169,9 @@ def test_exit_code_and_signal_appear_in_status_lines(make_runner, tmp_path, run_
     assert "Tool name: Stub C Result: false" in lines
 
 
-@NEEDS_EXECUTOR
-def test_a_verdict_the_conf_does_not_accept_is_unknown(make_runner, tmp_path, run_dir, capsys):
+def test_a_verdict_without_an_entry_is_printed_and_ignored(make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
-                           Stub_A='echo "STUB-STATUS: false"\n')
+                           Stub_A=write_witness("no-data-race", "false") + 'echo "STUB-STATUS: false"\n')
     run.conf["properties"]["no-data-race"]["answers"] = [["Stub A:true"]]
 
     verdict = run.execute()
@@ -182,10 +179,11 @@ def test_a_verdict_the_conf_does_not_accept_is_unknown(make_runner, tmp_path, ru
 
     assert verdict == "unknown"
     assert "Tool name: Stub A Status: false Exit code: 0" in lines
-    assert "Tool name: Stub A Result: unknown" in lines
+    assert "Tool name: Stub A Result: false" in lines
+    assert "CoOpeRace answer: Stub A false, which has no entry in answers: ignored" in lines
+    assert sorted(path.name for path in run_dir.iterdir()) == []
 
 
-@NEEDS_EXECUTOR
 def test_the_witness_of_the_returned_component_is_delivered_to_the_working_directory(
         make_runner, tmp_path, run_dir):
     run, directories = stubbed_run(
@@ -215,7 +213,6 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
     assert not (directories["Stub A"] / "witness.yml").exists()
 
 
-@NEEDS_EXECUTOR
 def test_a_stale_witness_in_the_working_directory_is_removed_when_there_is_no_verdict(
         make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
@@ -226,7 +223,6 @@ def test_a_stale_witness_in_the_working_directory_is_removed_when_there_is_no_ve
     assert not (run_dir / "witness.graphml").exists()
 
 
-@NEEDS_EXECUTOR
 def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(
@@ -244,7 +240,6 @@ def test_parallel_winner_is_returned_and_the_loser_is_reported_as_stopped(
     assert not any(line.startswith("Tool name: Stub Slow Result:") for line in lines)
 
 
-@NEEDS_EXECUTOR
 def test_the_work_directory_is_removed_and_no_component_is_left(
         make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
@@ -266,7 +261,6 @@ def test_a_conf_in_the_tree_format_is_refused_before_anything_runs(make_runner, 
     assert run.runner.work_dir is None
 
 
-@NEEDS_EXECUTOR
 def test_an_exception_while_the_strategy_runs_stops_the_components_and_propagates(
         make_runner, tmp_path, run_dir, capsys):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
@@ -287,7 +281,6 @@ def test_an_exception_while_the_strategy_runs_stops_the_components_and_propagate
     assert run.group.processes == set()
 
 
-@NEEDS_EXECUTOR
 def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                            Stub_A='echo "STUB-STATUS: true"\n')
@@ -300,7 +293,6 @@ def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
 
 # --- the result per property ---------------------------------------------------
 
-@NEEDS_EXECUTOR
 @pytest.mark.parametrize("property_name, statuses, expected", [
     ("no-data-race", ["false(no-data-race)"], "false"),
     ("no-data-race", ["false"], "false"),
@@ -320,11 +312,15 @@ def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
 ], ids=lambda value: ",".join(value) if isinstance(value, list) else value)
 def test_run_returns_the_result_of_the_accepted_status_for_the_property(
         tmp_path, run_dir, capsys, property_name, statuses, expected):
+    # The last stub gives the verdict, with the witness it needs or can deliver
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=property_name)
     names = [f"Stub {index}" for index in range(len(statuses))]
     for name, status in zip(names, statuses, strict=True):
-        register_stub(runner, name, make_script(tmp_path / "stubs" / name.replace(" ", "_"),
-                                                f'echo "STUB-STATUS: {status}"\n'))
+        body = f'echo "STUB-STATUS: {status}"\n'
+        verdict = expected.partition("(")[0]
+        if name == names[-1] and witness_format(property_name, verdict) is not None:
+            body = write_witness(property_name, verdict, subproperty_of(expected)) + body
+        register_stub(runner, name, make_script(tmp_path / "stubs" / name.replace(" ", "_"), body))
     result = cli.run({"properties": {property_name: one_after_another(*names)}}, runner)
     lines = lines_of(capsys.readouterr())
 
@@ -339,6 +335,22 @@ def test_run_returns_the_result_of_the_accepted_status_for_the_property(
         assert lines[-1] == f"CoOpeRace result from: {names[-1]}"
 
 
+@pytest.mark.parametrize("property_name, status", [("no-data-race", "false"), ("unreach-call", "true"),
+                                                    ("unreach-call", "false(unreach-call)")])
+def test_a_verdict_without_the_witness_it_needs_is_unknown(tmp_path, run_dir, capsys, property_name, status):
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=property_name)
+    register_stub(runner, "Stub A", make_script(tmp_path / "stubs" / "A", f'echo "STUB-STATUS: {status}"\n'))
+
+    result = cli.run({"properties": {property_name: one_after_another("Stub A")}}, runner)
+    lines = lines_of(capsys.readouterr())
+
+    assert result == "unknown"
+    verdict = status.partition("(")[0]
+    assert (f"CoOpeRace: the verdict {verdict} of bracket 1 needs a witness, and no component with an entry for "
+            f"{verdict} wrote one that passes the check: the result is unknown") in lines
+    assert sorted(path.name for path in run_dir.iterdir()) == []
+
+
 # --- per-component limits ----------------------------------------------------
 
 # A stub that runs until a signal ends it.
@@ -349,18 +361,21 @@ ALLOCATING_STUB = f"exec {shlex.quote(sys.executable)} -c 'bytearray(2**30)'\n"
 
 def limited_run(make_runner, tmp_path, property_name, limits):
     """A Run of the stubs "Stub A" (BUSY_STUB or ALLOCATING_STUB, by the key of
-    `limits`) and "Stub B" (answers true) in sequence, with the limits
+    `limits`) and "Stub B" (answers true, with a correctness witness where
+    one counts) in sequence, with the limits
     `limits` (a conf's "cpuTimeLimits" or "memoryLimits" for Stub A), for a
     runner of the property `property_name`, in a conf whose only strategy is
     for `property_name`."""
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name=property_name)
     body = BUSY_STUB if "cpuTimeLimits" in limits else ALLOCATING_STUB
     register_stub(runner, "Stub A", make_script(tmp_path / "stubs" / "A", body))
-    register_stub(runner, "Stub B", make_script(tmp_path / "stubs" / "B", 'echo "STUB-STATUS: true"\n'))
+    body = 'echo "STUB-STATUS: true"\n'
+    if witness_format(property_name, "true") is not None:
+        body = write_witness(property_name, "true") + body
+    register_stub(runner, "Stub B", make_script(tmp_path / "stubs" / "B", body))
     return Run(runner, {"properties": {property_name: one_after_another("Stub A", "Stub B", **limits)}})
 
 
-@NEEDS_EXECUTOR
 @pytest.mark.parametrize("property_name", ["no-data-race", "valid-memsafety"])
 def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_next(
         make_runner, tmp_path, run_dir, capsys, property_name):
@@ -377,7 +392,6 @@ def test_a_component_stopped_at_its_cpu_time_limit_leaves_cooperace_to_run_the_n
     assert lines[-1] == "CoOpeRace result from: Stub B"
 
 
-@NEEDS_EXECUTOR
 def test_a_component_stopped_at_its_memory_limit_leaves_cooperace_to_run_the_next(
         make_runner, tmp_path, run_dir, capsys):
     limit = 256 * 2**20
@@ -422,7 +436,6 @@ SLEEPING_STUB = ('dir="$(dirname "$0")"\n(sleep 3; touch "$dir/escaped") &\n'
                  'touch "$dir/started"\necho "stub started"\nexec sleep 60\n')
 
 
-@NEEDS_EXECUTOR
 @pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
 def test_a_stop_signal_ends_cooperace_and_every_component(tmp_path, container, signum):
     stub_dir, run_dir = tmp_path / "stubs", tmp_path / "cwd"

@@ -6,13 +6,16 @@
 the arguments, the property file and the conf, checks them and the
 installation, runs the conf's strategy for the property on the task, and
 prints "CoOpeRace verdict: <result>" as the last line of standard output,
-which BenchExec's tool-info module for CoOpeRace reads. <result> is
-"unknown", "true", or the "false" of the component whose verdict was
-accepted (components.reported_result): for no-data-race plain "false", the
-line that module (BenchExec 3.31 to 3.35) maps to false(no-data-race), and for the
-other properties the status with its property, as "false(unreach-call)",
-"false(no-overflow)" or, for valid-memsafety, "false(valid-deref)",
-"false(valid-free)" or "false(valid-memtrack)".
+which BenchExec's tool-info module for CoOpeRace reads. <result> is what
+strategy.run_strategy decides: "unknown", "true", the "false" of the
+component the verdict is taken from (components.reported_result: for
+no-data-race plain "false", the line that module (BenchExec 3.31 to 3.35)
+maps to false(no-data-race), and for the other properties the status with
+its property, as "false(unreach-call)", "false(no-overflow)" or, for
+valid-memsafety, "false(valid-deref)", "false(valid-free)" or
+"false(valid-memtrack)"), or "ERROR (contradiction: <name> <verdict>, ...)"
+when components of the deciding bracket contradict each other, which
+BenchExec scores as an error.
 
 The task, the property file and `--conf` are paths relative to the working
 directory; without `--conf`, DEFAULT_CONF of TOOL_DIR is read. The property
@@ -23,8 +26,9 @@ in properties.FORMULAS, and a property the conf gives no strategy for
 
 Exit status and output. A verdict line is printed only for a run that was
 carried out, and then the status is 0; the result is "unknown" when no
-component gave an accepted verdict, also when a component crashed (its status
-is printed in its block and CoOpeRace goes on with the next step). A defect of
+component gave a verdict that decides, also when a component crashed (its
+status is printed in its block and counts as no verdict), and when the
+verdict needs a witness that no component wrote. A defect of
 the command line, the property, the conf or the installation, and an
 exception of CoOpeRace's own while the components run, end CoOpeRace without
 a verdict line: each problem is one line "CoOpeRace: error: <problem>" on
@@ -35,9 +39,7 @@ argparse refuses a command line with status 2. BenchExec's tool-info module
 reads a run without a verdict line as ERROR, not UNKNOWN. No component is
 started in these cases, except that an exception while they run first stops
 every component. After SIGTERM, SIGINT or SIGHUP, CoOpeRace ends by that
-signal (strategy.execute). strategy.run_strategy is not written, so every run
-that passes the checks ends with its NotImplementedError in this way, with
-status 1 and no verdict line."""
+signal (strategy.execute)."""
 from __future__ import annotations
 
 import argparse

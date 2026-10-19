@@ -4,7 +4,8 @@
 
 """Helpers shared by the unit tests: polling, running a command as CoOpeRace
 runs a component (run_command), a stub component that CoOpeRace can run
-without anything under tools/, and small strategies and confs."""
+without anything under tools/, a witness for a stub to write
+(write_witness), and small strategies and confs."""
 import os
 import stat
 import tempfile
@@ -12,11 +13,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
 from benchexec import result as bresult
 from benchexec.tools.template import BaseTool2
 
 from src.cooperace.components import DOI_RECORD, ComponentSpec, ComponentVersion
+from src.cooperace.witnesses import specification
 
 # Upper bound in seconds for every wait on a process or a file.
 WAIT_SECONDS = 15
@@ -143,11 +144,35 @@ def data_race_conf(strategy):
     return {"properties": {"no-data-race": strategy}}
 
 
-# A test that runs a strategy to its end, and so fails while
-# strategy.run_strategy, the executor of the format of phases, answers and
-# witnesses, is not written and raises NotImplementedError. Its expectations
-# are those of a strategy whose components run as one_after_another and
-# side_by_side describe. strict: the test fails once it passes, so that the
-# mark is removed with the executor.
-NEEDS_EXECUTOR = pytest.mark.xfail(strict=True,
-                                   reason="strategy.run_strategy, the executor of the strategy format, is not written")
+# A correctness witness (invariant_set) of format 2.1 with the specification
+# {specification}, which witnesses.passes accepts for a true of unreach-call
+# and no-overflow.
+CORRECTNESS_WITNESS = """- entry_type: invariant_set
+  metadata:
+    format_version: "2.1"
+    uuid: 00000000-0000-0000-0000-000000000000
+    creation_time: 2026-10-19T00:00:00Z
+    producer: {{name: Test, version: "1"}}
+    task:
+      input_files: [task.i]
+      input_file_hashes: {{task.i: "0"}}
+      specification: "{specification}"
+      data_model: ILP32
+      language: C
+  content: []
+"""
+
+
+def write_witness(property_name, verdict, subproperty=None):
+    """A shell command for a stub's script that writes, as run-witness.yml in
+    its working directory, a witness that witnesses.passes accepts for
+    `verdict` on `property_name` (with the sub-property `subproperty` of a
+    valid-memsafety false): PASSING_WITNESS with the specification of the
+    property for a false, CORRECTNESS_WITNESS for a true. The text is in the
+    command, since the stub's container hides /tmp."""
+    formulas = " ".join(specification(property_name, verdict, subproperty or property_name))
+    if verdict == "false":
+        text = PASSING_WITNESS.read_text().replace("CHECK( init(main()), LTL(G ! data-race) )", formulas)
+    else:
+        text = CORRECTNESS_WITNESS.format(specification=formulas)
+    return f"cat > run-witness.yml <<'END-OF-WITNESS'\n{text.rstrip()}\nEND-OF-WITNESS\n"

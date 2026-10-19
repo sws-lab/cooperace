@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from support import NEEDS_EXECUTOR, STUB_DOI, data_race_conf, make_script, one_after_another, register_stub
+from support import STUB_DOI, data_race_conf, make_script, one_after_another, register_stub
 
 from src.cooperace import cli, components, execution
 from src.cooperace.components import ComponentRunner
@@ -269,7 +269,6 @@ def test_nothing_starts_when_a_later_component_is_not_installed(make_runner, gro
     assert runner.work_dir is None
 
 
-@NEEDS_EXECUTOR
 def test_run_runs_the_strategy_for_the_property_of_the_runner_and_no_other(tmp_path, capsys, container):
     marker = tmp_path / "started"
     runner = ComponentRunner("/dev/null", "/dev/null", "ILP32", property_name="valid-memsafety")
@@ -336,7 +335,6 @@ def test_a_component_installed_from_another_doi_refuses_the_conf_also_in_another
     assert not marker.exists()
 
 
-@NEEDS_EXECUTOR
 def test_a_component_that_crashes_is_not_a_setup_error(make_runner, group, tmp_path, capsys, container):
     runner = make_runner()
     register_stub(runner, "Stub A", make_script(tmp_path / "stub", 'echo "STUB-STATUS: ERROR"\nexit 3\n'))
