@@ -14,8 +14,6 @@ both tracked:
 
 - tools.txt names the components of the SV-COMP archive;
   scripts/svcomp-dist.sh packs exactly these. They are always installed.
-  The default conf, conf/svcomp27.json, also runs sv-sanitizers and Deagle,
-  which are in tools-pool.txt and so not in the archive.
 - tools-pool.txt names the further components that CoOpeRace's registry can
   run (src/cooperace/components.py, REGISTRY) and that are not in the
   archive. They are installed only with `--pool`.
@@ -54,6 +52,15 @@ files, and exits 1 if a component would be installed or the options file
 would change; given `--fm-tools-dir`, it also compares the options with the
 fm-tools entries. `--dry-run` also looks up the DOIs in fm-tools, and fails on
 one that fm-tools does not list, but changes nothing.
+
+Without `--fm-tools-dir` the entries are read from the main branch of
+fm-tools, so a DOI that only an open merge request adds is not found there
+and the script stops. tools.txt names one: Deagle's svcomp27, proposed in
+fm-tools !1181. Such a version is installed from a clone of fm-tools with
+the merge request merged, passed as `--fm-tools-dir`:
+
+    git fetch origin main refs/merge-requests/1181/head:refs/mr/1181
+    git switch -c with-mrs origin/main && git merge refs/mr/1181
 
 The script can be run from any directory; the lock files, tools-options.json
 and tools/ are in the repository that contains it.

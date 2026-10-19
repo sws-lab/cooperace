@@ -70,8 +70,9 @@ class WitnessSpec:
     `options` tell the component to write them into the directory run_component
     makes for the run ({dir} in an option stands for it), and "component" if
     the component writes them under its own directory, the working directory
-    of its run. `files` are their paths relative to that directory, or None
-    for every file there whose name contains "witness" and ends in yml
+    of its run. `files` are their paths relative to that directory, empty
+    for a component that writes no witness that can count, or None for
+    every file there whose name contains "witness" and ends in yml
     (witness_files_under). ComponentRunner.run_component takes, of those the
     component wrote during the run, the one that witnesses.passing_witness
     accepts for its verdict, and witness_files_to_file_root delivers it as
@@ -125,7 +126,10 @@ REGISTRY = {spec.name: spec for spec in (
     ComponentSpec("Goblint", "benchexec.tools.goblint", "goblint",
                   witness=WitnessSpec("run", ("--set", "witness.yaml.path", "{dir}/witness.yml"),
                                       ("witness.yml",))),
-    ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle"),
+    #The wrapper deagle runs deagle_exe with --yaml-witness error-witness.yml in its
+    #working directory, Deagle's directory, and deletes the file unless it answers false
+    ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle",
+                  witness=WitnessSpec("component", (), ("error-witness.yml",))),
     #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
     #which must be Dartagnan's directory, and has no option for another one.
     #Version svcomp27 writes output/witness.yml; svcomp26 writes only output/witness.graphml
@@ -139,7 +143,11 @@ REGISTRY = {spec.name: spec for spec in (
                   witness=_ULTIMATE_WITNESS),
     ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
     ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "cpachecker"),
-    ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers"),
+    #sv-sanitizers.py writes witness.yml into its working directory, its own directory
+    ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers",
+                  witness=WitnessSpec("component", (), ("witness.yml",))),
+    #Version 2.0 writes only error-witness.graphml, which never counts (witnesses.py)
+    ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ())),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
 )}
 

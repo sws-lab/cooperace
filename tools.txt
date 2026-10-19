@@ -1,3 +1,6 @@
 goblint: 10.5281/zenodo.23361000
 dartagnan: 10.5281/zenodo.23263361
 uautomizer: 10.5281/zenodo.23295622
+sv-sanitizers: 10.5281/zenodo.23342909
+deagle: 10.5281/zenodo.23462830
+iekke: 10.5281/zenodo.23243599

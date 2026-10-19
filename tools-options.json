@@ -19,9 +19,19 @@
       "--full-output"
     ]
   },
+  "sv-sanitizers": {
+    "doi": "10.5281/zenodo.23342909",
+    "version": "svcomp27",
+    "options": []
+  },
   "deagle": {
-    "doi": "10.5281/zenodo.17636587",
-    "version": "svcomp26",
+    "doi": "10.5281/zenodo.23462830",
+    "version": "svcomp27",
+    "options": []
+  },
+  "iekke": {
+    "doi": "10.5281/zenodo.23243599",
+    "version": "2.0",
     "options": []
   },
   "ugemcutter": {
@@ -54,11 +64,6 @@
       "--timelimit",
       "900 s"
     ]
-  },
-  "sv-sanitizers": {
-    "doi": "10.5281/zenodo.17400380",
-    "version": "svcomp26",
-    "options": []
   },
   "racerf": {
     "doi": "10.5281/zenodo.17589798",
