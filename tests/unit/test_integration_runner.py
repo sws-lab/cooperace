@@ -240,3 +240,15 @@ def test_check_9_accepts_a_contradiction_and_a_wall_time_stop():
 
     assert run.stop_problems({"config": config}, lines) == []
     assert run.VERDICT_LINE.fullmatch(lines[-1])
+
+
+def test_check_7_reads_the_limits_from_the_property_strategy():
+    config = {"properties": {"no-data-race": {
+        "phases": [["Goblint"], ["Dartagnan"]], "cpuTimeLimits": {"Goblint": 30},
+        "answers": [["Goblint:true"], ["Dartagnan"]], "witnesses": ["Dartagnan"]}}}
+    run_def = {"config": config}
+    assert run.data_race_limits(config) == {"cpuTimeLimits": {"Goblint": 30}}
+    assert run.data_race_limits({"cpuTimeLimits": {"Goblint": 30}}) == {}
+    assert run.limit_problems(run_def, {}, ["CPU-time limit of Goblint: 30 s"]) == []
+    assert run.limit_problems(run_def, {}, ["CPU-time limit of Goblint: 10 s"]) == [
+        "Goblint's limit is printed as 10 s, but cpuTimeLimits gives 30 s"]

@@ -797,13 +797,21 @@ def is_yaml_witness(path):
 DELIVERED_WITNESSES = {"witness.graphml": is_graphml, "witness.yml": is_yaml_witness}
 
 
+def data_race_limits(config):
+    """The `memoryLimits` and `cpuTimeLimits` of the no-data-race strategy of
+    the configuration `config`, which conf/README.md places in the property's
+    strategy, not at the top of the conf."""
+    strategy = config.get("properties", {}).get("no-data-race", {})
+    return {key: strategy[key] for key in ("memoryLimits", "cpuTimeLimits") if key in strategy}
+
+
 def limit_problems(run, r, lines):
     """What is wrong with the lines in which CoOpeRace announces the limits of
-    `memoryLimits` and `cpuTimeLimits` of the run's configuration (check 7):
+    `memoryLimits` and `cpuTimeLimits` of the run's no-data-race strategy (check 7):
     each component with a limit that started must have its line, every
     such line must give the configured limit, a percentage taken of the
     memory limit BenchExec records for the run, within 1 %."""
-    config = run.get("config") or {}
+    config = data_race_limits(run.get("config") or {})
     if lines is None or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
         return []
     blocks, _ = component_blocks(lines)
@@ -1075,7 +1083,7 @@ def check(results, runs, tasks, skipped, fmt):
                 add(6, rundef, t["id"], not problems, "protocol", "; ".join(problems))
     # Check 7.
     for rundef, run in runs.items():
-        config = run.get("config") or {}
+        config = data_race_limits(run.get("config") or {})
         if run["kind"] == "alone" or not (config.get("memoryLimits") or config.get("cpuTimeLimits")):
             continue
         for t in run["tasks"]:
