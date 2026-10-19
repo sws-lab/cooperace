@@ -17,7 +17,9 @@ from src.cooperace.components import REGISTRY
 from src.cooperace.config import Entry, Phase, Step, Strategy
 
 ROOT = Path(__file__).resolve().parents[2]
-SHIPPED_CONFS = sorted([*ROOT.glob("conf/*.json"), *ROOT.glob("tests/integration/conf/*.json")])
+# conf/witnesses.json is the witness table, not a conf (test_witness_check.py).
+SHIPPED_CONFS = sorted(path for path in [*ROOT.glob("conf/*.json"), *ROOT.glob("tests/integration/conf/*.json")]
+                       if path != ROOT / "conf" / "witnesses.json")
 
 # The two examples of conf/README.md, "Two examples".
 NO_DATA_RACE = {

@@ -23,6 +23,9 @@ is recognized from the formulas in the property file (properties.recognize),
 never from a file name or path. A property file with formulas of no property
 in properties.FORMULAS, and a property the conf gives no strategy for
 (config.load_strategies), are refused as a defect of the property below.
+The witness table conf/witnesses.json of TOOL_DIR is checked too
+(witnesses.table), and one that witnesses.load_table refuses is a defect of
+the installation.
 
 Exit status and output. A verdict line is printed only for a run that was
 carried out, and then the status is 0; the result is "unknown" when no
@@ -52,7 +55,7 @@ from collections.abc import Container
 from pathlib import Path
 from typing import NoReturn
 
-from . import TOOL_DIR, config, properties, strategy
+from . import TOOL_DIR, config, properties, strategy, witnesses
 from .components import DATA_MODELS, REGISTRY, ComponentRunner, OptionsFileError
 from .config import Strategy
 from .processes import ComponentGroup
@@ -150,6 +153,10 @@ def main() -> None:
         if not os.path.isfile(abs_path):
             raise SetupError(f"the task {args.filepath} is not a file")
         conf = read_conf(args.conf or os.path.join(TOOL_DIR, DEFAULT_CONF))
+        try:
+            witnesses.table()
+        except witnesses.WitnessTableError as error:
+            raise SetupError(str(error)) from error
         #Before the runner is made, which reports a missing --arch on stderr,
         #so that a refused conf or property gives one line there
         strategy_for(load_strategies(conf, REGISTRY), property_name)

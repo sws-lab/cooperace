@@ -34,7 +34,7 @@ from src.cooperace.verdicts import (
 )
 
 PROPERTIES = ("no-data-race", "unreach-call", "no-overflow", "valid-memsafety")
-# Where a witness can count, and where one is required (witnesses.FORMATS).
+# Where a witness can count, and where one is required (conf/witnesses.json).
 COUNTS = {("no-data-race", FALSE), ("unreach-call", TRUE), ("unreach-call", FALSE),
           ("no-overflow", TRUE), ("no-overflow", FALSE), ("valid-memsafety", FALSE)}
 REQUIRED = COUNTS - {("valid-memsafety", FALSE)}

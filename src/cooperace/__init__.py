@@ -11,14 +11,15 @@ line), components (the registry of components, running one and reading its
 result and witness), execution (running a component under BenchExec's
 RunExecutor; with components, the only modules that import BenchExec),
 strategy (running the tree), config (the conf as a tree of steps per
-property), witnesses (which witness file counts for a verdict), properties
+property), witnesses (which witness file counts for a verdict, by the
+witness table conf/witnesses.json), properties
 (the properties and their recognition in a property file), processes
 (stopping the components that run together, and the run's memory limit).
 
 CoOpeRace runs from any working directory. TOOL_DIR, the directory that holds
 the launcher `cooperace`, is where it finds everything of its own: the
-bundled BenchExec in lib/, the default conf in conf/ and the components in
-tools/. It is taken from the location of this package, never from the working
+bundled BenchExec in lib/, the default conf and the witness table in conf/,
+and the components in tools/. It is taken from the location of this package, never from the working
 directory. What the user gives (the task, the property file and `--conf`) is
 a path relative to the working directory, and witnesses are delivered into it.
 

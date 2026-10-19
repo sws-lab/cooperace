@@ -1,6 +1,6 @@
 # Confs: a strategy per property
 
-A conf is a JSON object whose only key is `properties`, which maps a property to its strategy. A strategy says three things for its property: when each tool runs (`phases`), whose verdict wins (`answers`), and whose witness is delivered (`witnesses`). `conf/svcomp27.json` is the default conf, read when CoOpeRace is started without `--conf`.
+A conf is a JSON object whose only key is `properties`, which maps a property to its strategy. A strategy says three things for its property: when each tool runs (`phases`), whose verdict wins (`answers`), and whose witness is delivered (`witnesses`). `conf/svcomp27.json` is the default conf, read when CoOpeRace is started without `--conf`. `conf/witnesses.json` is not a conf: it is the witness table, which says which witness each verdict of each property needs (see [The witness table](#the-witness-table-confwitnessesjson)).
 
 ## Two examples
 
@@ -57,18 +57,59 @@ A property the conf gives no strategy for is refused before any tool starts, so 
 
 ## `witnesses`: whose witness is delivered
 
-`witnesses` is a list of tools, each with an entry in `answers`. A witness is delivered only where one can count for the property and verdict: a `false` in all four properties, and a `true` in unreach-call and no-overflow. For a `true` in no-data-race and valid-memsafety nothing is delivered, and `witnesses` does not apply. Where a witness can count, once the verdict is decided, it is taken from the first tool of this list that has an entry for the verdict in some bracket, answered that verdict, and wrote a witness that passes the check of `src/cooperace/witnesses.py` for the property and verdict. If no tool of the list qualifies, it is taken from the first tool by name of the deciding bracket that answered the verdict and wrote one. If there is none, and the competition's rules require a witness for the property and verdict, CoOpeRace prints `CoOpeRace verdict: unknown`, with a line before it saying which verdict it had and that no witness was written. `"witnesses": []` is allowed; then only the deciding bracket can supply the witness.
+`witnesses` is a list of tools, each with an entry in `answers`. A witness is delivered only where one can count for the property and verdict, which is where the witness table gives a format: in `conf/witnesses.json`, a `false` in all four properties, and a `true` in unreach-call and no-overflow. Where the table gives `null`, for a `true` in no-data-race and valid-memsafety, nothing is delivered, and `witnesses` does not apply. Where a witness can count, once the verdict is decided, it is taken from the first tool of this list that has an entry for the verdict in some bracket, answered that verdict, and wrote a witness that passes the check of `src/cooperace/witnesses.py` for the property and verdict: it is a YAML list with exactly one entry of the verdict's type (`violation_sequence` for `false`, `invariant_set` for `true`), whose `metadata.format_version` is one the witness table accepts and whose `metadata.task.specification` has the formulas of the property, or of the named sub-property for valid-memsafety. A GraphML witness never passes. If no tool of the list qualifies, it is taken from the first tool by name of the deciding bracket that answered the verdict and wrote one. If there is none, and the witness table requires a witness for the property and verdict, CoOpeRace prints `CoOpeRace verdict: unknown`, with a line before it saying which verdict it had and that no witness was written. `"witnesses": []` is allowed; then only the deciding bracket can supply the witness.
 
-| Property | `true` needs | `false` needs |
-| --- | --- | --- |
-| no-data-race | nothing | a YAML 2.2 violation witness |
-| unreach-call | a YAML 2.1+ correctness witness | a YAML 2.2 violation witness |
-| no-overflow | a YAML 2.1+ correctness witness | a YAML 2.2 violation witness |
-| valid-memsafety | nothing | nothing; a YAML 2.2+ violation witness (2.3+ for `valid-memtrack`) is delivered if one is written, and validated without affecting the score |
-
-This table is fixed by the rules of SV-COMP 2027 for `C.*.Concurrency` and is not part of the conf (`FORMATS` in `src/cooperace/witnesses.py`).
+Whether a witness can count, whether one is required, and which format versions pass the check are what the witness table says (see [The witness table](#the-witness-table-confwitnessesjson)); they are not part of the conf.
 
 In valid-memsafety, `false(valid-deref)` and `false(valid-free)` in one bracket are not a contradiction. The sub-property is taken from the tool whose witness is delivered, else from the first agreeing tool of `witnesses`, else from the first agreeing tool of the deciding bracket by name.
+
+## The witness table: `conf/witnesses.json`
+
+`conf/witnesses.json` is the one place that says what the competition requires of a witness. CoOpeRace reads it from its own directory, whatever `--conf` says, to decide whether a witness passes and whether a verdict without one can be delivered (`src/cooperace/witnesses.py`), and the integration suite reads it to check the witness a `false` delivers (`tests/integration/run.py`, check 6). It is plain JSON, so that a script checking a component's witnesses against the competition's formats can read it too:
+
+```json
+{
+    "highestVersion": "2.3",
+    "properties": {
+        "no-data-race": {
+            "true": null,
+            "false": {"minimumVersion": "2.2", "required": true}
+        },
+        "unreach-call": {
+            "true": {"minimumVersion": "2.1", "required": true},
+            "false": {"minimumVersion": "2.2", "required": true}
+        },
+        "no-overflow": {
+            "true": {"minimumVersion": "2.1", "required": true},
+            "false": {"minimumVersion": "2.2", "required": true}
+        },
+        "valid-memsafety": {
+            "true": null,
+            "false": {"minimumVersion": "2.2", "required": false,
+                      "subproperties": {"valid-memtrack": {"minimumVersion": "2.3"}}}
+        }
+    }
+}
+```
+
+- `highestVersion` is the highest YAML witness format version that passes, for every property and verdict.
+- `properties` has an object for each of the four properties, and each of those has the keys `"true"` and `"false"`. The value of a verdict is `null` where the competition supports no witness for it: none is delivered, `witnesses` does not apply, and the verdict scores without one. Otherwise it is an object with:
+  - `minimumVersion`, the lowest YAML format version that passes. A witness passes with a version from `minimumVersion` to `highestVersion`, both included. A version is a string `"major.minor"`, never a JSON number, since `2.10` and `2.1` are the same number. The type of the witness's entry follows from the verdict: `violation_sequence` for `false`, `invariant_set` for `true`.
+  - `required`, `true` if the competition scores the verdict only with a witness that passes. Then a verdict whose suppliers wrote no witness that passes ends as `CoOpeRace verdict: unknown`. `false` is the competition's demo mode: the verdict scores without a witness, and one that passes is still delivered, and validated without affecting the score. Rule 3 of "When a tool is stopped" applies in both cases.
+  - `subproperties`, optional and allowed only for valid-memsafety's `false`: a sub-property (`valid-free`, `valid-deref` or `valid-memtrack`) to an object `{"minimumVersion": "x.y"}`, which replaces `minimumVersion` for a `false` naming that sub-property. `required` cannot differ between sub-properties.
+
+| Property | `true` | `false` |
+| --- | --- | --- |
+| no-data-race | not supported | required, YAML 2.2 to 2.3 |
+| unreach-call | required, YAML 2.1 to 2.3 | required, YAML 2.2 to 2.3 |
+| no-overflow | required, YAML 2.1 to 2.3 | required, YAML 2.2 to 2.3 |
+| valid-memsafety | not supported | demo mode, YAML 2.2 to 2.3; 2.3 only for `valid-memtrack` |
+
+The content is the `C.*.Concurrency` rows of "Supported Witness Formats" on the SV-COMP 2027 benchmarks page (<https://sv-comp.sosy-lab.org/2027/benchmarks.php>, read 2026-10-20), which the competition's scoring scripts classify the same way (`sosy-lab/benchmarking/competition-scripts` at `cf979db`, `prepare_tables/category_structure.py`, commit `4cc75eb`, whose unit tests pin those cells). The page supports YAML 2.0 to 2.3, and 2.4 in demo mode only; `highestVersion` is 2.3, so a 2.4 witness never passes. GraphML witnesses count in none of these cells, and CoOpeRace never delivers one. In the valid-memsafety row the whole `false` cell is in demo mode. The page's footnote that versions 2.0 to 2.2 can express only valid-deref and valid-free violations, and that valid-memtrack needs 2.3 or higher in demo mode, belongs to the rows outside concurrency; the table keeps its consequence for valid-memtrack as a `subproperties` override, so that a valid-memtrack witness passes only in version 2.3.
+
+The table describes the `C.*.Concurrency` sub-categories only. In `C.Huawei-Concurrency-Challenges` every cell is in demo mode, but CoOpeRace cannot tell at run time whether a task belongs to it, and applies the `C.*.Concurrency` table to every task. On a Huawei task this changes the score in one case: a `false` of no-data-race, unreach-call or no-overflow, or a `true` of unreach-call or no-overflow, for which no supplier wrote a witness that passes, ends as `unknown` and scores 0. Under the Huawei rows, CoOpeRace would have delivered the answer without a witness: if right, it would have scored its points, which are lost; if wrong, it would have cost the penalty, which is avoided. A witness that passes is delivered on either table.
+
+When what the competition requires changes, edit `conf/witnesses.json`; the code has no copy of the table. A table that CoOpeRace refuses is listed under "What CoOpeRace refuses".
 
 ## When a tool is stopped
 
@@ -94,7 +135,7 @@ Both limits can be given for any tool of the strategy they are in. In a conf, ea
 
 ## What CoOpeRace refuses
 
-CoOpeRace checks the property file and the conf before it starts any tool (`src/cooperace/properties.py`, `src/cooperace/config.py`) and stops with status 1, one line `CoOpeRace: error: ...` on stderr and no `CoOpeRace verdict:` line (so BenchExec records ERROR, not UNKNOWN, and the task scores 0), if:
+CoOpeRace checks the property file, the conf and the witness table before it starts any tool (`src/cooperace/properties.py`, `src/cooperace/config.py`, `src/cooperace/witnesses.py`) and stops with status 1, one line `CoOpeRace: error: ...` on stderr and no `CoOpeRace verdict:` line (so BenchExec records ERROR, not UNKNOWN, and the task scores 0), if:
 
 - the property file holds the formulas of none of the four properties, or the conf has no strategy for the property;
 - the conf is not a JSON object, has no `properties`, has another key beside it, or maps a name that is not one of the four properties;
@@ -105,7 +146,8 @@ CoOpeRace checks the property file and the conf before it starts any tool (`src/
 - a bracket is empty, an entry is not `Tool:true`, `Tool:false` or `Tool`, or one verdict of one tool is in two entries, in one bracket or in two;
 - an entry names a tool in no phase, or a tool of a phase has no entry;
 - `witnesses` names a tool twice, or a tool with no entry;
-- `cpuTimeLimits` or `memoryLimits` has a key that is in no phase, or a `wallTimeLimit`, a `cpuTimeLimits` value or a `memoryLimits` value is not a positive number (for `memoryLimits`, nor a percentage above 0 and at most 100).
+- `cpuTimeLimits` or `memoryLimits` has a key that is in no phase, or a `wallTimeLimit`, a `cpuTimeLimits` value or a `memoryLimits` value is not a positive number (for `memoryLimits`, nor a percentage above 0 and at most 100);
+- the witness table `conf/witnesses.json` of CoOpeRace's directory cannot be read or is not JSON; it is not an object with exactly the keys `highestVersion` and `properties`; `properties` names a property that is not one of the four or lacks one of them; a property's object does not have exactly the keys `"true"` and `"false"`; a verdict's value is neither `null` nor an object with `minimumVersion` and `required` and optionally `subproperties`; `required` is not `true` or `false`; `highestVersion` or a `minimumVersion` is not a string `"major.minor"`; a `minimumVersion` is above `highestVersion`; or `subproperties` is given anywhere but valid-memsafety's `false`, names another sub-property than `valid-free`, `valid-deref` and `valid-memtrack`, or gives one another key than `minimumVersion`.
 
 Every strategy of the conf is checked, not only the one for the task's property. CoOpeRace also stops this way, before any tool starts, if the executable of a tool that any strategy of the conf names is not under the `tools/` directory of CoOpeRace; a conf that names a tool that is not installed (for example Deagle, which `scripts/download-tools.py` fetches only with `--pool`, since it is not in `tools.txt`) is refused as a whole, for every property. The same holds for a tool of any strategy whose `tools/<name>/.doi` is not the DOI that `tools-options.json` holds its options for.
 

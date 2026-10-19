@@ -11,6 +11,9 @@ sv-sanitizers 0.3.0 and Dartagnan svcomp27 wrote on no-data-race tasks of
 sv-benchmarks (format 2.2, violation_sequence; the input_files are paths on
 the machine they were run on). The 2027 validators confirmed each of them.
 The failing witnesses below are made from them by changing one field."""
+import copy
+import json
+import re
 import subprocess
 import sys
 import types
@@ -203,6 +206,118 @@ def test_passing_witness_is_the_first_file_that_passes(tmp_path):
     assert witnesses.passing_witness(paths[:2], "no-data-race", "false") is None
     assert witnesses.passing_witness(paths, "no-data-race", "true") is None
     assert witnesses.passing_witness([], "no-data-race", "false") is None
+
+
+# --- the witness table ---------------------------------------------------------
+
+ROOT = Path(__file__).resolve().parents[2]
+SHIPPED_TABLE = json.loads((ROOT / "conf" / "witnesses.json").read_text())
+
+
+def test_the_shipped_table_is_the_svcomp27_concurrency_table():
+    """conf/witnesses.json gives exactly the C.*.Concurrency cells of SV-COMP
+    2027 that conf/README.md, "The witness table", lists."""
+    table = witnesses.read_table(str(ROOT / "conf" / "witnesses.json"))
+    V, C = witnesses.VIOLATION, witnesses.CORRECTNESS
+    highest = (2, 3)
+
+    assert table == witnesses.table()
+    assert table.highest == highest
+    assert table.formats == {
+        ("no-data-race", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
+        ("unreach-call", "true"): witnesses.WitnessFormat(C, (2, 1), highest, True),
+        ("unreach-call", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
+        ("no-overflow", "true"): witnesses.WitnessFormat(C, (2, 1), highest, True),
+        ("no-overflow", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
+        ("valid-memsafety", "false"): witnesses.WitnessFormat(V, (2, 2), highest, False),
+    }
+    assert table.subproperty_formats == {
+        ("valid-memsafety", "false", "valid-memtrack"): witnesses.WitnessFormat(V, (2, 3), highest, False),
+    }
+
+
+def test_the_conf_readme_shows_the_shipped_table():
+    text = (ROOT / "conf" / "README.md").read_text()
+    block = re.search(r"## The witness table: `conf/witnesses.json`\n\n.*?```json\n(.*?)```", text, re.DOTALL)
+
+    assert json.loads(block.group(1)) == SHIPPED_TABLE
+
+
+def table_with(path, value):
+    """A deep copy of the shipped table with the value at `path` (a tuple of
+    keys) set to `value`, or deleted if `value` is DELETE."""
+    data = copy.deepcopy(SHIPPED_TABLE)
+    *parents, last = path
+    node = data
+    for key in parents:
+        node = node[key]
+    if value is DELETE:
+        del node[last]
+    else:
+        node[last] = value
+    return data
+
+
+DELETE = object()
+FALSE_OF = ("properties", "no-data-race", "false")
+
+
+@pytest.mark.parametrize("path, value, message", [
+    (("properties", "no-termination"), {"true": None, "false": None},
+     "properties names 'no-termination', which is not one of"),
+    (("properties", "no-overflow"), DELETE, "properties has no 'no-overflow'"),
+    (("properties", "no-data-race", "true"), DELETE, "properties.no-data-race has no 'true'"),
+    (("properties", "no-data-race", "unknown"), None, "properties.no-data-race has the key 'unknown'"),
+    ((*FALSE_OF, "minimumVersion"), 2.2, 'properties.no-data-race.false.minimumVersion is 2.2, not a version'),
+    ((*FALSE_OF, "minimumVersion"), "2", 'properties.no-data-race.false.minimumVersion is "2", not a version'),
+    ((*FALSE_OF, "minimumVersion"), "2.2.1",
+     'properties.no-data-race.false.minimumVersion is "2.2.1", not a version'),
+    (("highestVersion",), "v2.3", 'highestVersion is "v2.3", not a version'),
+    ((*FALSE_OF, "minimumVersion"), "2.4",
+     "properties.no-data-race.false.minimumVersion 2.4 is above highestVersion 2.3"),
+    ((*FALSE_OF, "minimumVersion"), DELETE, "properties.no-data-race.false has no 'minimumVersion'"),
+    ((*FALSE_OF, "required"), DELETE, "properties.no-data-race.false has no 'required'"),
+    ((*FALSE_OF, "required"), "yes", 'properties.no-data-race.false.required is "yes", not true or false'),
+    ((*FALSE_OF, "maximumVersion"), "2.3", "properties.no-data-race.false has the key 'maximumVersion'"),
+    (FALSE_OF, "2.2", "properties.no-data-race.false is not a JSON object"),
+    ((*FALSE_OF, "subproperties"), {"valid-memtrack": {"minimumVersion": "2.3"}},
+     "properties.no-data-race.false has subproperties, which only properties.valid-memsafety.false can have"),
+    (("properties", "valid-memsafety", "false", "subproperties", "valid-memleak"), {"minimumVersion": "2.3"},
+     "properties.valid-memsafety.false.subproperties names 'valid-memleak'"),
+    (("properties", "valid-memsafety", "false", "subproperties", "valid-memtrack", "required"), False,
+     "properties.valid-memsafety.false.subproperties.valid-memtrack has the key 'required'"),
+    (("properties", "valid-memsafety", "false", "subproperties", "valid-memtrack", "minimumVersion"), "2.4",
+     "properties.valid-memsafety.false.subproperties.valid-memtrack.minimumVersion 2.4 is above "
+     "highestVersion 2.3"),
+    (("graphml",), "1.0", "the witness table has the key 'graphml'"),
+    (("highestVersion",), DELETE, "the witness table has no 'highestVersion'"),
+])
+def test_a_malformed_table_is_refused(path, value, message):
+    with pytest.raises(witnesses.WitnessTableError) as error:
+        witnesses.load_table(table_with(path, value))
+    assert str(error.value).startswith(message), str(error.value)
+
+
+def test_a_table_that_is_not_an_object_or_not_json_is_refused(tmp_path):
+    with pytest.raises(witnesses.WitnessTableError, match="the witness table is not a JSON object"):
+        witnesses.load_table([])
+    path = tmp_path / "witnesses.json"
+    path.write_text("{")
+    with pytest.raises(witnesses.WitnessTableError, match=f"^the witness table {path}: "):
+        witnesses.read_table(str(path))
+    with pytest.raises(witnesses.WitnessTableError, match="^the witness table .*missing.json: "):
+        witnesses.read_table(str(tmp_path / "missing.json"))
+
+
+def test_a_raised_highest_version_and_another_required_cell_change_the_check(monkeypatch):
+    """The check reads the table: with highestVersion 2.4 a 2.4 witness passes,
+    and with no-data-race's false not required a witness-less false scores."""
+    data = table_with(("highestVersion",), "2.4")
+    data["properties"]["no-data-race"]["false"]["required"] = False
+    monkeypatch.setattr(witnesses, "table", lambda: witnesses.load_table(data))
+
+    assert witnesses.passes(violation("CHECK( init(main()), LTL(G ! data-race) )", '"2.4"'), "no-data-race", "false")
+    assert not witnesses.needs_witness("no-data-race", "false")
 
 
 # --- run_component returns only a file that passes ----------------------------

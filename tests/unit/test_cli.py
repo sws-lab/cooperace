@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from support import STUB_DOI, data_race_conf, make_script, one_after_another, register_stub
 
-from src.cooperace import cli, components, execution
+from src.cooperace import cli, components, execution, witnesses
 from src.cooperace.components import ComponentRunner
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -358,6 +358,23 @@ def test_an_options_file_that_is_missing_or_malformed_is_refused_before_any_comp
     (line,) = error_lines(err)
     assert line.startswith("CoOpeRace: error: ")
     assert str(tmp_path / components.OPTIONS_FILE) in line
+
+
+@pytest.mark.parametrize("content", [None, "{", '{"highestVersion": "2.3", "properties": {}}'])
+def test_a_witness_table_that_is_missing_or_malformed_is_refused_before_any_component_starts(
+        run_main, no_run, tmp_path, monkeypatch, content):
+    monkeypatch.setattr(witnesses, "TOOL_DIR", str(tmp_path))
+    witnesses.table.cache_clear()
+    if content is not None:
+        (tmp_path / "conf").mkdir()
+        (tmp_path / witnesses.TABLE_FILE).write_text(content)
+    try:
+        result = run_main("--prop", str(DATA_RACE))
+    finally:
+        witnesses.table.cache_clear()
+
+    assert_refused(result, f"the witness table {tmp_path / witnesses.TABLE_FILE}: ")
+    assert no_run == []
 
 
 def test_installation_problems_names_each_missing_component_on_one_line(tmp_path):
