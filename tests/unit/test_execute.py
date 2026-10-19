@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 import pytest
-from support import make_script, register_stub
+from support import PASSING_WITNESS, make_script, register_stub
 
 from src.cooperace import cli
 from src.cooperace.components import ComponentRunner
@@ -169,9 +169,9 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
         make_runner, tmp_path, run_dir):
     run, directories = stubbed_run(
         make_runner, tmp_path, "sequential",
-        Stub_A='echo "<graphml/>" > witness.graphml\necho "STUB-STATUS: unknown"\n',
-        Stub_B='echo "<graphml new/>" > run-witness.graphml\n'
-               'echo "- entry" > run-witness.yml\necho "STUB-STATUS: false"\n',
+        Stub_A=f'cp {shlex.quote(str(PASSING_WITNESS))} witness.yml\necho "STUB-STATUS: unknown"\n',
+        Stub_B='echo "<graphml new/>" > run-witness.graphml\necho "- entry" > other-witness.yml\n'
+               f'cp {shlex.quote(str(PASSING_WITNESS))} run-witness.yml\necho "STUB-STATUS: false"\n',
     )
     # A file of an earlier run in the component's directory.
     old = directories["Stub B"] / "old-witness.graphml"
@@ -183,13 +183,15 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
     verdict = run.execute()
 
     assert verdict == "false"
-    assert (run_dir / "witness.graphml").read_text() == "<graphml new/>\n"
-    assert (run_dir / "witness.yml").read_text() == "- entry\n"
+    # Only the file that passes the check is delivered, as witness.yml.
+    assert sorted(path.name for path in run_dir.iterdir()) == ["witness.yml"]
+    assert (run_dir / "witness.yml").read_text() == PASSING_WITNESS.read_text()
     assert old.read_text() == "old"
-    # The files were moved out of the component's directory.
+    # The files were written into the overlay, not the component's directory.
     assert not (directories["Stub B"] / "run-witness.graphml").exists()
+    assert not (directories["Stub B"] / "run-witness.yml").exists()
     # Stub A's witness, written during the run but not returned, is not delivered.
-    assert not (directories["Stub A"] / "witness.graphml").exists()
+    assert not (directories["Stub A"] / "witness.yml").exists()
 
 
 def test_a_stale_witness_in_the_working_directory_is_removed_when_there_is_no_verdict(

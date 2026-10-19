@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from benchexec import util as butil
 from benchexec.container import DIR_FULL_ACCESS, DIR_HIDDEN, DIR_OVERLAY, DIR_READ_ONLY
-from support import make_script, register_stub
+from support import OTHER_PASSING_WITNESS, PASSING_WITNESS, make_script, register_stub
 from test_execute import Run
 
 from src.cooperace import execution
@@ -310,16 +310,16 @@ def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale
     # A stale witness in the component's directory is neither collected nor
     # touched; the one written in this run is delivered, and the directory
     # itself keeps only what was there, since the run wrote into the overlay.
-    body = 'echo new > "$(dirname "$0")/fresh-witness.graphml"\necho "STUB-STATUS: false"\n'
+    body = (f'cp {shlex.quote(str(PASSING_WITNESS))} "$(dirname "$0")/fresh-witness.yml"\n'
+            'echo "STUB-STATUS: false"\n')
     run = stub_run(tmp_path, {"runType": "sequential", "tools": [{"Stub A": "all"}]}, Stub_A=body)
     stale = tmp_path / "stubs" / "Stub_A" / "old-witness.yml"
-    stale.write_text("stale")
+    stale.write_text(OTHER_PASSING_WITNESS.read_text())
     os.utime(stale, (time.time() + 3600, time.time() + 3600))  # newer than the run: no start time tells it apart
 
     verdict = run.execute()
 
     assert verdict == "false"
-    assert (run_dir / "witness.graphml").read_text() == "new\n"
-    assert not (run_dir / "witness.yml").exists()
-    assert stale.read_text() == "stale"
-    assert not (tmp_path / "stubs" / "Stub_A" / "fresh-witness.graphml").exists()
+    assert (run_dir / "witness.yml").read_text() == PASSING_WITNESS.read_text()
+    assert stale.read_text() == OTHER_PASSING_WITNESS.read_text()
+    assert not (tmp_path / "stubs" / "Stub_A" / "fresh-witness.yml").exists()

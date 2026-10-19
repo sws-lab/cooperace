@@ -40,12 +40,11 @@ def run_dirs(tmp_path):
 
 def test_the_files_a_spec_names_are_collected_from_the_run_directory(run_dirs):
     _component, run = run_dirs
-    write(run / "witness.graphml")  # Goblint writes only witness.yml
+    write(run / "witness.graphml")  # no spec names a GraphML file
     wanted = write(run / "witness.yml")
 
     assert components.witness_files_in(witness_of("Goblint"), str(run)) == [str(wanted)]
-    assert components.witness_files_in(witness_of("ULTIMATE GemCutter"), str(run)) == [
-        str(run / "witness.graphml"), str(wanted)]
+    assert components.witness_files_in(witness_of("ULTIMATE GemCutter"), str(run)) == [str(wanted)]
 
 
 def test_missing_files_are_ignored(run_dirs):
@@ -57,7 +56,8 @@ def test_missing_files_are_ignored(run_dirs):
 
 def test_a_spec_without_names_collects_by_name_pattern(run_dirs):
     _component, run = run_dirs
-    wanted = [write(run / "witness.graphml"), write(run / "sub/dir/Mixed-WITNESS.yml")]
+    wanted = [write(run / "a-witness.yml"), write(run / "sub/dir/Mixed-WITNESS.yml")]
+    write(run / "witness.graphml")
     write(run / "witness.yaml")
     write(run / "result.graphml")
 
@@ -68,10 +68,13 @@ def test_a_spec_without_names_collects_by_name_pattern(run_dirs):
 
 def test_result_files_patterns():
     assert components.result_files_patterns(WitnessSpec("run", ("--w", "{dir}"), ("witness.yml",))) == []
-    assert components.result_files_patterns(witness_of("Dartagnan")) == ["output/witness.graphml",
-                                                                       "output/witness.yml"]
-    patterns = components.result_files_patterns(DEFAULT_WITNESS)
-    assert len(patterns) == 2 and all(p.startswith("**/") for p in patterns)
+    assert components.result_files_patterns(witness_of("Dartagnan")) == ["output/witness.yml"]
+    assert components.result_files_patterns(DEFAULT_WITNESS) == ["**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*yml"]
+
+
+def test_no_witness_spec_names_a_graphml_file():
+    for spec in REGISTRY.values():
+        assert not any(file.endswith("graphml") for file in spec.witness.files or ())
 
 
 def test_the_default_witness_spec_and_the_components_with_their_own():
@@ -89,8 +92,7 @@ def test_witness_files_under_matches_the_name_pattern(tmp_path):
 
     found = components.witness_files_under(str(tmp_path))
 
-    assert sorted(found) == [str(tmp_path / "a-witness.graphml"),
-                             str(tmp_path / "b/WITNESS.yml")]
+    assert found == [str(tmp_path / "b/WITNESS.yml")]
 
 
 # --- witness_options ---------------------------------------------------------
@@ -105,39 +107,37 @@ def test_witness_options_put_the_run_directory_into_the_options():
 
 # --- witness_files_to_file_root and remove_old_witness_files -----------------------
 
-def test_witness_files_to_file_root_delivers_each_format_under_its_name(tmp_path, monkeypatch):
-    source, destination = tmp_path / "source", tmp_path / "cwd"
-    destination.mkdir()
-    graphml = write(source / "some-run-witness.graphml", "<graphml/>")
-    yaml = write(source / "other-witness.yml", "- entry")
-    monkeypatch.chdir(destination)
-
-    components.witness_files_to_file_root([str(graphml), str(yaml)])
-
-    assert (destination / "witness.graphml").read_text() == "<graphml/>"
-    assert (destination / "witness.yml").read_text() == "- entry"
-    assert graphml.exists() and yaml.exists()  # copied, not moved
-
-
-def test_witness_files_to_file_root_delivers_a_yaml_file_as_witness_yml(tmp_path, monkeypatch):
+def test_witness_files_to_file_root_delivers_the_file_as_witness_yml(tmp_path, monkeypatch):
     destination = tmp_path / "cwd"
     destination.mkdir()
-    yaml = write(tmp_path / "w.yaml", "- entry")
+    yaml = write(tmp_path / "source" / "other-witness.yaml", "- entry")
     monkeypatch.chdir(destination)
 
     components.witness_files_to_file_root([str(yaml)])
 
     assert [path.name for path in destination.iterdir()] == ["witness.yml"]
+    assert (destination / "witness.yml").read_text() == "- entry"
+    assert yaml.exists()  # copied, not moved
 
 
-def test_witness_files_to_file_root_skips_other_files_and_accepts_an_empty_list(tmp_path, monkeypatch):
+def test_witness_files_to_file_root_accepts_an_empty_list(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    components.witness_files_to_file_root([])
+
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("names", [["a-witness.yml", "b-witness.yml"], ["witness.graphml"]],
+                         ids=["two-files", "graphml"])
+def test_witness_files_to_file_root_refuses_two_files_and_a_graphml_file(tmp_path, monkeypatch, names):
     destination = tmp_path / "cwd"
     destination.mkdir()
-    other = write(tmp_path / "witness.txt")
+    files = [str(write(tmp_path / name)) for name in names]
     monkeypatch.chdir(destination)
 
-    components.witness_files_to_file_root([str(other)])
-    components.witness_files_to_file_root([])
+    with pytest.raises(ValueError):
+        components.witness_files_to_file_root(files)
 
     assert list(destination.iterdir()) == []
 

@@ -59,6 +59,7 @@ from .config import Step
 from .processes import ComponentGroup, run_memory_limit
 from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
+from .witnesses import passing_witness, subproperty_of
 
 
 @dataclass(frozen=True)
@@ -68,12 +69,13 @@ class WitnessSpec:
     makes for the run ({dir} in an option stands for it), and "component" if
     the component writes them under its own directory, the working directory
     of its run. `files` are their paths relative to that directory, or None
-    for every file there whose name contains "witness" and ends in graphml or
-    yml (witness_files_under). ComponentRunner.run_component takes only
-    those the component wrote during the run, and witness_files_to_file_root
-    delivers a graphml file as witness.graphml and a YAML file as witness.yml.
-    A component that writes a new witness file, or a new format, needs only
-    a new WitnessSpec in its registry entry."""
+    for every file there whose name contains "witness" and ends in yml
+    (witness_files_under). ComponentRunner.run_component takes, of those the
+    component wrote during the run, the one that witnesses.passing_witness
+    accepts for its verdict, and witness_files_to_file_root delivers it as
+    witness.yml. A component that writes a new witness file needs only a new
+    WitnessSpec in its registry entry. GraphML files are not named: no GraphML
+    witness counts (witnesses.py)."""
 
     directory: str
     options: tuple[str, ...] = ()
@@ -83,8 +85,8 @@ class WitnessSpec:
 #For a component without a WitnessSpec of its own: the name pattern, under its own directory
 DEFAULT_WITNESS = WitnessSpec("component")
 
-#Ultimate.py --witness-dir; witness.yml is written beside the graphml for "true"
-_ULTIMATE_WITNESS = WitnessSpec("run", ("--witness-dir", "{dir}"), ("witness.graphml", "witness.yml"))
+#Ultimate.py --witness-dir, into which it writes witness.yml (and witness.graphml, never delivered)
+_ULTIMATE_WITNESS = WitnessSpec("run", ("--witness-dir", "{dir}"), ("witness.yml",))
 
 
 @dataclass(frozen=True)
@@ -124,9 +126,9 @@ REGISTRY = {spec.name: spec for spec in (
     ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle"),
     #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
     #which must be Dartagnan's directory, and has no option for another one.
-    #Version svcomp26 writes output/witness.graphml, svcomp27 output/witness.yml
+    #Version svcomp27 writes output/witness.yml; svcomp26 writes only output/witness.graphml
     ComponentSpec("Dartagnan", "benchexec.tools.dartagnan", "dartagnan",
-                  witness=WitnessSpec("component", (), ("output/witness.graphml", "output/witness.yml"))),
+                  witness=WitnessSpec("component", (), ("output/witness.yml",))),
     ComponentSpec("ULTIMATE Automizer", "benchexec.tools.ultimateautomizer", "uautomizer",
                   witness=_ULTIMATE_WITNESS),
     ComponentSpec("ULTIMATE GemCutter", "benchexec.tools.ultimategemcutter", "ugemcutter",
@@ -400,9 +402,13 @@ class ComponentRunner:
     def run_component(self, actor: BaseTool2, step: Step, group: ComponentGroup) -> Outcome:
         """Runs the component `actor` of the config.Step `step` on the task in
         the ComponentGroup `group`, with the step's limits, and prints its
-        block. Returns the Outcome of its verdict, with the witness files it
-        wrote during this run, if `step.accept` accepts the verdict and `group`
-        was not stopped, and NO_OUTCOME otherwise.
+        block. Returns the Outcome of its verdict if `step.accept` accepts the
+        verdict and `group` was not stopped, and NO_OUTCOME otherwise. The
+        Outcome's witness_files hold the one file the component wrote during
+        this run that witnesses.passing_witness accepts for the verdict on
+        `property_name`, with the sub-property its result names
+        (witnesses.subproperty_of), or none if no file passes; the verdict is
+        returned either way.
 
         The component's entry in the registry is looked up by the conf's name
         of the component, `step.component`, which config.load has checked is
@@ -456,20 +462,21 @@ class ComponentRunner:
 
         if verdict == "unknown":
             return NO_OUTCOME
-        return Outcome(verdict, actor.name(), witness_files, reported_result(self.property_name, status))
+        result = reported_result(self.property_name, status)
+        witness = passing_witness(witness_files, self.property_name, verdict, subproperty_of(result))
+        return Outcome(verdict, actor.name(), [] if witness is None else [witness], result)
 
 
-# The patterns, as glob's, of the files a component without a list of witness
+# The pattern, as a glob, of the files a component without a list of witness
 # files writes under its own directory (WitnessSpec.files None): the names
-# witness_files_under matches, "witness" in any case and ending in graphml or
-# yml.
-_WITNESS_NAME_PATTERNS = ("**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*graphml", "**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*yml")
+# witness_files_under matches, "witness" in any case and ending in yml.
+_WITNESS_NAME_PATTERNS = ("**/*[Ww][Ii][Tt][Nn][Ee][Ss][Ss]*yml",)
 
 
 def result_files_patterns(witness: WitnessSpec) -> list[str]:
     """The `result_files_patterns` of a run in the container of a component
     with the WitnessSpec `witness`: none if it writes into the run's
-    directory, else the files `witness` names or the witness name patterns."""
+    directory, else the files `witness` names or the witness name pattern."""
     if witness.directory == "run":
         return []
     if witness.files is None:
@@ -721,36 +728,36 @@ def witness_options(witness: WitnessSpec, witness_dir: str) -> list[str]:
 
 def witness_files_under(tool_dir: str) -> list[str]:
     """The files under `tool_dir` whose name contains "witness" in any case
-    and ends in graphml or yml."""
+    and ends in yml."""
     witness_files = []
 
     for root, _dirs, files in os.walk(tool_dir):
         for file in files:
-            if 'witness' in file.lower() and (file.endswith("graphml") or file.endswith("yml")):
+            if 'witness' in file.lower() and file.endswith("yml"):
                 witness_files.append(os.path.join(root, file))
 
     return witness_files
 
 
 def witness_files_to_file_root(witness_files: list[str]) -> None:
-    """Copies the witness files of one component run, from
-    witness_files_in, to the working directory under the name of their
-    format: a graphml file as witness.graphml, a YAML file as witness.yml."""
+    """Copies the witness of one component run, the at most one file of the
+    Outcome of ComponentRunner.run_component, which witnesses.passing_witness
+    accepted, to the working directory as witness.yml. Raises ValueError for
+    more than one file, and for a file whose name ends in .graphml, which
+    never passes."""
+    if len(witness_files) > 1:
+        raise ValueError(f"more than one witness file to deliver: {', '.join(witness_files)}")
     for file in witness_files:
-        if file.endswith(".graphml"):
-            name = "witness.graphml"
-        elif file.endswith(".yml") or file.endswith(".yaml"):
-            name = "witness.yml"
-        else:
-            continue
-        shutil.copy2(file, os.path.join(os.getcwd(), name))
+        if file.lower().endswith(".graphml"):
+            raise ValueError(f"a GraphML file is never delivered: {file}")
+        shutil.copy2(file, os.path.join(os.getcwd(), "witness.yml"))
 
 
 def remove_old_witness_files() -> None:
-    """Removes witness.graphml and witness.yml, the names
-    witness_files_to_file_root delivers witnesses under, from the working
-    directory, so that one left there by an earlier run is not delivered
-    with this run's verdict."""
+    """Removes witness.yml, the name witness_files_to_file_root delivers a
+    witness under, and witness.graphml, which earlier versions of CoOpeRace
+    delivered, from the working directory, so that one left there by an
+    earlier run is not delivered with this run's verdict."""
     for name in ("witness.graphml", "witness.yml"):
         try:
             os.remove(os.path.join(os.getcwd(), name))

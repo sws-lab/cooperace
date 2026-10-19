@@ -23,6 +23,11 @@ WAIT_SECONDS = 15
 # The DOI a stub component is installed from, as register_stub records it.
 STUB_DOI = "10.5281/zenodo.0"
 
+# Two witnesses that pass witnesses.passes for a false of no-data-race, copies
+# described in test_witness_check.py.
+PASSING_WITNESS = Path(__file__).resolve().parent / "witnesses" / "sv-sanitizers" / "lamport-b.witness.yml"
+OTHER_PASSING_WITNESS = Path(__file__).resolve().parent / "witnesses" / "dartagnan" / "lamport-b.witness.yml"
+
 
 def wait_until(predicate, timeout=WAIT_SECONDS, interval=0.05):
     """Calls `predicate` until it returns a true value, which is returned, or

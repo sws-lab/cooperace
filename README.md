@@ -39,7 +39,8 @@ TMPDIR=/tmp runexec --container --read-only-dir / --hidden-dir /home --overlay-d
 ```
 
 CoOpeRace's output is in `output.log`, whose last line is `CoOpeRace verdict: false`, and the witness of the
-component that answered is `out/witness.graphml` or `out/witness.yml`; `runexec` prints its report (CPU time,
+component that answered is `out/witness.yml`, if it wrote one in the format its verdict needs
+(`src/cooperace/witnesses.py`); `runexec` prints its report (CPU time,
 wall time, memory) and exits 0 whether or not CoOpeRace succeeded. A task under `/home` is hidden: add
 `--read-only-dir` with its directory. As root in a container, as in fm-tools' CI, BenchExec can make the
 components' containers without `runexec`, and `./cooperace` runs directly; `scripts/sv-comp/smoketest.sh` does

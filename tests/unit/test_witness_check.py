@@ -2,18 +2,26 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Which witness file counts for a verdict (witnesses.py).
+"""Which witness file counts for a verdict (witnesses.py), and that
+ComponentRunner.run_component returns, and so delivers, only a file that
+counts.
 
 tests/unit/witnesses holds copies, unchanged, of four witnesses that
 sv-sanitizers 0.3.0 and Dartagnan svcomp27 wrote on no-data-race tasks of
 sv-benchmarks (format 2.2, violation_sequence; the input_files are paths on
 the machine they were run on). The 2027 validators confirmed each of them.
 The failing witnesses below are made from them by changing one field."""
+import subprocess
+import sys
+import types
 from pathlib import Path
 
 import pytest
+from support import make_script, register_stub
 
+import src.cooperace
 from src.cooperace import witnesses
+from src.cooperace.config import Step
 
 FIXTURES = Path(__file__).resolve().parent / "witnesses"
 PASSING = sorted(FIXTURES.glob("*/*.witness.yml"))
@@ -195,3 +203,67 @@ def test_passing_witness_is_the_first_file_that_passes(tmp_path):
     assert witnesses.passing_witness(paths[:2], "no-data-race", "false") is None
     assert witnesses.passing_witness(paths, "no-data-race", "true") is None
     assert witnesses.passing_witness([], "no-data-race", "false") is None
+
+
+# --- run_component returns only a file that passes ----------------------------
+
+class FakeExecution(types.SimpleNamespace):
+    """Stands in for execution.py, which needs Linux: execute_run writes
+    `files` (name to text) into the run's directory, as a component run
+    under RunExecutor leaves its witnesses there, and returns a finished run
+    whose output is `output`."""
+
+    def __init__(self, files, output):
+        super().__init__(files=files, output=output)
+
+    def container_dir_modes(self, *args):
+        return {}
+
+    def execute_run(self, cmdline, cwd, environments, group, *, output_dir, **kwargs):
+        for name, text in self.files.items():
+            Path(output_dir, name).write_text(text)
+        run = subprocess.CompletedProcess(cmdline, 0, self.output, "")
+        run.termination_reason = run.cpu_time = run.wall_time = run.memory = None
+        return run
+
+
+@pytest.fixture
+def fake_execution(monkeypatch):
+    """Returns a function that makes run_component run with FakeExecution."""
+
+    def install(files, output):
+        fake = FakeExecution(files, output)
+        monkeypatch.setitem(sys.modules, "src.cooperace.execution", fake)
+        monkeypatch.setattr(src.cooperace, "execution", fake, raising=False)
+
+    return install
+
+
+@pytest.mark.parametrize("files, status, delivered", [
+    ({"a-witness.yml": GRAPHML, "b-witness.yml": LAMPORT, "c-witness.yml": LAMPORT}, "false", "b-witness.yml"),
+    ({"witness.graphml": GRAPHML,
+      "a-witness.yml": violation("CHECK( init(main()), LTL(G ! data-race) )", '"2.1"'),
+      "b-witness.yml": changed(LAMPORT, "entry_type: violation_sequence", "entry_type: invariant_set"),
+      "c-witness.yml": violation("CHECK( init(main()), LTL(G ! overflow) )"),
+      "d-witness.yml": "not: [yaml"}, "false", None),
+    ({"a-witness.yml": LAMPORT}, "true", None),
+], ids=["one-passes", "none-passes", "true-of-no-data-race"])
+def test_only_a_witness_that_passes_is_returned_and_delivered(
+        make_runner, group, fake_execution, tmp_path, monkeypatch, files, status, delivered):
+    runner = make_runner()
+    register_stub(runner, "Stub A", make_script(tmp_path / "stub", ""))
+    fake_execution(files, f"STUB-STATUS: {status}\n")
+    runner.prepare()
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    try:
+        outcome = runner.run_step(Step("Stub A", "all"), group)
+        runner.deliver(outcome.witness_files)
+        assert outcome.verdict == status
+        assert [Path(file).name for file in outcome.witness_files] == ([] if delivered is None else [delivered])
+        assert sorted(path.name for path in cwd.iterdir()) == ([] if delivered is None else ["witness.yml"])
+        if delivered is not None:
+            assert (cwd / "witness.yml").read_text() == files[delivered]
+    finally:
+        runner.cleanup()

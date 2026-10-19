@@ -177,9 +177,9 @@ def test_a_witness_is_delivered_into_the_working_directory(tmp_path, monkeypatch
     work = tmp_path / "work"
     work.mkdir()
     monkeypatch.chdir(work)
-    witness = tmp_path / "w.graphml"
-    witness.write_text("<graphml/>")
+    witness = tmp_path / "w.yml"
+    witness.write_text("- entry")
 
     components.witness_files_to_file_root([str(witness)])
 
-    assert (work / "witness.graphml").read_text() == "<graphml/>"
+    assert (work / "witness.yml").read_text() == "- entry"
