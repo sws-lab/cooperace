@@ -86,7 +86,7 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    make svcomp
    ```
    This builds the archive, builds the image `cooperace-smoketest` from
-   [`scripts/sv-comp/Dockerfile`](scripts/sv-comp/Dockerfile) (Ubuntu 24.04 with the packages the CI job
+   [`scripts/sv-comp/Dockerfile`](scripts/sv-comp/Dockerfile) (Ubuntu 26.04 with the packages the CI job
    and CoOpeRace's fm-tools entry install, and the unpacked archive in `/opt/cooperace`), and runs it as
    root with `docker run --privileged`, which the CI's cgroup setup needs. In the container, the CI's
    cgroup setup runs and then `./smoketest.sh`, which runs `./cooperace` directly: as root, BenchExec

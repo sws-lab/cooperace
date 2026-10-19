@@ -4,17 +4,20 @@
 #
 # SPDX-License-Identifier: MIT
 
-# The container of fm-tools' CI job smoke-test (ci/.gitlab-ci.yml of
-# sosy-lab/benchmarking/fm-tools, read at commit 91acb17e), which runs
+# The container of fm-tools' CI job smoke-test for SV-COMP 2027
+# (ci/.gitlab-ci.yml of sosy-lab/benchmarking/fm-tools, as fm-tools !1214
+# "Prepare CI for SV-COMP 2027" sets it, read at commit 1a8e632d), which runs
 # smoketest.sh of the archive before the archive can be registered:
-# docker.io/ubuntu:24.04 as root, the packages its before_script installs,
-# and the required_ubuntu_packages of CoOpeRace's fm-tools entry, which
-# `fm-weck smoke-test --gitlab-ci-mode` installs with `apt install -y`.
-# fuse-overlayfs is not: smoketest.sh runs ./cooperace directly, so a
-# component's overlay is the second level on the image's overlay file system,
-# which the kernel's overlayfs allows. unzip unpacks the archive, which fm-weck does in Python. Run it with `docker run --privileged`
-# (make svcomp): the CI's cgroup setup writes to /sys/fs/cgroup.
-ARG BASE_IMAGE=docker.io/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# docker.io/ubuntu:26.04 (the digest pulled on 2026-10-17) as root, the
+# packages its before_script installs, and the required_ubuntu_packages of
+# CoOpeRace's fm-tools entry, which `fm-weck smoke-test --gitlab-ci-mode`
+# installs with `apt install -y`. The competition image user:2027 is the same
+# Ubuntu 26.04.1. fuse-overlayfs is not installed: smoketest.sh runs
+# ./cooperace directly, so a component's overlay is the second level on the
+# image's overlay file system, which the kernel's overlayfs allows. unzip
+# unpacks the archive, which fm-weck does in Python. Run it with `docker run
+# --privileged` (make svcomp): the CI's cgroup setup writes to /sys/fs/cgroup.
+ARG BASE_IMAGE=docker.io/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 FROM scratch AS archive
 COPY cooperace.zip /tmp/cooperace.zip
 
