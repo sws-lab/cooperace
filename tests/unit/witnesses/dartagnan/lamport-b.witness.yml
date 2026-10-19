@@ -1,0 +1,70 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: "2.2"
+    uuid: "c862dc08-7943-45ec-81e0-3b31f2fc133b"
+    creation_time: "2026-10-19T10:40:38.917219030Z"
+    producer:
+      name: "Dartagnan"
+      version: "4.5.0-alpha (commit 6b3b4640002db677b8103ebce0b8b2f3d4be9dcb)"
+    task:
+      input_files:
+        - "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+      input_file_hashes:
+        "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i": "9bb446a7af732154870b2839e66288d9133e28dfbbe8fe81423789728796a44c"
+      specification: "CHECK( init(main()), LTL(G ! data-race) )"
+      data_model: ILP32
+      language: C
+  content:
+    - segment:
+        - waypoint:
+            type: function_enter
+            action: follow
+            thread_id: 0
+            location:
+              file_name: "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+              line: 731
+    - segment:
+        - waypoint:
+            type: function_enter
+            action: follow
+            thread_id: 0
+            location:
+              file_name: "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+              line: 732
+    - segment:
+        - waypoint:
+            type: assumption
+            action: follow
+            thread_id: 1
+            constraint:
+              value: "(y == 0)"
+              format: c_expression
+            location:
+              file_name: "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+              line: 681
+    - segment:
+        - waypoint:
+            type: assumption
+            action: follow
+            thread_id: 1
+            constraint:
+              value: "(x == 2)"
+              format: c_expression
+            location:
+              file_name: "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+              line: 687
+    - segment:
+        - waypoint:
+            type: target
+            action: follow
+            thread_id: 1
+            location:
+              file_name: "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+              line: 689
+        - waypoint:
+            type: target
+            action: follow
+            thread_id: 2
+            location:
+              file_name: "/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i"
+              line: 705

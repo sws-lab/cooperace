@@ -39,6 +39,14 @@ path = [
 SPDX-FileCopyrightText = "2024-2026 University of Tartu"
 SPDX-License-Identifier = "MIT"
 
+# Witnesses that sv-sanitizers and Dartagnan svcomp27 wrote on no-data-race
+# tasks of SV-Benchmarks, copied unchanged as fixtures of the unit tests
+# (tests/unit/test_witness_check.py).
+[[annotations]]
+path = "tests/unit/witnesses/**"
+SPDX-FileCopyrightText = "2024-2026 University of Tartu"
+SPDX-License-Identifier = "MIT"
+
 # Task definitions and set files copied from the SV-Benchmarks collection. Its
 # .reuse/dep5 (tag svcomp26) puts c/*/*.yml under CC0-1.0, copyright
 # "2011-2020 The SV-Benchmarks Community".

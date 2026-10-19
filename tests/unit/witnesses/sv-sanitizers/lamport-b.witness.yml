@@ -1,0 +1,32 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: "2.2"
+    uuid: 32640710-7e7e-4cb4-86c7-c319bbb0a88b
+    creation_time: 2026-10-19T09:55:44Z
+    producer:
+      name: SV-sanitizers
+      version: 0.3.0
+    task:
+      input_files:
+      - /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i
+      input_file_hashes:
+        /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i: 9bb446a7af732154870b2839e66288d9133e28dfbbe8fe81423789728796a44c
+      data_model: ILP32
+      language: C
+      specification: CHECK( init(main()), LTL(G ! data-race) )
+  content:
+  - segment:
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i
+          line: 706
+          function: thr2
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/pthread-atomic/lamport-b.i
+          line: 680
+          function: thr1
