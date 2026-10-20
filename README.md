@@ -81,33 +81,51 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
 
 ## SV-COMP Smoketests in Docker
 
-1. Run the archive's smoke test as fm-tools' CI runs it before the archive can be registered (job
-   `smoke-test` of its `ci/.gitlab-ci.yml`):
+1. Check the archive in the two environments in which fm-tools' CI checks it before it can be
+   registered (`ci/.gitlab-ci.yml` of fm-tools):
    ```bash
-   make svcomp
+   make svcomp FMTOOLS_ENTRY=<path or URL of fm-tools' data/cooperace.yml>
    ```
-   This builds the archive, builds the image `cooperace-smoketest` from
-   [`scripts/sv-comp/Dockerfile`](scripts/sv-comp/Dockerfile) (Ubuntu 26.04 with the packages the CI job
-   and CoOpeRace's fm-tools entry install, and the unpacked archive in `/opt/cooperace`), and runs it as
-   root with `docker run --privileged`, which the CI's cgroup setup needs. In the container, the CI's
-   cgroup setup runs and then `./smoketest.sh`, which runs `./cooperace` directly: as root, BenchExec
-   makes each component's container without `runexec`. The output is streamed to your terminal, and
-   `make` returns non-zero if the check fails. `DOCKER_RUN_OPTIONS` passes further options to
-   `docker run`.
+   `FMTOOLS_ENTRY` defaults to the file on fm-tools' branch `cooperace-2027`.
+   [`scripts/sv-comp/fmtools-entry.py`](scripts/sv-comp/fmtools-entry.py) reads from it the version
+   that the SV-COMP 2027 participation names as `tool_version`, as the CI does, and that version's
+   `required_ubuntu_packages`; it fails if the version has `full_container_images`, for which the CI
+   checks no package. The archive is built with that version's name in its `VERSION`. Then two images
+   are built from [`scripts/sv-comp/Dockerfile`](scripts/sv-comp/Dockerfile) and run as root with
+   `docker run --privileged`, which the CI's cgroup setup needs:
+   - **Check 1, `cooperace-smoketest`**, the CI job `smoke-test`: `ubuntu:26.04` by digest, the
+     packages of the job's `before_script`, the version's `required_ubuntu_packages` installed with
+     `apt install -y` as `fm-weck smoke-test --gitlab-ci-mode` installs them, and `./smoketest.sh` in the
+     unpacked archive. `./smoketest.sh` runs `./cooperace` directly: as root, BenchExec makes each
+     component's container without `runexec`.
+   - **Check 2, `cooperace-smoketest-competition`**, the competition image `user:2027` by digest, in which
+     nothing is installed: `dpkg --get-selections <package> | grep install` must succeed for each required
+     package, as the CI job `check-installed-required-packages-2027` requires; then `./smoketest.sh`
+     runs directly, and its task runs with `./cooperace` under `runexec` with the competition's options
+     (`--read-only-dir / --hidden-dir /home --overlay-dir <archive> --set-cgroup-value pids.max=5000`,
+     900 s, 15 GB), which must print the same verdict and a witness. That `runexec` is the bundled
+     wheel's, at `/usr/bin/runexec`, the path to which BenchExec's AppArmor profile grants user
+     namespaces on a host that restricts them.
+
+   The CI's smoke test runs the archive of the version's DOI. Until that archive is uploaded, and
+   whenever the DOI's archive was built from another commit, the local `dist/cooperace.zip` stands in
+   for it; both checks print a line saying which archive they ran, with its `VERSION` and MD5 sum.
+   The output is streamed to your terminal, and `make` returns non-zero if a check fails.
+   `DOCKER_RUN_OPTIONS` passes further options to `docker run`, such as `--cpuset-cpus 8-11`.
 
    The archive is built from the commit `HEAD` (`scripts/svcomp-dist.sh`), which must have no uncommitted
    changes to tracked files; `ALLOW_DIRTY=1` builds a development archive from the working tree instead,
-   and such an archive must never be submitted. Set `FMTOOLS_VERSION` to the version name that the fm-tools
-   entry will list, as in `FMTOOLS_VERSION=svcomp27 make svcomp`. The archive's file `VERSION` holds that
-   name and `git describe --always --dirty`, and `./cooperace --version` prints them.
+   and such an archive must never be submitted. The archive's file `VERSION` holds the version name and
+   `git describe --always --dirty`, and `./cooperace --version` prints them.
 
-2. To work in that container, start a shell in it and run the CI's steps by hand:
+2. To work in the CI image, start a shell in it and run the CI's steps by hand:
    ```bash
    docker run --rm -it --privileged --platform linux/amd64 cooperace-smoketest /bin/bash
    ci-smoke-test
    ```
    `ci-smoke-test` sets up the cgroups and runs `./smoketest.sh` in `/opt/cooperace`; afterwards
-   `./cooperace` can be run there by hand.
+   `./cooperace` can be run there by hand. In the competition image, start the shell with
+   `--tmpfs /opt/cooperace:exec` and run `competition-check`.
 
 If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
 `docker builder prune --all --force`.
