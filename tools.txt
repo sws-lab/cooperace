@@ -1,5 +1,5 @@
 goblint: 10.5281/zenodo.23361000
 dartagnan: 10.5281/zenodo.23263361
 sv-sanitizers: 10.5281/zenodo.23342909
-deagle: 10.5281/zenodo.23462830
+deagle: 10.5281/zenodo.23488039
 ugemcutter: 10.5281/zenodo.23295738
