@@ -112,7 +112,8 @@ def test_witness_files_under_matches_the_name_pattern(tmp_path):
 
 def test_witness_options_put_the_run_directory_into_the_options():
     assert components.witness_options(witness_of("Goblint"), "/w") == [
-        "--set", "witness.yaml.path", "/w/witness.yml"]
+        "--set", "witness.yaml.path", "/w/witness.yml",
+        "--set", "witness.yaml.entry-types", '["ghost_instrumentation"]']
     assert components.witness_options(witness_of("ULTIMATE Taipan"), "/w") == ["--witness-dir", "/w"]
     assert components.witness_options(witness_of("Dartagnan"), "/w") == []
     assert components.witness_options(witness_of("Unlisted"), "/w") == []
