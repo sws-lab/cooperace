@@ -1,5 +1,20 @@
 {
     "properties": {
+        "no-data-race": {
+            "phases":    [["sv-sanitizers"]],
+            "answers":   [["sv-sanitizers"]],
+            "witnesses": ["sv-sanitizers"]
+        },
+        "unreach-call": {
+            "phases":    [["sv-sanitizers"]],
+            "answers":   [["sv-sanitizers"]],
+            "witnesses": ["sv-sanitizers"]
+        },
+        "no-overflow": {
+            "phases":    [["sv-sanitizers"]],
+            "answers":   [["sv-sanitizers"]],
+            "witnesses": ["sv-sanitizers"]
+        },
         "valid-memsafety": {
             "phases":    [["sv-sanitizers"]],
             "answers":   [["sv-sanitizers"]],

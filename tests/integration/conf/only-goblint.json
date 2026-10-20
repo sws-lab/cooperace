@@ -14,6 +14,11 @@
             "phases":    [["Goblint"]],
             "answers":   [["Goblint"]],
             "witnesses": ["Goblint"]
+        },
+        "valid-memsafety": {
+            "phases":    [["Goblint"]],
+            "answers":   [["Goblint"]],
+            "witnesses": ["Goblint"]
         }
     }
 }

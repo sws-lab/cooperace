@@ -9,6 +9,16 @@
             "phases":    [["Dartagnan"]],
             "answers":   [["Dartagnan"]],
             "witnesses": ["Dartagnan"]
+        },
+        "no-overflow": {
+            "phases":    [["Dartagnan"]],
+            "answers":   [["Dartagnan"]],
+            "witnesses": ["Dartagnan"]
+        },
+        "valid-memsafety": {
+            "phases":    [["Dartagnan"]],
+            "answers":   [["Dartagnan"]],
+            "witnesses": ["Dartagnan"]
         }
     }
 }

@@ -1,11 +1,11 @@
 {
     "properties": {
         "no-data-race": {
-            "phases":        [["Goblint"], ["Dartagnan", "ULTIMATE Automizer"]],
+            "phases":        [["Goblint"], ["Dartagnan"]],
             "cpuTimeLimits": {"Goblint": 1},
-            "memoryLimits":  {"ULTIMATE Automizer": "70%"},
-            "answers":       [["Goblint:true"], ["Dartagnan"], ["ULTIMATE Automizer"]],
-            "witnesses":     ["Dartagnan", "ULTIMATE Automizer"]
+            "memoryLimits":  {"Dartagnan": "70%"},
+            "answers":       [["Goblint:true"], ["Dartagnan"]],
+            "witnesses":     ["Dartagnan"]
         }
     }
 }

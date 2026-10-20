@@ -71,7 +71,7 @@ def test_components_alone_run_under_the_bundled_wheel(tmp_path, monkeypatch):
     runs = {"alone-goblint": dict(kind="alone", tasks=[task], options=[]),
             "only-goblint": dict(kind="only", tasks=[task], conf=cdir / "conf" / "only-goblint.json")}
     monkeypatch.setattr(run, "write_definition", lambda *args, **kwargs: None)
-    args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
+    args = SimpleNamespace(timelimit=100, walltimelimit=150, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
                            cooperace_option=[], benchexec_args="")
 
     run.verify(args, runs, cdir, tmp_path / "out")
@@ -92,7 +92,7 @@ def test_cooperace_options_and_benchexec_args_reach_the_cooperace_runs(tmp_path,
     monkeypatch.setattr(run, "write_definition",
                         lambda path, module, options, *args, **kwargs: definitions.append(options))
     runs = {"svcomp27": dict(kind="config", tasks=[{"id": "t"}], conf=cdir / "conf" / "svcomp27.json")}
-    args = SimpleNamespace(timelimit=100, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
+    args = SimpleNamespace(timelimit=100, walltimelimit=150, memlimit="4GB", cores=2, parallel=1, allowed_cores=None,
                            cooperace_option=["--arch", "LP64"],
                            benchexec_args="--read-only-dir / --overlay-dir ./ --hidden-dir /home/")
 
@@ -211,7 +211,7 @@ def test_cooperace_s_witness_is_the_one_at_the_top_of_its_result_files(tmp_path)
         (tmp_path / rundef / "tools" / "dartagnan" / "output" / "witness.yml").write_text(YAML)
     results = {(rd, "t"): dict(verdict=False, files=tmp_path / rd) for rd in ("only-dartagnan", "alone-dartagnan")}
     runs = {"only-dartagnan": dict(kind="only"), "alone-dartagnan": dict(kind="alone")}
-    run.collect_witnesses(results, runs, YAML_FORMAT, tmp_path / "out")
+    run.collect_witnesses(results, runs, YAML_FORMAT, tmp_path / "out", [])
     assert results[("only-dartagnan", "t")]["witness"] is None
     collected = tmp_path / "out" / "witnesses" / "alone-dartagnan" / "t.yml" / "witness.yml"
     assert results[("alone-dartagnan", "t")]["witness"] == collected
@@ -303,12 +303,13 @@ def test_a_task_has_the_property_the_manifest_names_and_no_data_race_otherwise()
 def test_a_definition_has_one_block_per_property(tmp_path):
     tasks = [dict(yml=Path("/c/a.yml"), property="no-data-race"), dict(yml=Path("/c/b.yml"), property="unreach-call"),
              dict(yml=Path("/c/c.yml"), property="no-data-race")]
-    limits = dict(timelimit="1 s", hardtimelimit="2 s", memlimit="1 GB", cores="1")
+    limits = dict(timelimit="1 s", hardtimelimit="2 s", walltimelimit="3 s", memlimit="1 GB", cores="1")
 
     run.write_definition(tmp_path / "d.xml", "m", {"r": []}, limits, {"r": tasks}, result_files="**/*witness.*")
 
     text = (tmp_path / "d.xml").read_text()
     assert "<resultfiles>**/*witness.*</resultfiles>" in text
+    assert 'walltimelimit="3 s"' in text
     blocks = text.split("<tasks ")[1:]
     assert [b.split(">")[0] for b in blocks] == ['name="no-data-race"', 'name="unreach-call"']
     assert "/c/a.yml" in blocks[0] and "/c/c.yml" in blocks[0] and "no-data-race.prp" in blocks[0]
@@ -419,3 +420,163 @@ def test_check_7_reads_the_wall_time_limit_of_a_phase():
         "the wall-time limit of phase 1 is printed as 60 s, but the strategy gives 40"]
     assert run.wall_time_problems(run_def, [measured("SV-sanitizers", 46.0)]) == [
         "sv-sanitizers ran 46.0 s of wall time, past the 40 s of phase 1"]
+
+
+# --- check 8: the hand-over from phase 1 to phase 2 ---------------------------
+
+def measured_cpu(name, cpu):
+    return f"Tool name: {name} Measured: cputime={cpu:.2f}s walltime={cpu:.2f}s memory=1B terminationreason=cputime"
+
+
+HAND_OVER_TASK = dict(property="no-data-race", expected=False, id="t")
+
+
+def hand_over_output(sanitizers, *, goblint="unknown", answer="Dartagnan"):
+    """CoOpeRace's output on a no-data-race task of BASELINE: Goblint ends with
+    `goblint`, sv-sanitizers' block is `sanitizers`, and `answer` gives the
+    false in phase 2."""
+    lines = block("Goblint", goblint, goblint)
+    if goblint == "true":
+        lines += ["CoOpeRace answer: Goblint true, bracket 1"]
+    lines += sanitizers + block(answer, "false", "false")
+    return lines + [f"CoOpeRace answer: {answer} false, bracket 3, witness /w/witness.yml",
+                    f"CoOpeRace result from: {answer}", "CoOpeRace verdict: false"]
+
+
+def test_check_8_accepts_phase_1_reaching_its_cpu_time_limit():
+    lines = hand_over_output(block("SV-sanitizers", "TIMEOUT", "unknown") + [measured_cpu("SV-sanitizers", 30.8)])
+    assert run.hand_over_problems({"config": BASELINE}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  lines) == []
+
+
+def test_check_8_accepts_phase_1_stopped_at_its_wall_time_limit():
+    lines = hand_over_output(["CoOpeRace: the wall-time limit of phase 1, 40 s, has passed: stopping sv-sanitizers"]
+                             + block("SV-sanitizers", "stopped by CoOpeRace"))
+    assert run.hand_over_problems({"config": BASELINE}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  lines) == []
+
+
+def test_check_8_reports_phase_1_ending_early_or_answering():
+    gave_up = hand_over_output(block("SV-sanitizers", "unknown", "unknown") + [measured_cpu("SV-sanitizers", 0.3)])
+    assert run.hand_over_problems({"config": BASELINE}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  gave_up) == [
+        "no component of phase 1 only reached its CPU-time limit or the phase's wall-time limit: "
+        "sv-sanitizers unknown"]
+    answered = (block("SV-sanitizers", "false", "false")
+                + ["CoOpeRace answer: sv-sanitizers false, bracket 2, witness /w/witness.yml",
+                   "CoOpeRace result from: sv-sanitizers", "CoOpeRace verdict: false"])
+    assert run.hand_over_problems({"config": BASELINE}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  answered) == [
+        "phase 1 answered: sv-sanitizers false",
+        "sv-sanitizers, in phase 1 only, ended with false",
+        "no component of phase 1 only reached its CPU-time limit or the phase's wall-time limit: "
+        "sv-sanitizers false",
+        "the verdict is not from a component of phase 2 only (answered by sv-sanitizers)"]
+
+
+# --- check 9: a component of two consecutive phases is started once -------------
+
+def test_check_9_reports_a_component_of_two_phases_started_twice():
+    lines = (block("Goblint", "unknown", "unknown") + block("SV-sanitizers", "TIMEOUT", "unknown")
+             + block("Goblint", "unknown", "unknown") + block("Dartagnan", "false", "false")
+             + ["CoOpeRace answer: Dartagnan false, bracket 3, witness /w/witness.yml",
+                "CoOpeRace result from: Dartagnan", "CoOpeRace verdict: false"])
+    assert run.stop_problems({"config": BASELINE}, lines) == ["Goblint, in phases 1 and 2, was started 2 times"]
+
+
+def test_check_9_notes_a_component_running_once_across_a_hand_over():
+    lines = hand_over_output(block("SV-sanitizers", "TIMEOUT", "unknown"))
+    assert run.stop_problems({"config": BASELINE}, lines) == []
+    assert run.shared_across({"config": BASELINE}, lines, "no-data-race") == (
+        "Goblint ran once across phases 1 and 2 (Dartagnan started in phase 2)")
+    assert run.shared_across({"config": GOBLINT_1S}, lines, "no-data-race") == ""
+
+
+# --- witnesses of a true, validation and the components chosen -------------------
+
+def test_a_validator_confirms_a_violation_witness_by_false_and_a_correctness_witness_by_true():
+    answered = {"false": False, "true": True, "unknown": None}
+    for verdict, kind, outcome in [("false", "violation", "confirmed"), ("true", "violation", "rejected"),
+                                   ("true", "correctness", "confirmed"), ("false", "correctness", "rejected"),
+                                   ("unknown", "correctness", "unknown")]:
+        r = dict(status=verdict, verdict=answered[verdict], cpu=1.0)
+        assert run.validation_of(r, kind)["verdict"] == outcome
+
+
+def test_a_task_names_a_validator_of_its_verdict_s_kind():
+    assert run.validator_spec(YAML_FORMAT, "ugemcutter-correctness", "correctness", "yaml-2.2")["kind"] == "correctness"
+    with pytest.raises(run.CouldNotRun, match="checks violation witnesses"):
+        run.validator_spec(YAML_FORMAT, "theta", "correctness", "yaml-2.2")
+    with pytest.raises(run.CouldNotRun, match="does not have"):
+        run.validator_spec(YAML_FORMAT, "nobody", "violation", "yaml-2.2")
+
+
+def test_the_witness_of_a_true_is_collected_where_one_can_count(tmp_path):
+    tasks = [dict(id="u", property="unreach-call"), dict(id="d", property="no-data-race")]
+    results = {}
+    for task in ("u", "d"):
+        (tmp_path / task).mkdir()
+        (tmp_path / task / "witness.yml").write_text("- entry_type: invariant_set\n")
+        results[("svcomp27", task)] = dict(verdict=True, files=tmp_path / task)
+    run.collect_witnesses(results, {"svcomp27": dict(kind="production")}, YAML_FORMAT, tmp_path / "out", tasks)
+    assert results[("svcomp27", "u")]["witness_kind"] == "correctness"
+    assert results[("svcomp27", "d")]["witness"] is None
+
+
+def test_a_true_witness_needs_its_validator_and_the_correctness_linter(tmp_path):
+    witness = tmp_path / "witness.yml"
+    witness.write_text("- entry_type: invariant_set\n  metadata:\n    producer:\n      name: ULTIMATE GemCutter\n")
+    t = dict(property="unreach-call", validator="ugemcutter-correctness")
+    r = dict(verdict=True, witness=witness, witness_kind="correctness", log=tmp_path / "log",
+             validation=dict(verdict="confirmed", status="true"), lint="done")
+    only = dict(kind="only", component="ugemcutter")
+    assert run.witness_problems(r, only, t, YAML_FORMAT) == []
+    r.update(validation=None, lint="ERROR (invalid witness syntax)")
+    assert run.witness_problems(r, only, t, YAML_FORMAT) == [
+        "ugemcutter-correctness does not confirm it: not validated",
+        "witnesslint-correctness does not accept it: ERROR (invalid witness syntax)"]
+    assert run.witness_problems(dict(verdict=True), only, t, YAML_FORMAT) == ["no witness.yml delivered"]
+    assert run.witness_problems(dict(verdict=True), only, dict(t, property="valid-memsafety"), YAML_FORMAT) == []
+
+
+def test_the_components_are_those_of_the_production_confs_unless_chosen():
+    assert run.chosen_components(None, [BASELINE]) == ["goblint", "dartagnan", "sv-sanitizers"]
+    assert run.chosen_components("all", [BASELINE]) == list(run.COMPONENTS)
+    assert run.chosen_components("uautomizer,iekke", [BASELINE]) == ["uautomizer", "iekke"]
+
+
+# --- running the calls of a stage at the same time ------------------------------
+
+def test_a_stage_shares_its_runs_at_a_time_by_the_number_of_runs():
+    assert run.share_slots([1, 40, 3], 7) == [1, 5, 1]
+    assert run.share_slots([2, 2], 7) == [2, 2]
+    assert run.share_slots([5], 1) == [1]
+
+
+def test_a_stage_puts_its_calls_in_lanes_by_their_runs():
+    assert run.lanes_of([3, 43, 7, 6, 5, 2], 3) == [[1], [2, 0, 5], [3, 4]]
+    assert run.lanes_of([1], 3) == [[0]]
+
+
+def test_a_stage_with_jobs_runs_its_lanes_at_once_on_disjoint_cores(tmp_path, monkeypatch):
+    started = []
+
+    class FakeProcess:
+        returncode = 0
+
+        def __init__(self, cmd, **kwargs):
+            started.append(cmd)
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(run.subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(run.os, "sched_getaffinity", lambda pid: set(range(16)))
+    args = SimpleNamespace(jobs=8, cores=2, allowed_cores=None, benchexec_args="")
+    stage = run.Stage(args)
+    for name, runs in (("a", 1), ("b", 10), ("c", 1)):
+        stage.add(tmp_path / f"{name}.xml", tmp_path, tmp_path, tmp_path / "out", name, runs)
+    stage.run()
+    by_name = {cmd[cmd.index("--name") + 1]: (cmd[cmd.index("--allowedCores") + 1], cmd[cmd.index("-N") + 1])
+               for cmd in started}
+    assert by_name == {"b": ("0,1,2,3,4,5", "3"), "a": ("6,7", "1"), "c": ("6,7", "1")}

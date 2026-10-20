@@ -1,6 +1,16 @@
 {
     "properties": {
+        "no-data-race": {
+            "phases":    [["Deagle"]],
+            "answers":   [["Deagle"]],
+            "witnesses": ["Deagle"]
+        },
         "unreach-call": {
+            "phases":    [["Deagle"]],
+            "answers":   [["Deagle"]],
+            "witnesses": ["Deagle"]
+        },
+        "no-overflow": {
             "phases":    [["Deagle"]],
             "answers":   [["Deagle"]],
             "witnesses": ["Deagle"]

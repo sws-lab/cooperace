@@ -63,8 +63,8 @@ recorded in DIR/meta.json by `run`, and ignore the options that choose them.
 
     run.py [run] [--out DIR] [--cooperace-dir DIR] [--validators DIR]
                  [--config conf/x.json ...] [--components goblint,dartagnan,...]
-                 [--tasks SUBSTRING ...] [--allowed-cores 14,15] [-N 1]
-                 [--cores 2] [--memlimit 4GB] [--timelimit 100]
+                 [--tasks SUBSTRING ...] [-j 14 | -N 1] [--allowed-cores 14,15]
+                 [--cores 2] [--memlimit "1 GB"] [--timelimit 90] [--walltimelimit 120]
                  [--no-validation] [--cross] [--witness-format yaml-2.2]
                  [--cooperace-option OPT ...] [--benchexec-args "ARGS"]
     run.py validate --out DIR         # validate and check the verification runs in DIR
@@ -84,6 +84,8 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from xml.sax.saxutils import escape, quoteattr
@@ -122,20 +124,25 @@ TOOL_DIRS = {
 
 # Witness formats.  A format names the file a verifier writes (collected from
 # the verification run's result files), the validators that read it, the
-# linter that checks its syntax (None if there is none), and how to read the
-# producer out of it.  Per validator and linter: directory under the
-# validators directory (as scripts/download-validators.py names it), BenchExec
-# tool-info module, the options in front of the witness option, and the name
-# of the option that takes the witness.  The manifest names, per task, a
-# validator of the chosen format.
+# linters that check its syntax, one per kind of witness (none if there is
+# none), and how to read the producer out of it.  Per validator and linter:
+# directory under the validators directory (as scripts/download-validators.py
+# names it), BenchExec tool-info module, the options in front of the witness
+# option, the name of the option that takes the witness, and the kind of
+# witness it checks: "violation" (of a `false`; the validator confirms it by
+# answering false) or "correctness" (of a `true`; confirmed by answering
+# true).  The manifest names, per task, a validator of the chosen format, of
+# the kind of the task's expected verdict.
 #
-# yaml-2.2 is what SV-COMP 2027 requires for no-data-race (a violation witness
-# in YAML format 2.2 in witness.yml).  Its validators and linter are the
-# versions proposed for the track "Validation of Violation Witnesses v2"
-# (fm-tools merge requests !1172, !1196, !1198 and !1173, open on
-# 2026-10-17), with the `benchexec_toolinfo_options` of those versions.
-# graphml-1.0 is what SV-COMP 2026 validated, with the options of the
-# validators' bench-defs definitions `*-validate-violation-witnesses-v1.xml`
+# yaml-2.2 is what SV-COMP 2027 requires (a violation witness in YAML format
+# 2.2, or a correctness witness in format 2.1 or higher, in witness.yml).  Its
+# validators and linter are the versions of the tracks "Validation of
+# Violation Witnesses v2" and "Validation of Correctness Witnesses v2" in
+# fm-tools (ULTIMATE Automizer !1172, Theta !1196, ConcurrentWitness2Test
+# !1198 and WitnessLint !1173, open on 2026-10-17; ULTIMATE GemCutter
+# svcomp27-correctness), with the `benchexec_toolinfo_options` of those
+# versions.  graphml-1.0 is what SV-COMP 2026 validated, with the options of
+# the validators' bench-defs definitions `*-validate-violation-witnesses-v1.xml`
 # at tag svcomp26.
 def graphml_producer(witness):
     """The `producer` named in a graphml witness, or None."""
@@ -167,36 +174,51 @@ WITNESS_FORMATS = {
         file="witness.yml",
         producer=yaml_producer,
         validators={
-            "uautomizer": dict(dir="uautomizer-svcomp27-violation",
+            "uautomizer": dict(dir="uautomizer-svcomp27-violation", kind="violation",
                                module="benchexec.tools.ultimateautomizer",
                                options=["--full-output", "--witness-type", "violation_witness"],
                                witness_option="--validate"),
-            "theta": dict(dir="theta-svcomp27-validator",
+            "theta": dict(dir="theta-svcomp27-validator", kind="violation",
                           module="benchexec.tools.theta",
                           options=["--svcomp", "--portfolio", "STABLE", "--loglevel", "RESULT"],
                           witness_option="--witness"),
-            "concurrentwitness2test": dict(dir="concurrentwitness2test-svcomp27",
+            "concurrentwitness2test": dict(dir="concurrentwitness2test-svcomp27", kind="violation",
                                            module="benchexec.tools.concurrentwitness2test",
                                            options=[], witness_option="--witness"),
+            "uautomizer-correctness": dict(dir="uautomizer-svcomp27-correctness", kind="correctness",
+                                           module="benchexec.tools.ultimateautomizer",
+                                           options=["--full-output", "--witness-type", "correctness_witness"],
+                                           witness_option="--validate"),
+            "ugemcutter-correctness": dict(dir="ugemcutter-svcomp27-correctness", kind="correctness",
+                                           module="benchexec.tools.ultimategemcutter",
+                                           options=["--full-output", "--witness-type", "correctness_witness"],
+                                           witness_option="--validate"),
         },
-        linter=dict(name="witnesslint", dir="witnesslint-2.3-violation-witnesses-v2",
-                    module="benchexec.tools.witnesslint",
-                    options=["--expectViolationWitness", "--ignoreSelfLoops",
-                             "--expectedWitnessVersion", "2"],
-                    witness_option="--witness")),
+        linters={
+            "violation": dict(name="witnesslint-violation", dir="witnesslint-2.3-violation-witnesses-v2",
+                              module="benchexec.tools.witnesslint",
+                              options=["--expectViolationWitness", "--ignoreSelfLoops",
+                                       "--expectedWitnessVersion", "2"],
+                              witness_option="--witness"),
+            "correctness": dict(name="witnesslint-correctness", dir="witnesslint-2.3-correctness-witnesses-v2",
+                                module="benchexec.tools.witnesslint",
+                                options=["--expectCorrectnessWitness", "--ignoreSelfLoops",
+                                         "--expectedWitnessVersion", "2"],
+                                witness_option="--witness"),
+        }),
     "graphml-1.0": dict(
         file="witness.graphml",
         producer=graphml_producer,
-        linter=None,
+        linters={},
         validators={
-            "dartagnan": dict(dir="dartagnan-svcomp26-validation",
+            "dartagnan": dict(dir="dartagnan-svcomp26-validation", kind="violation",
                               module="benchexec.tools.dartagnan",
                               options=[], witness_option="-witness"),
-            "uautomizer": dict(dir="uautomizer-svcomp26-violation",
+            "uautomizer": dict(dir="uautomizer-svcomp26-violation", kind="violation",
                                module="benchexec.tools.ultimateautomizer",
                                options=["--full-output", "--witness-type", "violation_witness"],
                                witness_option="--validate"),
-            "cpachecker": dict(dir="cpachecker-4.2.2-validation-violation",
+            "cpachecker": dict(dir="cpachecker-4.2.2-validation-violation", kind="violation",
                                module="benchexec.tools.cpachecker",
                                options=["--violation-witness-validation", "--heap", "5000m",
                                         "--benchmark",
@@ -211,7 +233,7 @@ WITNESS_FORMATS = {
                                witness_option="--witness"),
         }),
 }
-VALIDATION_LIMITS = dict(timelimit="90 s", hardtimelimit="120 s", cores="2")
+VALIDATION_LIMITS = dict(timelimit="90 s", hardtimelimit="120 s", walltimelimit="120 s", cores="2")
 
 # The data model of an SV-COMP task whose .yml names none.
 DEFAULT_DATA_MODEL = "ILP32"
@@ -290,6 +312,7 @@ def write_definition(path, tool, rundefs, limits, tasks_of, bench_options=(), re
              ' "https://www.sosy-lab.org/benchexec/benchmark-2.3.dtd">',
              f'<benchmark tool={quoteattr(tool)} timelimit={quoteattr(limits["timelimit"])}'
              f' hardtimelimit={quoteattr(limits["hardtimelimit"])}'
+             f' walltimelimit={quoteattr(limits["walltimelimit"])}'
              f' memlimit={quoteattr(limits["memlimit"])} cpuCores={quoteattr(limits["cores"])}>',
              f"  <resultfiles>{escape(result_files)}</resultfiles>"]
     lines += [option_xml(o, v, "  ") for o, v in bench_options]
@@ -379,16 +402,23 @@ def benchexec_environment(wheel=None):
     return env
 
 
+def benchexec_command(definition, tool_directory, out_dir, name, args, parallel, allowed_cores):
+    """The `benchexec` command line for `definition`, writing its results to
+    `out_dir` under `name`, `parallel` runs at a time on `allowed_cores` (a
+    comma-separated list, or None to let BenchExec choose)."""
+    cmd = ["benchexec", "--tool-directory", str(tool_directory), "-N", str(parallel),
+           "--no-compress-results", "--name", name, "-o", str(out_dir) + os.sep]
+    if allowed_cores:
+        cmd += ["--allowedCores", allowed_cores]
+    return cmd + shlex.split(args.benchexec_args) + [str(definition)]
+
+
 def run_benchexec(definition, workdir, tool_directory, out_dir, name, args, wheel=None):
     """Run `benchexec` on `definition` with `workdir` as the working directory,
-    with `wheel` (see benchexec_environment) as its BenchExec if given."""
+    with `wheel` (see benchexec_environment) as its BenchExec if given, -N
+    and --allowedCores as `args` give them."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = ["benchexec", "--tool-directory", str(tool_directory), "-N", str(args.parallel),
-           "--no-compress-results", "--name", name, "-o", str(out_dir) + os.sep]
-    if args.allowed_cores:
-        cmd += ["--allowedCores", args.allowed_cores]
-    cmd += shlex.split(args.benchexec_args)
-    cmd.append(str(definition))
+    cmd = benchexec_command(definition, tool_directory, out_dir, name, args, args.parallel, args.allowed_cores)
     prefix = f"PYTHONPATH={shlex.quote(str(wheel))} " if wheel is not None else ""
     print("+ (cd", workdir, "&&", prefix + " ".join(shlex.quote(c) for c in cmd), ")", flush=True)
     with open(out_dir / f"{name}.stdout.txt", "w") as log:
@@ -398,8 +428,98 @@ def run_benchexec(definition, workdir, tool_directory, out_dir, name, args, whee
         raise CouldNotRun(f"benchexec exited with {proc.returncode}; see {out_dir}/{name}.stdout.txt")
 
 
+def share_slots(runs, slots):
+    """How many runs at a time each of several lanes of benchexec calls
+    gets, with `runs` the number of runs of each lane and `slots` the runs
+    the suite may have at a time: at least one each, the rest one by one to
+    the lane with the most runs per slot, while it has runs left for it.
+    Assumes len(runs) <= slots."""
+    share = [1] * len(runs)
+    for _ in range(slots - len(runs)):
+        i = max(range(len(runs)), key=lambda k: runs[k] / share[k])
+        if runs[i] <= share[i]:
+            break
+        share[i] += 1
+    return share
+
+
+def lanes_of(runs, count):
+    """The calls, by index into `runs` (the number of runs of each call), in
+    `count` lanes whose calls run one after the other: the calls with most
+    runs first, each to the lane with the fewest runs so far."""
+    lanes = [[] for _ in range(count)]
+    for i in sorted(range(len(runs)), key=lambda k: -runs[k]):
+        min(lanes, key=lambda lane: sum(runs[k] for k in lane)).append(i)
+    return [lane for lane in lanes if lane]
+
+
+class Stage:
+    """The benchexec calls of one stage of the suite (verification,
+    validation, linting), which do not depend on each other.  Without
+    --jobs they run one after the other as run_benchexec runs them.  With
+    --jobs CORES the suite may have S = CORES // --cores runs at a time, on
+    the first CORES of the cores this process may use (or of
+    --allowed-cores).  The calls are put in at most S // 2 lanes (lanes_of)
+    that run at the same time, each on its own cores and with a share of the
+    S runs at a time by its number of runs (share_slots); the calls of a lane
+    run one after the other, and BenchExec places each run on its lane's
+    cores."""
+
+    def __init__(self, args):
+        self.args, self.calls = args, []
+
+    def add(self, definition, workdir, tool_directory, out_dir, name, runs, wheel=None):
+        self.calls.append(dict(definition=definition, workdir=workdir, tool_directory=tool_directory,
+                               out_dir=out_dir, name=name, runs=runs, wheel=wheel))
+
+    def run(self):
+        args, calls = self.args, self.calls
+        self.calls = []
+        if getattr(args, "jobs", None) is None:
+            for c in calls:
+                run_benchexec(c["definition"], c["workdir"], c["tool_directory"], c["out_dir"], c["name"],
+                              args, wheel=c["wheel"])
+            return
+        if not calls:
+            return
+        pool = ([int(x) for x in args.allowed_cores.split(",")] if args.allowed_cores
+                else sorted(os.sched_getaffinity(0)))[:args.jobs]
+        slots = max(1, len(pool) // args.cores)
+        runs = [c["runs"] for c in calls]
+        lanes = lanes_of(runs, max(1, min(len(calls), slots // 2)))
+        share = share_slots([sum(runs[k] for k in lane) for lane in lanes], slots)
+        threads, failed, offset = [], [], 0
+        for lane, n in zip(lanes, share, strict=True):
+            cores = ",".join(map(str, pool[offset:offset + n * args.cores]))
+            offset += n * args.cores
+            threads.append(threading.Thread(target=self.run_lane, args=([calls[k] for k in lane], n, cores, failed)))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        if failed:
+            raise CouldNotRun("; ".join(failed))
+
+    def run_lane(self, calls, parallel, cores, failed):
+        """Run `calls` one after the other, `parallel` runs at a time on
+        `cores`; append a message to `failed` for each that fails."""
+        for c in calls:
+            c["out_dir"].mkdir(parents=True, exist_ok=True)
+            cmd = benchexec_command(c["definition"], c["tool_directory"], c["out_dir"], c["name"], self.args,
+                                    parallel, cores)
+            prefix = f"PYTHONPATH={shlex.quote(str(c['wheel']))} " if c["wheel"] is not None else ""
+            print("+ (cd", c["workdir"], "&&", prefix + " ".join(shlex.quote(x) for x in cmd), ")", flush=True)
+            with open(c["out_dir"] / f"{c['name']}.stdout.txt", "w") as log:
+                proc = subprocess.Popen(cmd, cwd=c["workdir"], env=benchexec_environment(c["wheel"]),
+                                        stdout=log, stderr=subprocess.STDOUT)
+                if proc.wait() != 0:
+                    failed.append(f"benchexec exited with {proc.returncode}; see {c['out_dir']}/{c['name']}.stdout.txt")
+
+
 def read_results(out_dir):
-    """{(run definition, task id): dict} of every result XML in out_dir."""
+    """{(run definition, task id): dict} of every result XML in out_dir; the
+    dict's `benchmark` is the name the XML was written under (run_benchexec's
+    `name`)."""
     results = {}
     for xml in sorted(glob.glob(str(out_dir / "*.results.*.xml*"))):
         if xml.endswith(".txt"):
@@ -420,6 +540,7 @@ def read_results(out_dir):
                 memory=int((cols.get("memory") or "0B").rstrip("B")),
                 reason=cols.get("terminationreason"),
                 memlimit=int(memlimit.rstrip("B")) if memlimit else None,
+                benchmark=Path(xml).name.split(".", 1)[0],
                 log=logs / f"{rundef}.{task}.yml.log",
                 files=files / rundef / f"{task}.yml")
     return results
@@ -462,6 +583,19 @@ def read_conf(path):
         raise CouldNotRun(f"cannot read the configuration {path}: {e}") from e
 
 
+def chosen_components(option, confs):
+    """The components (keys of COMPONENTS) that `--components` chooses: the
+    comma-separated list `option`, "all" for every component, or, if
+    `option` is None, the components that the production configurations
+    `confs` name, which are the components of the archive."""
+    if option == "all":
+        return list(COMPONENTS)
+    if option is not None:
+        return [c for c in option.split(",") if c]
+    named = {TOOL_DIRS.get(n, n) for conf in confs for n in conf_components(conf)}
+    return [c for c in COMPONENTS if c in named]
+
+
 def plan(args):
     """The run definitions: alone-<c>, only-<c> for every component c, one per
     production configuration, and one per configuration of the suite
@@ -474,8 +608,9 @@ def plan(args):
     manifest, tasks = load_tasks(args.tasks)
     regular = [t for t in tasks if not t.get("configurations")]
     cdir = Path(args.cooperace_dir).resolve()
-    present = [c for c in COMPONENTS if (cdir / "tools" / c).is_dir()
-               and c in args.components.split(",")]
+    configs = args.config or [cdir / "conf" / "svcomp27.json"]
+    wanted = chosen_components(args.components, [read_conf(Path(p).resolve()) for p in configs])
+    present = [c for c in COMPONENTS if (cdir / "tools" / c).is_dir() and c in wanted]
     runs, skipped = {}, {}
     for c in present:
         own = [t for t in regular if c in t["owners"]] if not args.cross else regular
@@ -485,15 +620,13 @@ def plan(args):
             conf = HERE / "conf" / f"only-{c}.json"
             runs[f"only-{c}"] = dict(kind="only", component=c, tasks=own,
                                      conf=conf, config=read_conf(conf))
-    for c in args.components.split(","):
+    for c in wanted:
         if c not in present:
             skipped[c] = f"tools/{c} is not installed"
-    configs = args.config or [cdir / "conf" / "svcomp27.json"]
-    production = [(Path(p).stem, Path(p), "production", regular, []) for p in configs]
-    suite = [(name, HERE / entry["conf"], "suite",
-              [t for t in tasks if name in t.get("configurations", ())], entry.get("checks", []))
+    production = [(Path(p).stem, Path(p), "production", regular) for p in configs]
+    suite = [(name, HERE / entry["conf"], "suite", [t for t in tasks if name in t.get("configurations", ())])
              for name, entry in manifest.get("configurations", {}).items()]
-    for name, path, kind, its_tasks, checks in production + suite:
+    for name, path, kind, its_tasks in production + suite:
         if not its_tasks:
             continue
         path = path.resolve()
@@ -512,7 +645,7 @@ def plan(args):
                     + ": the conf has no entry for the expected verdict of any owner")
             if not its_tasks:
                 continue
-        runs[name] = dict(kind=kind, conf=path, config=conf, tasks=its_tasks, checks=checks)
+        runs[name] = dict(kind=kind, conf=path, config=conf, tasks=its_tasks)
     return manifest, tasks, runs, skipped, cdir
 
 
@@ -537,7 +670,6 @@ def plan_from_meta(meta):
                        else HERE / "conf" / f"{name}.json")
             run["conf"] = Path(r.get("conf", default))
             run["config"] = r["config"] if "config" in r else read_conf(run["conf"])
-            run["checks"] = manifest.get("configurations", {}).get(name, {}).get("checks", [])
         runs[name] = run
     ids = {t["id"] for r in runs.values() for t in r["tasks"]}
     tasks = [t for t in all_tasks if t["id"] in ids]
@@ -581,10 +713,12 @@ def verify(args, runs, cdir, out):
     the BenchExec of `cdir`'s lib/ wheel, the one whose tool-info modules
     CoOpeRace uses; the other benchmarks use the installed BenchExec."""
     limits = dict(timelimit=f"{args.timelimit} s", hardtimelimit=f"{int(args.timelimit * 1.25)} s",
+                  walltimelimit=f"{args.walltimelimit} s",
                   memlimit=args.memlimit, cores=str(args.cores))
     vdir = out / "verify"
     shutil.rmtree(vdir, ignore_errors=True)
     (out / "defs").mkdir(parents=True, exist_ok=True)
+    stage = Stage(args)
     for c, comp in COMPONENTS.items():
         name = f"alone-{c}"
         if name not in runs:
@@ -594,8 +728,8 @@ def verify(args, runs, cdir, out):
         # A component alone may name its witness otherwise (Deagle: error-witness.yml)
         write_definition(definition, comp["module"], {name: option_pairs(runs[name]["options"])},
                          limits, {name: runs[name]["tasks"]}, result_files="**/*witness.*")
-        run_benchexec(definition, tool_dir, tool_dir, vdir, name, args,
-                      wheel=bundled_benchexec(cdir))
+        stage.add(definition, tool_dir, tool_dir, vdir, name, len(runs[name]["tasks"]),
+                  wheel=bundled_benchexec(cdir))
     coop = {n: r for n, r in runs.items() if r["kind"] != "alone"}
     if coop:
         definition = out / "defs" / "cooperace.xml"
@@ -604,20 +738,33 @@ def verify(args, runs, cdir, out):
                           for n, r in coop.items()},
                          limits, {n: r["tasks"] for n, r in coop.items()})
         # ./cooperace looks for tools/ in its working directory.
-        run_benchexec(definition, cdir, cdir, vdir, "cooperace", args)
+        stage.add(definition, cdir, cdir, vdir, "cooperace", sum(len(r["tasks"]) for r in coop.values()))
+    stage.run()
 
 
-def collect_witnesses(results, runs, fmt, out):
+def collect_witnesses(results, runs, fmt, out, tasks):
     """Copy the witness file of the format (fmt["file"]) of every run with a
-    `false` verdict from the verification run's result files to
-    out/witnesses/<run definition>/<task>/.  For CoOpeRace that is the file
-    at the top of the result files, where CoOpeRace delivers it; a component
-    run alone may write it into a directory of its own (Dartagnan's
-    output/) and under a name that ends in the format's (Deagle's
-    error-witness.yml), so for such a run it is the first such file anywhere
-    in the result files."""
+    `false` verdict, and of every run with a `true` verdict on a property for
+    which the witness table has a cell for `true` (unreach-call,
+    no-overflow; YAML only), from the verification run's result files to
+    out/witnesses/<run definition>/<task>/, and record its kind as the run's
+    `witness_kind` ("violation" or "correctness").  For CoOpeRace the file is
+    the one at the top of the result files, where CoOpeRace delivers it; a
+    component run alone may write it into a directory of its own
+    (Dartagnan's output/) and under a name that ends in the format's
+    (Deagle's error-witness.yml), so for such a run it is the first such file
+    anywhere in the result files."""
+    by_id = {t["id"]: t for t in tasks}
     for (rundef, task), r in results.items():
         r["witness"] = None
+        t = by_id.get(task)
+        if r["verdict"] is False:
+            kind = "violation"
+        elif (r["verdict"] is True and t is not None and fmt["file"] == "witness.yml"
+              and accepted_versions(t["property"], "true") is not None):
+            kind = "correctness"
+        else:
+            continue
         top = r["files"] / fmt["file"]
         if top.is_file():
             src = top
@@ -625,29 +772,47 @@ def collect_witnesses(results, runs, fmt, out):
             src = next(iter(sorted(r["files"].rglob("*" + fmt["file"]))), None)
         else:
             src = None
-        if r["verdict"] is False and src:
+        if src:
             # BenchExec's ${taskdef_name} is the task file's name, with .yml
             dst = out / "witnesses" / rundef / f"{task}.yml" / fmt["file"]
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(src, dst)
-            r["witness"] = dst
+            r["witness"], r["witness_kind"] = dst, kind
 
 
 # ----------------------------------------------------------- validators
 
-def validation_of(r):
-    """The outcome of a validator's or linter's BenchExec run `r`, as stored
-    in a verification run's results."""
-    return dict(status=r["status"], cpu=r["cpu"],
-                verdict="confirmed" if r["verdict"] is False else
-                        "rejected" if r["verdict"] is True else "unknown")
+def validation_of(r, kind):
+    """The outcome of a validator's or linter's BenchExec run `r` on a witness
+    of `kind` ("violation" or "correctness"), as stored in a verification
+    run's results: a validator confirms a violation witness by answering
+    false and a correctness witness by answering true."""
+    confirming = False if kind == "violation" else True
+    return dict(status=r["status"], cpu=r["cpu"], kind=kind,
+                verdict="confirmed" if r["verdict"] is confirming else
+                        "rejected" if r["verdict"] is (not confirming) else "unknown")
+
+
+def validator_spec(fmt, name, kind, witness_format):
+    """The validator `name` of the witness format `fmt`, which must check
+    witnesses of `kind`; raises CouldNotRun if the format has no such
+    validator or it checks the other kind."""
+    spec = fmt["validators"].get(name)
+    if spec is None:
+        raise CouldNotRun(f"manifest.json names the validator {name}, which the witness format "
+                          f"{witness_format} does not have")
+    if spec["kind"] != kind:
+        raise CouldNotRun(f"manifest.json names the validator {name}, which checks {spec['kind']} "
+                          f"witnesses, for a task whose verdict needs a {kind} witness")
+    return spec
 
 
 def validate(args, results, tasks, out):
-    """Run the validator named in the manifest on every `false` witness of a
-    run whose task is expected `false`, one BenchExec benchmark per validator,
-    reading the witness from the collected witnesses; then run the format's
-    linter, if it has one, on every collected witness (lint)."""
+    """Run the validator named in the manifest on the witness of every run
+    whose verdict is the task's expected one, one BenchExec benchmark per
+    validator, reading the witness from the collected witnesses: a violation
+    validator on a `false`, a correctness validator on a `true`; then run the
+    format's linters on every collected witness (lint)."""
     by_id = {t["id"]: t for t in tasks}
     vdir = out / "validate"
     shutil.rmtree(vdir, ignore_errors=True)
@@ -655,14 +820,13 @@ def validate(args, results, tasks, out):
     todo = {}
     for (rundef, task), r in results.items():
         t = by_id.get(task)
-        if t and r.get("witness") and not t["expected"] and t["validator"]:
+        if t and r.get("witness") and r["verdict"] == t["expected"] and t["validator"]:
+            validator_spec(args.fmt, t["validator"], r["witness_kind"], args.witness_format)
             todo.setdefault(t["validator"], {}).setdefault(rundef, []).append(t)
     limits = dict(VALIDATION_LIMITS, memlimit=args.memlimit)
     validators = Path(args.validators).resolve()
+    stage = Stage(args)
     for v, per_rundef in todo.items():
-        if v not in args.fmt["validators"]:
-            raise CouldNotRun(f"manifest.json names the validator {v}, which the witness format "
-                              f"{args.witness_format} does not have")
         spec = args.fmt["validators"][v]
         tool_dir = validators / spec["dir"]
         if not tool_dir.is_dir():
@@ -676,41 +840,58 @@ def validate(args, results, tasks, out):
             {rd: [(spec["witness_option"], str(witness))] for rd in per_rundef},
             limits, per_rundef, bench_options=option_pairs(spec["options"]),
             required_files={rd: [witness] for rd in per_rundef})
-        run_benchexec(definition, tool_dir, tool_dir, vdir, f"validate-{v}", args)
-        for (rundef, task), r in read_results(vdir).items():
-            if (rundef, task) in results and (results[(rundef, task)].get("validator") in (None, v)):
-                results[(rundef, task)]["validator"] = v
-                results[(rundef, task)]["validation"] = validation_of(r)
+        stage.add(definition, tool_dir, tool_dir, vdir, f"validate-{v}", sum(len(ts) for ts in per_rundef.values()))
+    stage.run()
+    read_validation(results, tasks, args.fmt, out)
     lint(args, results, by_id, out)
 
 
+def read_validation(results, tasks, fmt, out):
+    """Record, as `validator` and `validation` of each run in `results`, the
+    run of the task's validator on its witness in out/validate/."""
+    if not (out / "validate").is_dir():
+        return
+    by_id = {t["id"]: t for t in tasks}
+    for (rundef, task), r in read_results(out / "validate").items():
+        own = results.get((rundef, task))
+        t = by_id.get(task)
+        if own is None or t is None or not t["validator"] or not own.get("witness"):
+            continue
+        # Each validator writes its own result XML, so `r` is the run of the
+        # task's validator only if the XML's run definition belongs to it.
+        if r["benchmark"] == f"validate-{t['validator']}":
+            own["validator"] = t["validator"]
+            own["validation"] = validation_of(r, fmt["validators"][t["validator"]]["kind"])
+
+
 def lint(args, results, by_id, out):
-    """Run the linter of the witness format on the collected witness of every
-    run whose task is in `by_id`, one BenchExec benchmark in out/lint/, and
-    record its status as the run's `lint`; nothing if the format has no
-    linter."""
-    spec = args.fmt.get("linter")
+    """Run the linter of the witness format for each kind of witness on the
+    collected witnesses of that kind of every run whose task is in `by_id`,
+    one BenchExec benchmark per kind in out/lint/, and record its status as
+    the run's `lint`; nothing if the format has no linter."""
     ldir = out / "lint"
     shutil.rmtree(ldir, ignore_errors=True)
-    if not spec:
-        return
-    tasks_of = {}
-    for (rundef, task), r in sorted(results.items()):
-        if r.get("witness") and task in by_id:
-            tasks_of.setdefault(rundef, []).append(by_id[task])
-    if not tasks_of:
-        return
-    tool_dir = Path(args.validators).resolve() / spec["dir"]
-    if not tool_dir.is_dir():
-        raise CouldNotRun(f"linter {spec['name']} not found in {tool_dir.parent}; "
-                          "run scripts/download-validators.py")
-    definition = out / "defs" / f"lint-{spec['name']}.xml"
-    witness = out / "witnesses" / "${rundefinition_name}" / "${taskdef_name}" / args.fmt["file"]
-    write_definition(
-        definition, spec["module"], {rd: [(spec["witness_option"], str(witness))] for rd in tasks_of},
-        dict(VALIDATION_LIMITS, memlimit=args.memlimit), tasks_of,
-        bench_options=option_pairs(spec["options"]), required_files={rd: [witness] for rd in tasks_of})
-    run_benchexec(definition, tool_dir, tool_dir, ldir, f"lint-{spec['name']}", args)
+    stage = Stage(args)
+    for kind, spec in args.fmt.get("linters", {}).items():
+        tasks_of = {}
+        for (rundef, task), r in sorted(results.items()):
+            if r.get("witness") and r.get("witness_kind") == kind and task in by_id:
+                tasks_of.setdefault(rundef, []).append(by_id[task])
+        if not tasks_of:
+            continue
+        tool_dir = Path(args.validators).resolve() / spec["dir"]
+        if not tool_dir.is_dir():
+            raise CouldNotRun(f"linter {spec['name']} not found in {tool_dir.parent}; "
+                              "run scripts/download-validators.py")
+        definition = out / "defs" / f"lint-{spec['name']}.xml"
+        witness = out / "witnesses" / "${rundefinition_name}" / "${taskdef_name}" / args.fmt["file"]
+        write_definition(
+            definition, spec["module"], {rd: [(spec["witness_option"], str(witness))] for rd in tasks_of},
+            dict(VALIDATION_LIMITS, memlimit=args.memlimit), tasks_of,
+            bench_options=option_pairs(spec["options"]), required_files={rd: [witness] for rd in tasks_of})
+        stage.add(definition, tool_dir, tool_dir, ldir, f"lint-{spec['name']}",
+                  sum(len(ts) for ts in tasks_of.values()))
+    stage.run()
     read_lint(results, out)
 
 
@@ -1049,26 +1230,53 @@ def wall_time_problems(run, lines, property_name=DEFAULT_PROPERTY):
     return problems
 
 
-def goblint_cpu_limit_problems(r, t, lines):
-    """What departs, in the run `r` of task `t`, from what a CPU-time limit of
-    Goblint should cause (check 8): the limit, one of the cgroup of Goblint's
-    run, ends its whole portfolio, so Goblint's status is TIMEOUT; Goblint's
-    phase ends without a verdict, and a component of a later phase gives the
-    expected verdict."""
+def hand_over_problems(run, r, t, lines):
+    """What departs, in the run `r` of task `t` with the configuration of the
+    run definition `run`, from a hand-over from phase 1 to phase 2 (check 8):
+    no component of phase 1 gives an answer with an entry in `answers`; a
+    component that is in phase 1 only ends without a verdict, and at least
+    one of them reaches a limit: its status is TIMEOUT, with a CPU-time limit
+    in `cpuTimeLimits` that its `Measured:` line shows used, or the phase's
+    wall-time limit stops it; the verdict comes from a component that is in
+    phase 2 only (`CoOpeRace result from: X`) and is the expected one."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
-    blocks, _ = component_blocks(lines)
-    goblint = [b for b in blocks if b["name"] == COMPONENTS["goblint"]["name"]]
+    strategy = (run.get("config") or {}).get("properties", {}).get(t["property"], {})
+    phases = [phase_tools(p) for p in strategy.get("phases", [])]
+    if len(phases) < 2:
+        return [f"the strategy for {t['property']} has {len(phases)} phase(s), no hand-over"]
+    first_only = {n.lower(): n for n in phases[0] if n not in phases[1]}
+    second_only = {n.lower() for n in phases[1] if n not in phases[0]}
+    limits = {n.lower(): float(v) for n, v in strategy.get("cpuTimeLimits", {}).items()}
+    blocks = {b["name"].lower(): b for b in component_blocks(lines)[0]}
+    cpu = {m.group(1).lower(): float(m.group(2).rstrip("s")) for line in lines
+           if (m := MEASURED_LINE.fullmatch(line))}
+    stopped = {name.lower() for line in lines if (m := WALL_TIME_LINE.fullmatch(line))
+               and line.startswith("CoOpeRace: the wall-time limit of phase 1,")
+               for name in m.group(1).split(", ")}
     problems = []
-    if not goblint:
-        return ["Goblint did not run"]
-    if goblint[0]["status"] != "TIMEOUT":
-        problems.append(f"Goblint's status is {goblint[0]['status']}, not TIMEOUT")
-    if goblint[0]["result"] != "unknown":
-        problems.append(f"Goblint's result is {goblint[0]['result']}, not unknown")
+    for line in lines:
+        m = ANSWER_LINE.fullmatch(line)
+        if m and m.group(1) in phases[0]:
+            problems.append(f"phase 1 answered: {m.group(1)} {m.group(2)}")
+    limited = []
+    for key, name in first_only.items():
+        b = blocks.get(key)
+        if b is None:
+            continue
+        if b["result"] in ("true", "false"):
+            problems.append(f"{name}, in phase 1 only, ended with {b['result']}")
+        if key in stopped:
+            limited.append(f"{name} stopped at the wall-time limit of phase 1")
+        elif b["status"] == "TIMEOUT" and key in limits and cpu.get(key, 0) >= 0.9 * limits[key]:
+            limited.append(f"{name} TIMEOUT at {cpu[key]:.1f} s of its {limits[key]:g} s CPU-time limit")
+    if not limited:
+        problems.append("no component of phase 1 only reached its CPU-time limit or the phase's wall-time "
+                        "limit: " + ", ".join(f"{name} {blocks[k]['status'] if k in blocks else 'not started'}"
+                                              for k, name in first_only.items()))
     answered = answering_name(lines)
-    if answered in (None, COMPONENTS["goblint"]["name"]):
-        problems.append(f"the verdict is not from a later phase (answered by {answered})")
+    if (answered or "").lower() not in second_only:
+        problems.append(f"the verdict is not from a component of phase 2 only (answered by {answered})")
     if r["verdict"] != t["expected"]:
         problems.append(f"{r['status']}, expected {str(t['expected']).lower()}")
     return problems
@@ -1136,8 +1344,15 @@ def stop_problems(run, lines, property_name=DEFAULT_PROPERTY):
     if lines is None:
         return []
     blocks, _ = component_blocks(lines)
-    names = [b["name"] for b in blocks]
-    problems = [f"{n} has {names.count(n)} blocks" for n in sorted(set(names)) if names.count(n) > 1]
+    names = [b["name"].lower() for b in blocks]
+    phases = [phase_tools(p) for p in (run.get("config") or {}).get("properties", {})
+              .get(property_name, {}).get("phases", [])]
+    # A component listed in consecutive phases keeps running across the
+    # boundary and must not be started again in the later phase.
+    shared = {n.lower(): (i + 1, n) for i in range(len(phases) - 1) for n in phases[i] if n in phases[i + 1]}
+    problems = [f"{shared[n][1]}, in phases {shared[n][0]} and {shared[n][0] + 1}, was started {names.count(n)} times"
+                if n in shared else f"{n} has {names.count(n)} blocks"
+                for n in sorted(set(names)) if names.count(n) > 1]
     final = VERDICT_LINE.fullmatch(lines[-1]) if lines else None
     if final is None:
         return problems  # BenchExec ended the run; check 6 reports a missing verdict line
@@ -1258,39 +1473,27 @@ def check(results, runs, tasks, skipped, fmt):
                 f"{r['status']}, expected {str(t['expected']).lower()} ({t['data_model']})")
         else:
             add(1, rundef, task, True, "", "")
-        if r["verdict"] is False and not t["expected"]:
+        if r["verdict"] is not None and r["verdict"] == t["expected"] and (
+                r["verdict"] is False or witness_counts(t["property"], "true")):
             v = r.get("validation")
             who = t["validator"]
+            kind = "violation" if r["verdict"] is False else "correctness"
             if run["kind"] == "alone":
-                # A task without a validator (none of the suite's validators
-                # checks its property) is not validated.
+                # A task without a validator is not validated.
                 ok = who is None or (bool(v) and v["verdict"] == "confirmed")
                 add(2, rundef, task, ok, "bad task pick",
-                    "" if ok else f"the witness of {run['component']} alone is not confirmed by "
+                    "" if ok else f"the {kind} witness of {run['component']} alone is not confirmed by "
                                   f"{who}: {v['verdict'] + ' (' + v['status'] + ')' if v else 'not validated'}")
             else:
-                problems = []
-                if not r.get("witness"):
-                    if witness_needed(t["property"], "false"):
-                        problems.append(f"no {fmt['file']} delivered")
-                else:
-                    if who is not None and (not v or v["verdict"] != "confirmed"):
-                        problems.append(f"{who} does not confirm it: "
-                                        + (f"{v['verdict']} ({v['status']})" if v else "not validated"))
-                    if fmt.get("linter") and r.get("lint") != "done":
-                        problems.append(f"{fmt['linter']['name']} does not accept it: "
-                                        + (r["lint"] if r.get("lint") else "not checked"))
-                    producer = fmt["producer"](r["witness"])
-                    answered = run["component"] if run["kind"] == "only" else answered_by(r)
-                    if producer and component_of_producer(producer) not in (None, answered):
-                        problems.append(f"witness producer {producer!r}, answered by {answered}")
+                problems = witness_problems(r, run, t, fmt)
                 add(4, rundef, task, not problems, "witness", "; ".join(problems))
-        elif run["kind"] == "only" and not t["expected"] and component_result(r, run) is False:
-            # The component answered the expected false inside CoOpeRace, but
+        elif (run["kind"] == "only" and component_result(r, run) is t["expected"]
+              and (not t["expected"] or witness_counts(t["property"], "true"))):
+            # The component answered the expected verdict inside CoOpeRace, but
             # CoOpeRace did not print it: its witness did not pass the check.
             add(4, rundef, task, False, "witness",
-                f"{run['component']} answers false, but CoOpeRace prints {r['status']}: "
-                "no witness that passes the check")
+                f"{run['component']} answers {str(t['expected']).lower()}, but CoOpeRace prints "
+                f"{r['status']}: no witness that passes the check")
     # Check 2, verdicts of the references on their own tasks.
     for rundef, run in runs.items():
         if run["kind"] != "alone":
@@ -1340,13 +1543,13 @@ def check(results, runs, tasks, skipped, fmt):
                 add(7, rundef, t["id"], not problems, "limit line", "; ".join(problems))
     # Check 8.
     for rundef, run in runs.items():
-        if "goblint-cpu-limit" not in run.get("checks", ()):
+        if run["kind"] not in ("production", "suite"):
             continue
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
-            if r:
-                problems = goblint_cpu_limit_problems(r, t, cooperace_output(r))
-                add(8, rundef, t["id"], not problems, "Goblint's CPU-time limit", "; ".join(problems))
+            if r and t.get("hand_over"):
+                problems = hand_over_problems(run, r, t, cooperace_output(r))
+                add(8, rundef, t["id"], not problems, "hand-over", "; ".join(problems))
     # Check 9.
     for rundef, run in runs.items():
         if run["kind"] == "alone":
@@ -1354,8 +1557,10 @@ def check(results, runs, tasks, skipped, fmt):
         for t in run["tasks"]:
             r = results.get((rundef, t["id"]))
             if r:
-                problems = stop_problems(run, cooperace_output(r), t["property"])
-                add(9, rundef, t["id"], not problems, "verdict and stops", "; ".join(problems))
+                lines = cooperace_output(r)
+                problems = stop_problems(run, lines, t["property"])
+                add(9, rundef, t["id"], not problems, "verdict and stops",
+                    "; ".join(problems) or shared_across(run, lines, t["property"]))
     # Check 5.
     for rundef, run in runs.items():
         if run["kind"] not in ("production", "suite"):
@@ -1367,6 +1572,56 @@ def check(results, runs, tasks, skipped, fmt):
                 add(5, rundef, t["id"], ok, "missing or wrong verdict",
                     "" if ok else f"{r['status']}, expected {str(t['expected']).lower()}")
     return out
+
+
+def shared_across(run, lines, property_name):
+    """A note for check 9 where the output `lines` shows a component of two
+    consecutive phases of the strategy for `property_name` started once
+    while the later phase started another component: "X ran once across
+    phases N and N+1"; empty otherwise."""
+    if lines is None:
+        return ""
+    phases = [phase_tools(p) for p in (run.get("config") or {}).get("properties", {})
+              .get(property_name, {}).get("phases", [])]
+    names = [b["name"].lower() for b in component_blocks(lines)[0]]
+    notes = []
+    for i in range(len(phases) - 1):
+        later = [n for n in phases[i + 1] if n not in phases[i] and n.lower() in names]
+        for n in phases[i]:
+            if n in phases[i + 1] and names.count(n.lower()) == 1 and later:
+                notes.append(f"{n} ran once across phases {i + 1} and {i + 2} ({', '.join(later)} started in "
+                             f"phase {i + 2})")
+    return "; ".join(notes)
+
+
+def witness_counts(property_name, verdict):
+    """Whether a witness can count for `verdict` ("true" or "false") on
+    `property_name`: the witness table has a cell for it."""
+    return accepted_versions(property_name, verdict) is not None
+
+
+def witness_problems(r, run, t, fmt):
+    """What is wrong with the witness that the run `r` of CoOpeRace, with the
+    configuration of the run definition `run`, delivered with its verdict on
+    task `t`, which is the expected one (check 4): it is missing where the
+    witness table requires one; the task's validator does not confirm it;
+    the format's linter for its kind does not accept it; or its producer is
+    not the component that answered."""
+    verdict = "false" if r["verdict"] is False else "true"
+    if not r.get("witness"):
+        return [f"no {fmt['file']} delivered"] if witness_needed(t["property"], verdict) else []
+    problems = []
+    v, who = r.get("validation"), t["validator"]
+    if who is not None and (not v or v["verdict"] != "confirmed"):
+        problems.append(f"{who} does not confirm it: " + (f"{v['verdict']} ({v['status']})" if v else "not validated"))
+    linter = fmt.get("linters", {}).get(r.get("witness_kind"))
+    if linter and r.get("lint") != "done":
+        problems.append(f"{linter['name']} does not accept it: " + (r["lint"] if r.get("lint") else "not checked"))
+    producer = fmt["producer"](r["witness"])
+    answered = run["component"] if run["kind"] == "only" else answered_by(r)
+    if producer and component_of_producer(producer) not in (None, answered):
+        problems.append(f"witness producer {producer!r}, answered by {answered}")
+    return problems
 
 
 def component_result(r, run):
@@ -1397,7 +1652,8 @@ def cell(r, t):
     if r["verdict"] is not None and r["verdict"] != t["expected"]:
         s += " WRONG"
     v = r.get("validation")
-    if r["verdict"] is False and not t["expected"]:
+    if r["verdict"] is not None and r["verdict"] == t["expected"] and (
+            r["verdict"] is False or witness_counts(t["property"], "true")):
         s += " [" + ("no witness" if not r.get("witness") else v["verdict"] if v else "not validated")
         if r.get("witness") and r.get("lint") not in (None, "done"):
             s += ", lint " + r["lint"]
@@ -1419,17 +1675,37 @@ def table(results, runs, tasks, skipped):
     return "\n".join(lines)
 
 
-def report(checks, results, runs, tasks, skipped, out, meta=None):
+def peak_memory(results, out):
+    """Lines giving, per verification run definition and per validator and
+    linter, the largest `memory` (BenchExec's peak memory of a run) and the
+    task it was reached on, from `results` and the result XMLs in
+    out/validate/ and out/lint/."""
+    peaks = {}
+    def note(group, task, memory):
+        if memory >= peaks.get(group, (-1, ""))[0]:
+            peaks[group] = (memory, task)
+    for (rundef, task), r in results.items():
+        note(rundef, task, r["memory"])
+    for sub in ("validate", "lint"):
+        if (out / sub).is_dir():
+            for (_rundef, task), r in read_results(out / sub).items():
+                note(r["benchmark"], task, r["memory"])
+    return [f"  {group}: {memory / 1e6:.0f} MB ({task})" for group, (memory, task) in sorted(peaks.items())]
+
+
+def report(checks, results, runs, tasks, skipped, out, meta=None, timings=None):
     names = {1: "no wrong verdict", 2: "reference verdicts and witnesses on own tasks",
              3: "CoOpeRace with one component equals the component alone",
-             4: "witness of every false is confirmed, produced by the answering component",
+             4: "witness of every false and of a true where one counts is confirmed, "
+                "produced by the answering component",
              5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
              7: "CoOpeRace prints the configured component limits and keeps the phases' wall-time limits",
-             8: "Goblint's CPU-time limit ends it (TIMEOUT) and a later phase answers",
-             9: "a phase stops its other components once one answers"}
+             8: "on a hand-over task, phase 1 reaches a limit without an answer and phase 2 answers",
+             9: "the verdict follows from the answers, no component is stopped early or started twice"}
     lines = [table(results, runs, tasks, skipped), "",
-             "cells: verdict, [validation of a false witness, and the linter's status where "
+             "cells: verdict, [validation of the witness of a false, or of a true where one can count, "
+             "and the linter's status where "
              "it does not accept the witness], CPU time; "
              "WRONG = verdict differs from the expected one", ""]
     failed = False
@@ -1441,6 +1717,13 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
                      f"({len(rel) - len(bad)} of {len(rel)} pass)")
         for _, rundef, task, _ok, kind, detail in bad:
             lines.append(f"    FAIL [{kind}] {rundef} / {task}: {detail}")
+        for _, rundef, task, _ok, kind, detail in rel:
+            if _ok and detail:
+                lines.append(f"    ok   [{kind}] {rundef} / {task}: {detail}")
+    lines += ["", "peak memory of a run (BenchExec's memory column), per run definition, validator and linter:"]
+    lines += peak_memory(results, out)
+    if timings:
+        lines += ["", "wall time: " + ", ".join(f"{stage} {seconds:.0f} s" for stage, seconds in timings.items())]
     lines += ["", "result: " + ("FAIL" if failed else "pass")]
     text = "\n".join(lines) + "\n"
     (out / "table.txt").write_text(text)
@@ -1467,16 +1750,23 @@ def main():
     ap.add_argument("--config", action="append", type=Path,
                     help="a further production configuration (JSON); "
                          "default: conf/svcomp27.json")
-    ap.add_argument("--components", default=",".join(COMPONENTS))
+    ap.add_argument("--components", default=None,
+                    help="components to run alone and with only-<component>: a comma-separated list "
+                         "of " + ", ".join(COMPONENTS) + ", or all; default: those the production "
+                         "configurations name")
     ap.add_argument("--tasks", action="append", help="only tasks whose name contains this")
     ap.add_argument("--cross", action="store_true",
                     help="run every component on every task, not only on its own")
     ap.add_argument("--no-validation", action="store_true")
     ap.add_argument("--allowed-cores", default=None, help="cores BenchExec may use, e.g. 14,15")
-    ap.add_argument("-N", "--parallel", type=int, default=1)
+    ap.add_argument("-N", "--parallel", type=int, default=1, help="runs at a time in each benchexec call")
+    ap.add_argument("-j", "--jobs", type=int, default=None, metavar="CORES",
+                    help="cores the suite may use at a time: runs as many runs at a time as fit, "
+                         "CORES // --cores (overrides -N); BenchExec chooses the cores")
     ap.add_argument("--cores", type=int, default=2, help="cores per run")
-    ap.add_argument("--memlimit", default="4 GB")
-    ap.add_argument("--timelimit", type=int, default=100, help="CPU seconds per run")
+    ap.add_argument("--memlimit", default="1 GB", help="memory per run, verification and validation")
+    ap.add_argument("--timelimit", type=int, default=90, help="CPU seconds per verification run")
+    ap.add_argument("--walltimelimit", type=int, default=120, help="wall-time seconds per verification run")
     ap.add_argument("--witness-format", choices=list(WITNESS_FORMATS), default="yaml-2.2")
     ap.add_argument("--cooperace-option", action="append", default=[], metavar="OPT",
                     help="an option for every ./cooperace run, e.g. --cooperace-option=--arch "
@@ -1486,6 +1776,8 @@ def main():
                          "the competition's container: \"--read-only-dir / --overlay-dir ./ --hidden-dir /home/\"")
     args = ap.parse_args()
     args.fmt = WITNESS_FORMATS[args.witness_format]
+    if args.jobs is not None:
+        args.parallel = max(1, args.jobs // args.cores)
 
     try:
         sys.exit(suite(args))
@@ -1497,6 +1789,7 @@ def main():
 def suite(args):
     """Runs the command of `args`; returns the exit status of `report`."""
     out = Path(args.out).resolve()
+    timings, started = {}, time.monotonic()
     if args.command == "run":
         out.mkdir(parents=True, exist_ok=True)
         manifest, tasks, runs, skipped, cdir = plan(args)
@@ -1504,7 +1797,8 @@ def suite(args):
             raise CouldNotRun("nothing to run: no component under tools/")
         meta = dict(machine=machine_description(cdir), cooperace_dir=str(cdir),
                     limits=dict(cores=args.cores, memlimit=args.memlimit,
-                                cputime_s=args.timelimit, parallel=args.parallel,
+                                cputime_s=args.timelimit, walltime_s=args.walltimelimit,
+                                parallel=args.parallel,
                                 allowed_cores=args.allowed_cores),
                     cooperace_options=args.cooperace_option, benchexec_args=args.benchexec_args,
                     sv_benchmarks=manifest["sv_benchmarks"],
@@ -1517,6 +1811,7 @@ def suite(args):
                     skipped=skipped)
         (out / "meta.json").write_text(json.dumps(meta, indent=1) + "\n")
         verify(args, runs, cdir, out)
+        timings["verification"] = time.monotonic() - started
     else:
         try:
             meta = json.loads((out / "meta.json").read_text())
@@ -1533,17 +1828,18 @@ def suite(args):
     results = {(rundef, task): r for (rundef, task), r in read_results(out / "verify").items()
                if rundef in runs and task in ids}
     read_verdict_lines(results, runs)
-    collect_witnesses(results, runs, args.fmt, out)
+    collect_witnesses(results, runs, args.fmt, out, tasks)
     if args.command in ("run", "validate") and not args.no_validation:
+        validation_started = time.monotonic()
         validate(args, results, tasks, out)
+        timings["validation"] = time.monotonic() - validation_started
     elif args.command == "check":
-        previous = read_results(out / "validate") if (out / "validate").exists() else {}
-        for (rundef, task), r in previous.items():
-            if (rundef, task) in results:
-                results[(rundef, task)]["validation"] = validation_of(r)
+        read_validation(results, tasks, args.fmt, out)
         read_lint(results, out)
     checks = check(results, runs, tasks, skipped, args.fmt)
-    return report(checks, results, runs, tasks, skipped, out, meta)
+    if timings:
+        timings["total"] = time.monotonic() - started
+    return report(checks, results, runs, tasks, skipped, out, meta, timings)
 
 
 if __name__ == "__main__":

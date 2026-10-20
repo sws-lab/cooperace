@@ -1,11 +1,21 @@
 {
     "properties": {
+        "no-data-race": {
+            "phases":    [["ULTIMATE GemCutter"]],
+            "answers":   [["ULTIMATE GemCutter"]],
+            "witnesses": ["ULTIMATE GemCutter"]
+        },
         "unreach-call": {
             "phases":    [["ULTIMATE GemCutter"]],
             "answers":   [["ULTIMATE GemCutter"]],
             "witnesses": ["ULTIMATE GemCutter"]
         },
         "no-overflow": {
+            "phases":    [["ULTIMATE GemCutter"]],
+            "answers":   [["ULTIMATE GemCutter"]],
+            "witnesses": ["ULTIMATE GemCutter"]
+        },
+        "valid-memsafety": {
             "phases":    [["ULTIMATE GemCutter"]],
             "answers":   [["ULTIMATE GemCutter"]],
             "witnesses": ["ULTIMATE GemCutter"]
