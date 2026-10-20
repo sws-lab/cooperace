@@ -127,6 +127,23 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    `./cooperace` can be run there by hand. In the competition image, start the shell with
    `--tmpfs /opt/cooperace:exec` and run `competition-check`.
 
+3. The entry's `required_ubuntu_packages` are computed by
+   [`scripts/sv-comp/required-packages.py`](scripts/sv-comp/required-packages.py): the union of the
+   `required_ubuntu_packages` of every component of `tools.txt`, taken from the version of its fm-tools
+   entry whose DOI `tools.txt` names, and of
+   [`scripts/sv-comp/own-packages.txt`](scripts/sv-comp/own-packages.txt), the packages the archive's
+   own code needs, each with the reason. It warns about a component version whose
+   `base_container_images` are not exactly `docker.io/ubuntu:26.04` or that has
+   `full_container_images`, and fails, naming the component, when an entry lists no version with the
+   DOI. `--fm-tools-dir` reads the entries from a checkout of fm-tools instead of its main branch:
+   ```bash
+   python3 scripts/sv-comp/required-packages.py --fm-tools-dir <fm-tools> --why   # each package and who declares it
+   python3 scripts/sv-comp/required-packages.py --fm-tools-dir <fm-tools> --yaml  # the block for data/cooperace.yml
+   python3 scripts/sv-comp/required-packages.py --fm-tools-dir <fm-tools> --check <path or URL of data/cooperace.yml>
+   ```
+   `--check` compares the computed list with that of the version the SV-COMP 2027 participation names,
+   prints the missing and the extra packages and exits 1 if they differ. `make svcomp` does not run it.
+
 If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
 `docker builder prune --all --force`.
 
