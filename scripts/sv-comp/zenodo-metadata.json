@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "CoOpeRace: Cooperative Race Freedom Verification",
+    "title": "CoOpeRace (SV-COMP 2027 submission)",
     "upload_type": "software",
     "description": "<p>CoOpeRace metaverifier for SV-COMP 2027.</p>",
     "version": "svcomp27",
