@@ -1,3 +1,10 @@
+// This file is part of the SV-Benchmarks collection of verification tasks:
+// https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+//
+// SPDX-FileCopyrightText: 2005-2021 University of Tartu & Technische Universität München
+//
+// SPDX-License-Identifier: MIT
+
 typedef unsigned char __u_char;
 typedef unsigned short int __u_short;
 typedef unsigned int __u_int;
@@ -10,14 +17,6 @@ typedef signed int __int32_t;
 typedef unsigned int __uint32_t;
 __extension__ typedef signed long long int __int64_t;
 __extension__ typedef unsigned long long int __uint64_t;
-typedef __int8_t __int_least8_t;
-typedef __uint8_t __uint_least8_t;
-typedef __int16_t __int_least16_t;
-typedef __uint16_t __uint_least16_t;
-typedef __int32_t __int_least32_t;
-typedef __uint32_t __uint_least32_t;
-typedef __int64_t __int_least64_t;
-typedef __uint64_t __uint_least64_t;
 __extension__ typedef long long int __quad_t;
 __extension__ typedef unsigned long long int __u_quad_t;
 __extension__ typedef long long int __intmax_t;
@@ -60,17 +59,12 @@ typedef char *__caddr_t;
 __extension__ typedef int __intptr_t;
 __extension__ typedef unsigned int __socklen_t;
 typedef int __sig_atomic_t;
-static __inline __uint16_t
-__bswap_16 (__uint16_t __bsx)
-{
-  return __builtin_bswap16 (__bsx);
-}
-static __inline __uint32_t
-__bswap_32 (__uint32_t __bsx)
+static __inline unsigned int
+__bswap_32 (unsigned int __bsx)
 {
   return __builtin_bswap32 (__bsx);
 }
-__extension__ static __inline __uint64_t
+static __inline __uint64_t
 __bswap_64 (__uint64_t __bsx)
 {
   return __builtin_bswap64 (__bsx);
@@ -682,7 +676,6 @@ extern int pthread_atfork (void (*__prepare) (void),
       void (*__parent) (void),
       void (*__child) (void)) __attribute__ ((__nothrow__ , __leaf__));
 
-void abort(void);
 
 extern void __assert_fail (const char *__assertion, const char *__file,
       unsigned int __line, const char *__function)
@@ -693,24 +686,28 @@ extern void __assert_perror_fail (int __errnum, const char *__file,
 extern void __assert (const char *__assertion, const char *__file, int __line)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__noreturn__));
 
-void reach_error() { ((void) sizeof ((0) ? 1 : 0), __extension__ ({ if (0) ; else __assert_fail ("0", "svc.h", 6, __extension__ __PRETTY_FUNCTION__); })); }
-void dtor( void *v ) {
-    long val = (long)v;
-    (!(val != 42) ? reach_error() : (void)0);
+extern void abort(void);
+void reach_error() { ((void) sizeof ((0) ? 1 : 0), __extension__ ({ if (0) ; else __assert_fail ("0", "racemacros.h", 9, __extension__ __PRETTY_FUNCTION__); })); }
+void __VERIFIER_assert(int cond) { if(!(cond)) { ERROR: {reach_error();abort();} } }
+extern int __VERIFIER_nondet_int();
+void assume_abort_if_not(int cond) {
+  if(!cond) {abort();}
 }
-void *worker( void *k ) {
-    pthread_key_t *key = k;
-    int r = pthread_setspecific( *key, (void *)42 );
-    (!(r == 0) ? reach_error() : (void)0);
-    return 0;
+pthread_mutex_t __global_lock = { { 0, 0, 0, 0, 0, { { 0, 0 } } } };
+int global = 0;
+pthread_mutex_t mutex1 = { { 0, 0, 0, 0, 0, { { 0, 0 } } } };
+pthread_mutex_t mutex2 = { { 0, 0, 0, 0, 0, { { 0, 0 } } } };
+void *t_fun(void *arg) {
+  pthread_mutex_lock(&mutex1);
+  do { do { pthread_mutex_lock(&__global_lock); (global)++; pthread_mutex_unlock(&__global_lock); } while (0); do { pthread_mutex_lock(&__global_lock); (global)--; pthread_mutex_unlock(&__global_lock); } while (0); } while (0);
+  pthread_mutex_unlock(&mutex1);
+  return ((void *)0);
 }
-int main() {
-    pthread_key_t key;
-    int r = pthread_key_create( &key, &dtor );
-    (!(r == 0) ? reach_error() : (void)0);
-    pthread_t tid;
-    pthread_create( &tid, ((void *)0), worker, &key );
-    r = pthread_setspecific( key, (void *)16 );
-    (!(r == 0) ? reach_error() : (void)0);
-    pthread_join( tid, ((void *)0) );
+int main(void) {
+  pthread_t t_ids[10000]; for (int i=0; i<10000; i++) pthread_create(&t_ids[i], ((void *)0), t_fun, ((void *)0));
+  pthread_mutex_lock(&mutex1);
+  do { pthread_mutex_lock(&__global_lock); __VERIFIER_assert((global) == 0); pthread_mutex_unlock(&__global_lock); } while (0);
+  pthread_mutex_unlock(&mutex1);
+  for (int i=0; i < 10000; i++) pthread_join (t_ids[i], ((void *)0));
+  return 0;
 }

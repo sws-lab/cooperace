@@ -173,6 +173,13 @@ path = "tests/integration/c/ldv-races/*.i"
 SPDX-FileCopyrightText = "The authors of the Linux Driver Verification races benchmarks"
 SPDX-License-Identifier = "GPL-2.0-only"
 
+# SV-Benchmarks (tag svcomp26, .reuse/dep5) puts c/pthread-ext/ under
+# LicenseRef-unknown, as for the SV-COMP 2025 tasks above.
+[[annotations]]
+path = "tests/integration/c/pthread-ext/*.i"
+SPDX-FileCopyrightText = "unknown: the SV-Benchmarks collection does not record the authors of these files"
+SPDX-License-Identifier = "LicenseRef-unknown"
+
 # The two programs written for this repository's integration suite.
 [[annotations]]
 path = "tests/integration/c/lp64/*"

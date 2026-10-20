@@ -5,14 +5,11 @@
   "commit": "7efe28dd29576b46927b7a34e8f742bd90966a75",
   "note": "Tasks are copied with their .yml trimmed to the task's property (`property`, no-data-race where it names none); the .yml of an original task is c/<origin>. Licences are those of the task's directory (SPDX header or LICENSE file), texts in c/LICENSES/."
  },
- "sv_comp_2026_source": "verified and validated result XMLs of Goblint, Dartagnan, ULTIMATE Automizer in C.no-data-race.Concurrency, 2026-01; cpu_s is CPU time of the component's own run",
+ "sv_comp_2026_source": "verified and validated result XMLs of Goblint, Dartagnan, ULTIMATE Automizer in C.no-data-race.Concurrency, 2026-01, for the tasks without their own sv_comp_2026_source; cpu_s is CPU time of the component's own run",
  "configurations": {
   "goblint-1s": {
    "conf": "conf/goblint-1s.json",
-   "checks": [
-    "goblint-cpu-limit"
-   ],
-   "purpose": "Goblint with a CPU-time limit of 1 s in phase 1, then Dartagnan and ULTIMATE Automizer in phase 2, on a task where a level of Goblint's portfolio reaches it: the limit ends that level, the runner gives up the rest, and phase 2 answers."
+   "purpose": "Goblint with a CPU-time limit of 1 s in phase 1, then Dartagnan in phase 2 with a memory limit of 70 % of the run's, on a task where a level of Goblint's portfolio reaches the CPU-time limit: the limit ends that level, the runner gives up the rest, and phase 2 answers."
   }
  },
  "tasks": [
@@ -96,7 +93,7 @@
    "validator": null,
    "origin": "c/pthread-divine/tls_basic.yml",
    "license": "ISC",
-   "purpose": "Dartagnan answers true; Goblint gives unknown and ULTIMATE Automizer no answer.",
+   "purpose": "Dartagnan answers true; Goblint gives unknown and ULTIMATE Automizer no answer. The no-data-race hand-over task (check 8): in svcomp27 sv-sanitizers reaches its CPU-time limit of 30 s, Goblint ends in unknown in phase 1 and is not started again in phase 2, and Dartagnan answers true in phase 2.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -110,31 +107,8 @@
      "answer": "none",
      "status": "unknown"
     }
-   }
-  },
-  {
-   "name": "pthread-divine/tls_destructor_worker",
-   "owners": [
-    "dartagnan"
-   ],
-   "validator": null,
-   "origin": "c/pthread-divine/tls_destructor_worker.yml",
-   "license": "ISC",
-   "purpose": "Dartagnan answers true; the others do not.",
-   "sv_comp_2026": {
-    "goblint": {
-     "answer": "none",
-     "status": "unknown"
-    },
-    "dartagnan": {
-     "answer": "true",
-     "cpu_s": 7.6
-    },
-    "uautomizer": {
-     "answer": "none",
-     "status": "unknown"
-    }
-   }
+   },
+   "hand_over": true
   },
   {
    "name": "pthread-divine/ring_1w1r-1",
@@ -168,7 +142,7 @@
    "validator": "uautomizer",
    "origin": "c/goblint-regression/09-regions_01-list_rc.yml",
    "license": "MIT",
-   "purpose": "Dartagnan answers false on a .c task (preprocessed by the component) and ULTIMATE Automizer's validator confirms its witness; Goblint ends in unknown after 0.8 s and ULTIMATE Automizer times out. Replaces pthread-divine/ring_1w1r-2, where Goblint's own run needs 169 s CPU time to end in unknown, which with a working Goblint in front of Dartagnan exceeds the suite's 100 s limit.",
+   "purpose": "Dartagnan answers false on a .c task (preprocessed by the component) and ULTIMATE Automizer's validator confirms its witness; Goblint ends in unknown after 0.8 s and ULTIMATE Automizer times out. Replaces pthread-divine/ring_1w1r-2, where Goblint's own run needs 169 s CPU time to end in unknown, which with a working Goblint in front of Dartagnan exceeds the suite's limits.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -259,12 +233,13 @@
   {
    "name": "goblint-regression/04-mutex_21-sound_base",
    "owners": [
-    "uautomizer"
+    "uautomizer",
+    "sv-sanitizers"
    ],
    "validator": "concurrentwitness2test",
    "origin": "c/goblint-regression/04-mutex_21-sound_base.yml",
    "license": "MIT",
-   "purpose": "ULTIMATE Automizer alone answers false on a .c task (preprocessed by the component); ConcurrentWitness2Test confirms its witness.",
+   "purpose": "sv-sanitizers answers false in 0.4 s and ConcurrentWitness2Test confirms its YAML 2.2 witness; Goblint ends in unknown after 0.7 s, and Dartagnan svcomp27 answers false without a witness (it reports an invalid function pointer), which a no-data-race false cannot be delivered without, so in svcomp27 only sv-sanitizers gives the verdict. ULTIMATE Automizer (pool) also answers false alone on this .c task (preprocessed by the component), and ConcurrentWitness2Test confirms its witness too.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -313,7 +288,7 @@
    "validator": "uautomizer",
    "origin": "c/goblint-regression/04-mutex_19-call_by_ptr_rc.yml",
    "license": "MIT",
-   "purpose": "Run by goblint-1s only. A level of Goblint's portfolio uses more than 1 s of CPU time, so the 1 s limit ends it (goblint exited with code -24) and the runner gives up the remaining levels; Dartagnan answers false in phase 2 and ULTIMATE Automizer's validator confirms its witness. ULTIMATE Automizer also answers false, with 20.6 s of CPU time against Dartagnan's 8.6 s in SV-COMP 2026, so CoOpeRace normally stops it. Goblint's own run needs 54 s to end in unknown, too long for the other configurations.",
+   "purpose": "Run by goblint-1s only, a hand-over task (check 8). A level of Goblint's portfolio uses more than 1 s of CPU time, so the 1 s limit ends it (goblint exited with code -24) and the runner gives up the remaining levels; Dartagnan answers false in phase 2 and ULTIMATE Automizer's validator confirms its witness. Goblint's own run needs 54 s to end in unknown, too long for the other configurations.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -327,7 +302,8 @@
      "answer": "false",
      "cpu_s": 20.6
     }
-   }
+   },
+   "hand_over": true
   },
   {
    "name": "libvsync/clhlock",
@@ -338,7 +314,7 @@
    "validator": null,
    "origin": "c/libvsync/clhlock.yml",
    "license": "MIT",
-   "purpose": "sv-sanitizers answers false(valid-deref) in 0.4 s; Goblint ends in unknown after 7.9 s and Deagle in unknown after 0.4 s, so in the valid-memsafety strategy only sv-sanitizers gives the verdict. Its witness has one target waypoint and is of format 2.0, which does not pass the check; a valid-memsafety false needs none, so CoOpeRace prints the false without a witness. No validator of the suite checks valid-memsafety.",
+   "purpose": "sv-sanitizers answers false(valid-deref) in 0.4 s; Goblint ends in unknown after 7.9 s and Deagle in unknown after 0.4 s, so in the valid-memsafety strategy only sv-sanitizers gives the verdict. Its witness has one target waypoint and is of format 2.0, which does not pass the check; a valid-memsafety false needs none (demo mode), so CoOpeRace prints the false without a witness. No validator is named: ULTIMATE Automizer svcomp27-violation runs out of memory on the witness (4 GB and 7 GB) and Theta svcomp27-validator reaches 90 s; on the two other tasks where only sv-sanitizers answers (goblint-regression/28-race_reach_86 and 87) Automizer runs out of memory as well and Theta ends in ERROR (frontend failed).",
    "sv_comp_2026": {
     "sv-sanitizers": {
      "answer": "false(valid-deref)",
@@ -368,7 +344,7 @@
    "validator": null,
    "origin": "c/pthread/bigshot_s.yml",
    "license": "Apache-2.0",
-   "purpose": "Deagle answers true in 0.2 s; Goblint ends in unknown after 0.7 s and sv-sanitizers reaches the time limit, so in the valid-memsafety strategy only Deagle gives the verdict, in phase 2 after sv-sanitizers' CPU-time limit. A valid-memsafety true needs no witness.",
+   "purpose": "Deagle answers true in 0.2 s; Goblint ends in unknown after 0.7 s and sv-sanitizers reaches the time limit, so in the valid-memsafety strategy only Deagle gives the verdict. The valid-memsafety hand-over task (check 8): sv-sanitizers ends TIMEOUT at its CPU-time limit of 30 s, and Deagle answers in phase 2. A valid-memsafety true needs no witness.",
    "sv_comp_2026": {
     "deagle": {
      "answer": "true",
@@ -387,19 +363,19 @@
      "status": "ERROR"
     }
    },
-   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
+   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run",
+   "hand_over": true
   },
   {
    "name": "pthread/singleton",
    "property": "unreach-call",
    "owners": [
-    "deagle",
     "dartagnan"
    ],
-   "validator": null,
+   "validator": "uautomizer",
    "origin": "c/pthread/singleton.yml",
    "license": "Apache-2.0",
-   "purpose": "Deagle answers false(unreach-call) in 0.2 s with a YAML violation witness, error-witness.yml; Goblint ends in unknown after 1.0 s and Dartagnan answers false after 8.6 s. An unreach-call false needs a YAML 2.2 violation witness, so CoOpeRace prints Deagle's false only if its witness passes the check. No validator of the suite checks unreach-call. Dartagnan is an owner too, since svcomp27 takes unreach-call's false from Dartagnan, not Deagle; its svcomp27 version writes a YAML 2.2 violation witness.",
+   "purpose": "Dartagnan answers false(unreach-call) with a YAML 2.2 violation witness that ULTIMATE Automizer's validator confirms; Goblint ends in unknown after 1.0 s. Deagle and ULTIMATE GemCutter answer false too, which svcomp27 does not accept from them in unreach-call (it has no entry for them there), so only Dartagnan gives the verdict.",
    "sv_comp_2026": {
     "deagle": {
      "answer": "false(unreach-call)",
@@ -412,6 +388,10 @@
     "dartagnan": {
      "answer": "false(unreach-call)",
      "cpu_s": 8.6
+    },
+    "ugemcutter": {
+     "answer": "false(unreach-call)",
+     "cpu_s": 20.5
     }
    },
    "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
@@ -452,10 +432,10 @@
    "owners": [
     "goblint"
    ],
-   "validator": null,
+   "validator": "uautomizer-correctness",
    "origin": "c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.yml",
    "license": "MIT",
-   "purpose": "Goblint answers true in 0.1 s, in phase 1 of svcomp27, and an unreach-call true needs a YAML 2.1+ correctness witness: CoOpeRace delivers Goblint's ghost_instrumentation witness of format 2.1 only if the option witness.yaml.entry-types reaches Goblint. ULTIMATE GemCutter, Dartagnan and Deagle also answer true, later.",
+   "purpose": "Goblint answers true in 0.1 s, in phase 1 of svcomp27, and an unreach-call true needs a YAML 2.1+ correctness witness: CoOpeRace delivers Goblint's ghost_instrumentation witness of format 2.1, which ULTIMATE Automizer's correctness validator confirms. Goblint alone, without the option witness.yaml.entry-types that CoOpeRace adds, writes a witness WitnessLint rejects (two format versions). ULTIMATE GemCutter, Dartagnan and Deagle also answer true, later.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "true",
@@ -482,10 +462,10 @@
    "owners": [
     "goblint"
    ],
-   "validator": null,
+   "validator": "ugemcutter-correctness",
    "origin": "c/goblint-regression/06-symbeq_11-equ_nr.yml",
    "license": "MIT",
-   "purpose": "Goblint answers true in 0.2 s, in phase 1 of svcomp27, and a no-overflow true needs a YAML 2.1+ correctness witness: CoOpeRace delivers Goblint's ghost_instrumentation witness of format 2.1 only if the option witness.yaml.entry-types reaches Goblint. ULTIMATE GemCutter, Dartagnan and Deagle also answer true, later. Replaces 06-symbeq_14-list_entry_rc, on which Goblint answered true in 2026 and its svcomp27 version answers unknown.",
+   "purpose": "The same for no-overflow: Goblint answers true in 0.2 s, and ULTIMATE GemCutter's correctness validator confirms its ghost_instrumentation witness. Replaces 06-symbeq_14-list_entry_rc, on which Goblint answered true in 2026 and its svcomp27 version answers unknown.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "true",
@@ -516,10 +496,10 @@
    "owners": [
     "ugemcutter"
    ],
-   "validator": null,
+   "validator": "uautomizer-correctness",
    "origin": "c/goblint-regression/13-privatized_66-mine-W-init_true.yml",
    "license": "MIT",
-   "purpose": "ULTIMATE GemCutter answers true in 18 s with an invariant_set witness; Goblint ends in unknown after 0.6 s, so svcomp27 answers in phase 2. Dartagnan and Deagle also answer true, which svcomp27 does not accept from them.",
+   "purpose": "ULTIMATE GemCutter answers true in 18 s (8 to 11 s on goblint) with an invariant_set witness that ULTIMATE Automizer's correctness validator confirms; Goblint ends in unknown after 0.6 s, so svcomp27 answers in phase 2. Dartagnan and Deagle also answer true, which svcomp27 does not accept from them.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -546,10 +526,10 @@
    "owners": [
     "ugemcutter"
    ],
-   "validator": null,
+   "validator": "ugemcutter-correctness",
    "origin": "c/goblint-regression/04-mutex_28-base_nr.yml",
    "license": "MIT",
-   "purpose": "ULTIMATE GemCutter answers true in 18 s with an invariant_set witness; Goblint ends in unknown after 0.8 s, so svcomp27 answers in phase 2. Dartagnan and Deagle also answer true, which svcomp27 does not accept from them.",
+   "purpose": "The same for no-overflow: GemCutter answers true, its own correctness validator confirms the witness, and Goblint ends in unknown after 0.8 s.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",
@@ -570,6 +550,174 @@
     "deagle": {
      "answer": "true",
      "cpu_s": 0.4
+    }
+   },
+   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
+  },
+  {
+   "name": "pthread-ext/28_buggy_simple_loop1_vf",
+   "property": "unreach-call",
+   "owners": [
+    "dartagnan"
+   ],
+   "hand_over": true,
+   "validator": "uautomizer",
+   "origin": "c/pthread-ext/28_buggy_simple_loop1_vf.yml",
+   "license": "LicenseRef-unknown",
+   "purpose": "The unreach-call hand-over task (check 8). Goblint reached the time limit in SV-COMP 2026, and its svcomp27 version ends TIMEOUT at its CPU-time limit of 30 s in phase 1; Dartagnan then answers false in phase 2 with a witness that ULTIMATE Automizer's validator confirms. GemCutter answers false too, which svcomp27 does not accept from it; it is kept running by Dartagnan's false, which its true could contradict, and ends after about 6 s.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "dartagnan": {
+     "answer": "false(unreach-call)",
+     "cpu_s": 6.9
+    },
+    "deagle": {
+     "answer": "false(unreach-call)",
+     "cpu_s": 5.3
+    },
+    "ugemcutter": {
+     "answer": "false(unreach-call)",
+     "cpu_s": 19.2
+    }
+   },
+   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
+  },
+  {
+   "name": "goblint-regression/04-mutex_05-lockfuns",
+   "property": "no-overflow",
+   "owners": [
+    "ugemcutter"
+   ],
+   "hand_over": true,
+   "validator": "uautomizer-correctness",
+   "origin": "c/goblint-regression/04-mutex_05-lockfuns.yml",
+   "license": "MIT",
+   "purpose": "The no-overflow hand-over task (check 8). Goblint svcomp27 ends TIMEOUT at its CPU-time limit of 30 s in phase 1; ULTIMATE GemCutter then answers true in phase 2 with an invariant_set witness that ULTIMATE Automizer's correctness validator confirms. Deagle answers true too (no entry in svcomp27) and ends at once.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "sv-sanitizers": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "dartagnan": {
+     "answer": "true",
+     "cpu_s": 7.7
+    },
+    "deagle": {
+     "answer": "true",
+     "cpu_s": 0.2
+    },
+    "ugemcutter": {
+     "answer": "true",
+     "cpu_s": 23.9
+    }
+   },
+   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
+  },
+  {
+   "name": "goblint-regression/04-mutex_46a-escape_nr",
+   "property": "no-overflow",
+   "owners": [
+    "deagle"
+   ],
+   "validator": "uautomizer",
+   "origin": "c/goblint-regression/04-mutex_46a-escape_nr.yml",
+   "license": "MIT",
+   "purpose": "Deagle answers false(no-overflow) in 0.2 s with a YAML 2.2 violation witness, error-witness.yml, that ULTIMATE Automizer's validator confirms; Goblint ends in unknown after 0.7 s. ULTIMATE GemCutter and Dartagnan answer false too, which svcomp27 does not accept from them in no-overflow, so only Deagle gives the verdict.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "sv-sanitizers": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "dartagnan": {
+     "answer": "false(no-overflow)",
+     "cpu_s": 7.5
+    },
+    "deagle": {
+     "answer": "false(no-overflow)",
+     "cpu_s": 0.2
+    },
+    "ugemcutter": {
+     "answer": "false(no-overflow)",
+     "cpu_s": 18.5
+    }
+   },
+   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
+  },
+  {
+   "name": "goblint-regression/09-regions_11-arraylist_nr-deref",
+   "property": "valid-memsafety",
+   "owners": [
+    "deagle"
+   ],
+   "validator": "uautomizer",
+   "origin": "c/goblint-regression/09-regions_11-arraylist_nr-deref.yml",
+   "license": "MIT",
+   "purpose": "Deagle answers false(valid-deref) in 0.5 s with a witness that ULTIMATE Automizer's validator confirms; Goblint ends in unknown after 1.5 s and sv-sanitizers gives no answer, so in the valid-memsafety strategy only Deagle gives the verdict, in phase 2.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "none",
+     "status": "unknown"
+    },
+    "sv-sanitizers": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "dartagnan": {
+     "answer": "false(valid-deref)",
+     "cpu_s": 9.5
+    },
+    "deagle": {
+     "answer": "false(valid-deref)",
+     "cpu_s": 0.5
+    },
+    "ugemcutter": {
+     "answer": "false(valid-deref)",
+     "cpu_s": 33.9
+    }
+   },
+   "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
+  },
+  {
+   "name": "goblint-regression/28-race_reach_02-simple_racefree",
+   "property": "valid-memsafety",
+   "owners": [
+    "goblint"
+   ],
+   "validator": null,
+   "origin": "c/goblint-regression/28-race_reach_02-simple_racefree.yml",
+   "license": "MIT",
+   "purpose": "Goblint answers valid-memsafety true in 0.3 s in phase 1; Deagle ends in ERROR and sv-sanitizers reaches the time limit, so only Goblint gives the verdict. A valid-memsafety true needs no witness.",
+   "sv_comp_2026": {
+    "goblint": {
+     "answer": "true",
+     "cpu_s": 0.3
+    },
+    "sv-sanitizers": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "dartagnan": {
+     "answer": "none",
+     "status": "TIMEOUT"
+    },
+    "deagle": {
+     "answer": "none",
+     "status": "ERROR"
+    },
+    "ugemcutter": {
+     "answer": "none",
+     "status": "TIMEOUT"
     }
    },
    "sv_comp_2026_source": "verified result XMLs of the SV-COMP 2026 participants in the sub-categories of C.Concurrency, 2026-01, from results-verified, fetched 2026-10-19; cpu_s is CPU time of the component's own run"
