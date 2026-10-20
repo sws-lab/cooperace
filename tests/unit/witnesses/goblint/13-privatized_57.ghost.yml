@@ -1,0 +1,63 @@
+- entry_type: ghost_instrumentation
+  metadata:
+    format_version: "2.1"
+    uuid: 641f6977-7e4c-4ed9-953f-88d3b5e4f2ce
+    creation_time: 2026-10-20T00:50:21Z
+    producer:
+      name: Goblint
+      version: tags/svcomp27-0-gfabf66229
+      command_line: '''/mnt/big-data/vesal/scratch/cooperace-svcomp27-suite/tools/goblint/goblint''
+        ''--conf'' ''conf/svcomp27/common.json'' ''--conf'' ''conf/svcomp27/verify.json''
+        ''--conf'' ''conf/svcomp27/level00.json'' ''--set'' ''witness.yaml.entry-types''
+        ''["ghost_instrumentation"]'' ''--sets'' ''ana.specification'' ''/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/properties/unreach-call.prp''
+        ''--sets'' ''exp.architecture'' ''32bit'' ''/mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.c'''
+    task:
+      input_files:
+      - /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.c
+      input_file_hashes:
+        /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.c: 17a286d306a9282f28277d47f0b873eb60c07c533b9e3845e14597a1c7125ae0
+      data_model: ILP32
+      language: C
+      specification: CHECK( init(main()), LTL(G ! call(reach_error())) )
+  content:
+    ghost_variables:
+    - name: A_locked
+      scope: global
+      type: int
+      initial:
+        value: "0"
+        format: c_expression
+    - name: multithreaded
+      scope: global
+      type: int
+      initial:
+        value: "0"
+        format: c_expression
+    ghost_updates:
+    - location:
+        file_name: /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.c
+        line: 32
+        column: 3
+        function: main
+      updates:
+      - variable: multithreaded
+        value: "1"
+        format: c_expression
+    - location:
+        file_name: /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.c
+        line: 27
+        column: 3
+        function: main
+      updates:
+      - variable: A_locked
+        value: "0"
+        format: c_expression
+    - location:
+        file_name: /mnt/big-data/vesal/active/_SVCOMP_/sv-benchmarks/c/goblint-regression/13-privatized_57-singlethreaded-unlock_true.c
+        line: 25
+        column: 3
+        function: main
+      updates:
+      - variable: A_locked
+        value: "1"
+        format: c_expression

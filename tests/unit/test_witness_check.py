@@ -148,6 +148,50 @@ def test_a_correctness_witness_of_2_1_to_2_3_passes_for_a_true_of_unreach_call()
                             "no-overflow", "true")
 
 
+# Goblint svcomp27's witnesses for a true (notebook finding 1020-imp-true-witness-2027):
+# with witness.yaml.entry-types ["ghost_instrumentation"], one ghost_instrumentation
+# entry of format 2.1 (WitnessLint 2.3 accepts it); with its default options, the same
+# entry beside an invariant_set entry of format 2.0 (WitnessLint 2.3 rejects the mixed
+# versions).
+GOBLINT = FIXTURES / "goblint"
+GHOST = (GOBLINT / "18_read_write_lock.ghost.yml").read_text()
+
+
+def ghost(text, version='"2.1"'):
+    """The ghost-only witness `text` with the format_version `version`."""
+    return changed(text, 'format_version: "2.1"', f"format_version: {version}")
+
+
+def test_goblint_s_ghost_only_witness_passes_for_a_true_of_its_property():
+    assert witnesses.passes(GHOST, "no-overflow", "true")
+    assert witnesses.passes((GOBLINT / "13-privatized_57.ghost.yml").read_text(), "unreach-call", "true")
+    assert not witnesses.passes(GHOST, "unreach-call", "true")
+    assert not witnesses.passes(GHOST, "no-overflow", "false")
+
+
+def test_goblint_s_default_witness_with_two_format_versions_does_not_pass():
+    assert not witnesses.passes((GOBLINT / "18_read_write_lock.default.yml").read_text(), "no-overflow", "true")
+
+
+def test_a_ghost_entry_beside_an_invariant_set_of_the_same_version_passes():
+    invariants = correctness(specification="CHECK( init(main()), LTL(G ! overflow) )")
+    assert witnesses.passes(GHOST + invariants, "no-overflow", "true")
+    assert not witnesses.passes(ghost(GHOST, '"2.2"') + invariants, "no-overflow", "true")
+    assert not witnesses.passes(GHOST + GHOST, "no-overflow", "true")
+    assert not witnesses.passes(GHOST + invariants + invariants, "no-overflow", "true")
+
+
+def test_a_ghost_entry_out_of_bounds_does_not_pass():
+    assert not witnesses.passes(ghost(GHOST, '"2.0"'), "no-overflow", "true")
+    assert not witnesses.passes(ghost(GHOST, '"2.4"'), "no-overflow", "true")
+    assert witnesses.passes(ghost(GHOST, '"2.3"'), "no-overflow", "true")
+
+
+def test_a_ghost_entry_is_no_part_of_a_violation_witness():
+    assert not witnesses.passes(GHOST + LAMPORT, "no-data-race", "true")
+    assert witnesses.passes(GHOST + LAMPORT, "no-data-race", "false")
+
+
 def test_a_valid_memsafety_witness_names_the_sub_property_of_the_false():
     deref = violation(DEREF)
     assert witnesses.passes(deref, "valid-memsafety", "false", "valid-deref")

@@ -6,9 +6,10 @@
 by the witness formats SV-COMP accepts, which the witness table
 conf/witnesses.json of TOOL_DIR records (conf/README.md, "The witness table").
 A file counts only if `passes` holds for its text: it is a YAML list of
-entries, exactly one of which has the entry_type of the verdict
-("violation_sequence" for false, "invariant_set" for true), with a
-metadata.format_version in the bounds of the WitnessFormat and a
+entries, of which those of the verdict's kind (WITNESS_ENTRY_TYPES: a
+"violation_sequence" for false; an "invariant_set", a
+"ghost_instrumentation" or both for true) each have a different entry_type,
+one metadata.format_version in the bounds of the WitnessFormat, and a
 metadata.task.specification whose formulas are those of the property, or of
 the sub-property for valid-memsafety (properties.same_formulas). A GraphML
 file never counts. passing_witness picks the file of a run that counts.
@@ -45,6 +46,14 @@ from .properties import (
 
 VIOLATION = "violation_sequence"
 CORRECTNESS = "invariant_set"
+GHOST = "ghost_instrumentation"
+
+# The entry types a witness whose WitnessFormat has the entry_type of the key
+# may consist of. A correctness witness of format 2.1 and higher may hold
+# ghost_instrumentation beside, or instead of, its invariant_set: Goblint
+# svcomp27 with witness.yaml.entry-types ["ghost_instrumentation"] writes only
+# that entry, which WitnessLint 2.3 accepts as a correctness witness.
+WITNESS_ENTRY_TYPES = {VIOLATION: (VIOLATION,), CORRECTNESS: (CORRECTNESS, GHOST)}
 
 # The entry_type a witness of each verdict has.
 ENTRY_TYPES = {"true": CORRECTNESS, "false": VIOLATION}
@@ -263,10 +272,12 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     """Whether `text`, the content of a witness file, counts as the witness
     of the verdict `verdict` on `property_name` (with `subproperty` as in
     witness_format): False if witness_format has no format for it; else
-    `text` parses as YAML to a list of mappings, exactly one of which has the
-    format's entry_type, and that entry's metadata.format_version
-    (version_of) is in the format's bounds and its
-    metadata.task.specification is a string with the formulas of
+    `text` parses as YAML to a list of mappings; those whose entry_type is
+    one of WITNESS_ENTRY_TYPES of the format's entry_type are at least one
+    and have different entry types; they have one and the same
+    metadata.format_version (version_of), as WitnessLint requires of the
+    entries of a witness, and it is in the format's bounds; and the
+    metadata.task.specification of each is a string with the formulas of
     `specification` (properties.same_formulas). GraphML text does not parse
     to a list, so it never passes."""
     format_ = witness_format(property_name, verdict, subproperty)
@@ -279,18 +290,25 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
         return False
     if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
         return False
-    matching = [entry for entry in entries if entry.get("entry_type") == format_.entry_type]
-    if len(matching) != 1:
+    kinds = WITNESS_ENTRY_TYPES[format_.entry_type]
+    matching = [entry for entry in entries if entry.get("entry_type") in kinds]
+    types = [entry["entry_type"] for entry in matching]
+    if not matching or len(set(types)) != len(types):
         return False
-    metadata = matching[0].get("metadata")
-    if not isinstance(metadata, dict):
+    versions = set()
+    for entry in matching:
+        metadata = entry.get("metadata")
+        if not isinstance(metadata, dict):
+            return False
+        versions.add(version_of(metadata.get("format_version")))
+        task = metadata.get("task")
+        spec = task.get("specification") if isinstance(task, dict) else None
+        if not (isinstance(spec, str) and same_formulas(spec, formulas)):
+            return False
+    if len(versions) != 1:
         return False
-    version = version_of(metadata.get("format_version"))
-    if version is None or not format_.lowest <= version <= format_.highest:
-        return False
-    task = metadata.get("task")
-    spec = task.get("specification") if isinstance(task, dict) else None
-    return isinstance(spec, str) and same_formulas(spec, formulas)
+    version = versions.pop()
+    return version is not None and format_.lowest <= version <= format_.highest
 
 
 def file_passes(path: str, property_name: str, verdict: str, subproperty: str | None = None) -> bool:
