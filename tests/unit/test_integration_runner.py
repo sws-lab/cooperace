@@ -352,3 +352,70 @@ def test_check_3_reads_the_result_of_the_component_inside_cooperace(tmp_path):
                                            "CoOpeRace verdict: unknown"]) + "\n")
     assert run.component_result(dict(log=log), dict(component="deagle")) is True
     assert run.component_result(dict(log=tmp_path / "missing"), dict(component="deagle")) is None
+
+
+# --- the production conf's tasks, a true's witness, and wall-time limits -------
+
+BASELINE = {"properties": {"no-data-race": {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 40}, ["Goblint", "Dartagnan"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30},
+    "answers": [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan:false"]],
+    "witnesses": ["sv-sanitizers", "Dartagnan"]}}}
+
+
+def task(owners, expected, prop="no-data-race"):
+    return dict(owners=owners, expected=expected, property=prop)
+
+
+def test_a_production_conf_runs_only_tasks_it_can_answer_from_an_owner():
+    assert run.can_answer(BASELINE, task(["goblint"], True))
+    assert run.can_answer(BASELINE, task(["dartagnan"], False))
+    assert not run.can_answer(BASELINE, task(["dartagnan"], True))
+    assert not run.can_answer(BASELINE, task(["uautomizer"], False))
+    assert run.can_answer(BASELINE, task(["uautomizer", "dartagnan"], False))
+    assert not run.can_answer(BASELINE, task(["goblint"], True, "unreach-call"))
+    assert run.can_answer(BASELINE, task([], True))
+
+
+def true_run(tmp_path, files):
+    """A `true` run of CoOpeRace whose result files are `files`."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    r = false_run(tmp_path, files)
+    r["verdict"] = True
+    return r
+
+
+TRUE_OUTPUT = ["CoOpeRace result from: Goblint", "CoOpeRace verdict: true"]
+WITNESSES = Path(__file__).resolve().parent / "witnesses" / "goblint"
+
+
+def test_a_true_of_unreach_call_delivers_a_correctness_witness_of_one_accepted_version(tmp_path):
+    ghost = (WITNESSES / "13-privatized_57.ghost.yml").read_text()
+    default = (WITNESSES / "18_read_write_lock.default.yml").read_text()
+
+    assert run.protocol_problems(true_run(tmp_path / "a", {"witness.yml": ghost}), TRUE_OUTPUT, YAML_FORMAT,
+                                 "unreach-call") == []
+    assert run.protocol_problems(true_run(tmp_path / "b", {}), TRUE_OUTPUT, YAML_FORMAT, "unreach-call") == [
+        "no witness.yml in the result files, which a true needs for unreach-call"]
+    assert run.protocol_problems(true_run(tmp_path / "c", {"witness.yml": default}), TRUE_OUTPUT, YAML_FORMAT,
+                                 "no-overflow") == [
+        "witness.yml has no single format_version of invariant_set and ghost_instrumentation entries, "
+        "but witnesses.json accepts 2.1 to 2.3 for a no-overflow true"]
+    assert run.protocol_problems(true_run(tmp_path / "d", {}), TRUE_OUTPUT, YAML_FORMAT, "no-data-race") == []
+
+
+def measured(name, wall):
+    return f"Tool name: {name} Measured: cputime=1.00s walltime={wall:.2f}s memory=1B terminationreason=none"
+
+
+def test_check_7_reads_the_wall_time_limit_of_a_phase():
+    run_def = {"config": BASELINE}
+    within = [measured("SV-sanitizers", 44.0), measured("Goblint", 300.0)]
+    assert run.wall_time_problems(run_def, within) == []
+    assert run.wall_time_problems(run_def, ["CoOpeRace: the wall-time limit of phase 1, 40 s, has passed: "
+                                            "stopping sv-sanitizers"] + within) == []
+    assert run.wall_time_problems(run_def, ["CoOpeRace: the wall-time limit of phase 1, 60 s, has passed: "
+                                            "stopping sv-sanitizers"]) == [
+        "the wall-time limit of phase 1 is printed as 60 s, but the strategy gives 40"]
+    assert run.wall_time_problems(run_def, [measured("SV-sanitizers", 46.0)]) == [
+        "sv-sanitizers ran 46.0 s of wall time, past the 40 s of phase 1"]

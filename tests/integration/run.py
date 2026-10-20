@@ -7,7 +7,7 @@
 """Integration suite for the components of CoOpeRace.
 
 For every component that is installed under tools/ (Goblint, Dartagnan,
-ULTIMATE Automizer, sv-sanitizers, Deagle, iekke) the suite runs a handful of
+ULTIMATE Automizer, sv-sanitizers, Deagle, iekke, ULTIMATE GemCutter) the suite runs a handful of
 small tasks, each of one property (`property` in manifest.json, no-data-race
 where a task names none)
 
@@ -45,9 +45,12 @@ checks (see README.md):
      block closed, no `CoOpeRace: error:`; a `false` delivers the format's
      witness file where the witness table requires one, and no two files of
      one format, and a YAML witness has a version that conf/witnesses.json
-     accepts for the task's property
+     accepts for the task's property; a `true` delivers witness.yml with
+     one accepted version where the table requires a witness for it
   7  each component limit of the configuration (memoryLimits, cpuTimeLimits)
-     is printed with the configured value whenever that component started
+     is printed with the configured value whenever that component started;
+     a phase's wall-time limit is printed with its value when it passes,
+     and a component only in that phase ends within it
   8  in goblint-1s, the 1 s CPU-time limit ends Goblint (status
      TIMEOUT) and a later phase gives the expected verdict
   9  the verdict is the one the components' answers decide, and no
@@ -104,6 +107,7 @@ COMPONENTS = {
     "sv-sanitizers": dict(module="benchexec.tools.sv-sanitizers", name="sv-sanitizers"),
     "deagle": dict(module="benchexec.tools.deagle", name="Deagle"),
     "iekke": dict(module="benchexec.tools.iekke", name="iekke"),
+    "ugemcutter": dict(module="benchexec.tools.ultimategemcutter", name="ULTIMATE GemCutter"),
 }
 
 # Tool directories under tools/ of the names that conf/*.json may use
@@ -436,6 +440,20 @@ def conf_components(conf):
                               for phase in strategy["phases"] for name in phase_tools(phase)))
 
 
+def can_answer(conf, t):
+    """Whether the CoOpeRace configuration `conf` can give the expected
+    verdict of the task `t` from one of the task's owners: its strategy for
+    the task's property has an entry for that verdict of an owner (by the
+    owner's name in the conf, COMPONENTS). A task without owners counts as
+    answerable."""
+    if not t["owners"]:
+        return True
+    brackets, _ = strategy_answers(conf, t["property"])
+    verdict = str(t["expected"]).lower()
+    names = {COMPONENTS[o]["name"] for o in t["owners"] if o in COMPONENTS}
+    return any((name, verdict) in bracket for bracket in brackets for name in names)
+
+
 def read_conf(path):
     """The CoOpeRace configuration in the file `path`."""
     try:
@@ -448,7 +466,11 @@ def plan(args):
     """The run definitions: alone-<c>, only-<c> for every component c, one per
     production configuration, and one per configuration of the suite
     (`configurations` in manifest.json); with the tasks each one runs.  A task
-    that names `configurations` of its own is run by those only."""
+    that names `configurations` of its own is run by those only.  A
+    production configuration runs only the tasks it can_answer: a task whose
+    owners it gives no entry for the task's expected verdict (Dartagnan's
+    `true` in a conf that accepts only its `false`) is listed among the
+    skipped, with the reason, since check 5 would fail on it by design."""
     manifest, tasks = load_tasks(args.tasks)
     regular = [t for t in tasks if not t.get("configurations")]
     cdir = Path(args.cooperace_dir).resolve()
@@ -480,8 +502,17 @@ def plan(args):
                    if not (cdir / "tools" / TOOL_DIRS.get(n, n)).is_dir()]
         if missing:
             skipped[name] = "not run: " + ", ".join(sorted(set(missing))) + " not installed under tools/"
-        else:
-            runs[name] = dict(kind=kind, conf=path, config=conf, tasks=its_tasks, checks=checks)
+            continue
+        if kind == "production":
+            unanswerable = [t for t in its_tasks if not can_answer(conf, t)]
+            its_tasks = [t for t in its_tasks if can_answer(conf, t)]
+            if unanswerable:
+                skipped[f"{name} (tasks)"] = (
+                    "not run on " + ", ".join(t["name"] for t in unanswerable)
+                    + ": the conf has no entry for the expected verdict of any owner")
+            if not its_tasks:
+                continue
+        runs[name] = dict(kind=kind, conf=path, config=conf, tasks=its_tasks, checks=checks)
     return manifest, tasks, runs, skipped, cdir
 
 
@@ -694,7 +725,7 @@ def read_lint(results, out):
 
 def component_of_producer(producer):
     p = producer.lower()
-    for name, c in (("dartagnan", "dartagnan"), ("goblint", "goblint"),
+    for name, c in (("dartagnan", "dartagnan"), ("goblint", "goblint"), ("gemcutter", "ugemcutter"),
                     ("automizer", "uautomizer"), ("ultimate", "uautomizer"),
                     ("sanitizers", "sv-sanitizers"), ("deagle", "deagle"), ("iekke", "iekke")):
         if name in p:
@@ -718,6 +749,12 @@ BLOCK_START = re.compile(r"---(?!end of )(.+) logs---")
 BLOCK_END = re.compile(r"---end of (.+) logs---")
 STATUS_LINE = re.compile(r"Tool name: (.+?) Status: (.*) Exit code: (.*)")
 RESULT_LINE = re.compile(r"Tool name: (.+?) Result: (\w+)")
+MEASURED_LINE = re.compile(r"Tool name: (.+?) Measured: cputime=(\S+) walltime=(\S+) .*")
+WALL_TIME_PHASE = re.compile(r"CoOpeRace: the wall-time limit of phase (\d+), (\S+) s, has passed: stopping .+")
+# How long after a phase's wall-time limit a component of that phase may still
+# end: CoOpeRace looks at the clock about once a second and stopping a
+# component's RunExecutor run takes time.
+WALL_TIME_SLACK = 5
 
 
 def cooperace_output(r):
@@ -882,6 +919,30 @@ def violation_version(path):
         return None
 
 
+def correctness_version(path):
+    """The one metadata.format_version, as (major, minor), of the entries of
+    entry_type invariant_set and ghost_instrumentation of the YAML witness
+    `path`, which a correctness witness consists of; None if it has none,
+    one of the two types twice, entries of different versions, or a version
+    that is not "major.minor" (a string, or the number YAML reads an
+    unquoted 2.1 as)."""
+    try:
+        import yaml  # a BenchExec dependency
+        entries = yaml.safe_load(Path(path).read_text())
+        found = [e for e in entries if isinstance(e, dict)
+                 and e.get("entry_type") in ("invariant_set", "ghost_instrumentation")]
+        types = [e["entry_type"] for e in found]
+        values = [e["metadata"]["format_version"] for e in found]
+        if not found or len(set(types)) != len(types) or any(
+                isinstance(v, bool) or not isinstance(v, (str, float)) for v in values):
+            return None
+        versions = {str(v).strip() for v in values}
+        match = re.fullmatch(r"(\d+)\.(\d+)", versions.pop()) if len(versions) == 1 else None
+        return (int(match.group(1)), int(match.group(2))) if match else None
+    except Exception:
+        return None
+
+
 def version_problem(name, path, table=WITNESS_TABLE, property_name=DEFAULT_PROPERTY):
     """What is wrong with the version of `path`, the file `name` that a
     `false` of CoOpeRace on `property_name` delivered as its YAML witness:
@@ -947,6 +1008,44 @@ def limit_problems(run, r, lines, property_name=DEFAULT_PROPERTY):
             for n in printed:
                 if abs(n - expected) > 0.01 * expected:
                     problems.append(f"{name}'s limit is printed as {n} {unit}, but {key} gives {wanted}")
+    return problems
+
+
+def wall_time_problems(run, lines, property_name=DEFAULT_PROPERTY):
+    """What departs from the `wallTimeLimit` of the phases of the run's
+    strategy for `property_name` (check 7): a line `CoOpeRace: the
+    wall-time limit of phase N, L s, has passed: ...` must give the limit
+    of phase N, and each component that is only in a phase with a limit (in
+    neither the phase before nor the one after) must have ended within the
+    limit and WALL_TIME_SLACK, by the walltime of its `Tool name: X
+    Measured:` line."""
+    strategy = (run.get("config") or {}).get("properties", {}).get(property_name, {})
+    phases = strategy.get("phases", [])
+    limits = {i: p["wallTimeLimit"] for i, p in enumerate(phases)
+              if isinstance(p, dict) and "wallTimeLimit" in p}
+    if lines is None or not limits:
+        return []
+    problems = []
+    for line in lines:
+        m = WALL_TIME_PHASE.fullmatch(line)
+        if m:
+            index, printed = int(m.group(1)) - 1, float(m.group(2))
+            if limits.get(index) != printed:
+                problems.append(f"the wall-time limit of phase {index + 1} is printed as {m.group(2)} s, "
+                                f"but the strategy gives {limits.get(index, 'none')}")
+    wall = {}
+    for line in lines:
+        m = MEASURED_LINE.fullmatch(line)
+        if m and m.group(3).endswith("s"):
+            wall[m.group(1).lower()] = float(m.group(3)[:-1])
+    for index, limit in limits.items():
+        neighbours = {n for i in (index - 1, index + 1) if 0 <= i < len(phases) for n in phase_tools(phases[i])}
+        for name in phase_tools(phases[index]):
+            if name in neighbours or name.lower() not in wall:
+                continue
+            if wall[name.lower()] > limit + WALL_TIME_SLACK:
+                problems.append(f"{name} ran {wall[name.lower()]:.1f} s of wall time, past the {limit} s "
+                                f"of phase {index + 1}")
     return problems
 
 
@@ -1127,6 +1226,17 @@ def protocol_problems(r, lines, fmt, property_name=DEFAULT_PROPERTY):
                 problems.append(f"{len(with_it)} files in the format of {kind}: {', '.join(with_it)}")
         if fmt["file"] not in names and witness_needed(property_name, "false"):
             problems.append(f"no {fmt['file']} in the result files ({', '.join(names) or 'none'})")
+    if r["verdict"] is True and fmt["file"] == "witness.yml" and witness_needed(property_name, "true"):
+        path = Path(r["files"]) / "witness.yml"
+        lowest, highest = accepted_versions(property_name, "true")
+        version = correctness_version(path) if path.is_file() else None
+        if not path.is_file():
+            problems.append("no witness.yml in the result files, which a true needs for " + property_name)
+        elif version is None or not lowest <= version <= highest:
+            found = ("no single format_version of invariant_set and ghost_instrumentation entries"
+                     if version is None else f"format_version {version[0]}.{version[1]}")
+            problems.append(f"witness.yml has {found}, but {WITNESS_TABLE.name} accepts "
+                            f"{lowest[0]}.{lowest[1]} to {highest[0]}.{highest[1]} for a {property_name} true")
     return problems
 
 
@@ -1220,9 +1330,13 @@ def check(results, runs, tasks, skipped, fmt):
             continue
         for t in run["tasks"]:
             config = strategy_limits(run.get("config") or {}, t["property"])
+            phases = (run.get("config") or {}).get("properties", {}).get(t["property"], {}).get("phases", [])
+            walls = any(isinstance(p, dict) and "wallTimeLimit" in p for p in phases)
             r = results.get((rundef, t["id"]))
-            if r and (config.get("memoryLimits") or config.get("cpuTimeLimits")):
-                problems = limit_problems(run, r, cooperace_output(r), t["property"])
+            if r and (config.get("memoryLimits") or config.get("cpuTimeLimits") or walls):
+                lines = cooperace_output(r)
+                problems = limit_problems(run, r, lines, t["property"])
+                problems += wall_time_problems(run, lines, t["property"])
                 add(7, rundef, t["id"], not problems, "limit line", "; ".join(problems))
     # Check 8.
     for rundef, run in runs.items():
@@ -1311,7 +1425,7 @@ def report(checks, results, runs, tasks, skipped, out, meta=None):
              4: "witness of every false is confirmed, produced by the answering component",
              5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
-             7: "CoOpeRace prints the configured component limits",
+             7: "CoOpeRace prints the configured component limits and keeps the phases' wall-time limits",
              8: "Goblint's CPU-time limit ends it (TIMEOUT) and a later phase answers",
              9: "a phase stops its other components once one answers"}
     lines = [table(results, runs, tasks, skipped), "",
