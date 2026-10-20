@@ -4,6 +4,11 @@
             "phases":    [["Dartagnan"]],
             "answers":   [["Dartagnan"]],
             "witnesses": ["Dartagnan"]
+        },
+        "unreach-call": {
+            "phases":    [["Dartagnan"]],
+            "answers":   [["Dartagnan"]],
+            "witnesses": ["Dartagnan"]
         }
     }
 }

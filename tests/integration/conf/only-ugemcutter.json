@@ -1,0 +1,14 @@
+{
+    "properties": {
+        "unreach-call": {
+            "phases":    [["ULTIMATE GemCutter"]],
+            "answers":   [["ULTIMATE GemCutter"]],
+            "witnesses": ["ULTIMATE GemCutter"]
+        },
+        "no-overflow": {
+            "phases":    [["ULTIMATE GemCutter"]],
+            "answers":   [["ULTIMATE GemCutter"]],
+            "witnesses": ["ULTIMATE GemCutter"]
+        }
+    }
+}

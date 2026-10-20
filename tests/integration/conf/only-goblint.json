@@ -4,6 +4,16 @@
             "phases":    [["Goblint"]],
             "answers":   [["Goblint"]],
             "witnesses": ["Goblint"]
+        },
+        "unreach-call": {
+            "phases":    [["Goblint"]],
+            "answers":   [["Goblint"]],
+            "witnesses": ["Goblint"]
+        },
+        "no-overflow": {
+            "phases":    [["Goblint"]],
+            "answers":   [["Goblint"]],
+            "witnesses": ["Goblint"]
         }
     }
 }
