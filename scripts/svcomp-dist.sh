@@ -72,7 +72,10 @@ find "${DIST}" -name '.DS_Store' -delete
 # The same commit gives the same zip: every file gets the commit's time, and
 # the entries are sorted.
 EPOCH="$(git log -1 --format=%ct "${TREE}")"
-find "${DIST}" -exec touch -h -d "@${EPOCH}" {} +
+# `touch -d @EPOCH` is GNU-only, so the time is passed as `touch -t` local time,
+# formatted with GNU `date -d @` or, on macOS, BSD `date -r`.
+STAMP="$(date -d "@${EPOCH}" +%Y%m%d%H%M.%S 2>/dev/null || date -r "${EPOCH}" +%Y%m%d%H%M.%S)"
+find "${DIST}" -exec touch -h -t "${STAMP}" {} +
 (
   cd "${DIST}/.."
   rm -f cooperace.zip
