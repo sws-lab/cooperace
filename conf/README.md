@@ -12,7 +12,7 @@ The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Go
         "no-data-race": {
             "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
                               ["Goblint", "Dartagnan"]],
-            "cpuTimeLimits": {"sv-sanitizers": 30},
+            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
             "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
             "witnesses":     ["sv-sanitizers", "Dartagnan"]
         },

@@ -24,7 +24,7 @@ SHIPPED_CONFS = sorted(path for path in [*ROOT.glob("conf/*.json"), *ROOT.glob("
 # Two strategies of the default conf, conf/svcomp27.json, which conf/README.md shows.
 NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Goblint", "Dartagnan"]],
-    "cpuTimeLimits": {"sv-sanitizers": 30},
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
     "answers": [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["sv-sanitizers", "Dartagnan"],
 }
@@ -95,7 +95,7 @@ def test_the_no_data_race_example_loads(known):
                  frozenset({Entry("sv-sanitizers", "false")}),
                  frozenset({Entry("Dartagnan", "true"), Entry("Dartagnan", "false")})),
         witnesses=("sv-sanitizers", "Dartagnan"),
-        cpu_time_limits={"sv-sanitizers": 30},
+        cpu_time_limits={"sv-sanitizers": 30, "Goblint": 30},
         memory_limits={},
     )
 
@@ -161,7 +161,7 @@ def test_step_gives_a_component_its_own_limits_and_accepts_both_verdicts(known):
 
     assert strategy.step("sv-sanitizers") == Step("sv-sanitizers", "all", None, 30)
     assert strategy.step("Dartagnan") == Step("Dartagnan", "all", "70%", None)
-    assert strategy.step("Goblint") == Step("Goblint", "all", None, None)
+    assert strategy.step("Goblint") == Step("Goblint", "all", None, 30)
 
 
 def test_an_entry_without_a_verdict_is_an_entry_for_both(known):
