@@ -20,16 +20,27 @@ from src.cooperace.components import ComponentRunner
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_RACE = ROOT / "tests" / "properties" / "no-data-race.prp"
-# The properties of C.Concurrency, those that the default conf,
-# conf/svcomp27.json, has no strategy for, and the property files of
-# sv-benchmarks that hold no property of C.Concurrency
+# The properties of C.Concurrency, those that NO_DATA_RACE_ONLY has no
+# strategy for, and the property files of sv-benchmarks that hold no property
+# of C.Concurrency
 PROPERTIES = ["unreach-call", "no-overflow", "valid-memsafety", "no-data-race"]
-NO_STRATEGY = ["no-overflow"]
+NO_STRATEGY = ["unreach-call", "no-overflow", "valid-memsafety"]
 OTHER_PROPERTIES = ["unreach-call", "no-overflow", "valid-memsafety"]
 UNKNOWN_PROPERTIES = sorted(path for path in (ROOT / "tests" / "properties").glob("*.prp")
                             if path.stem not in PROPERTIES)
 GOBLINT = one_after_another("Goblint")
 FORMULA = "CHECK( init(main()), LTL(G ! data-race) )"
+# A conf with a strategy for no-data-race only, written as only.json into the
+# working directory by write_no_data_race_only
+NO_DATA_RACE_ONLY = {"properties": {"no-data-race": {"phases": [["Goblint"]], "answers": [["Goblint"]],
+                                                     "witnesses": []}}}
+
+
+def write_no_data_race_only(directory):
+    """Writes NO_DATA_RACE_ONLY to `directory`/only.json and returns its name
+    relative to `directory`."""
+    (directory / "only.json").write_text(json.dumps(NO_DATA_RACE_ONLY))
+    return "only.json"
 
 
 @pytest.fixture
@@ -111,9 +122,10 @@ def test_a_data_race_run_prints_the_verdict_line_last_and_exits_normally(run_mai
 # --- the property --------------------------------------------------------------
 
 @pytest.mark.parametrize("name", NO_STRATEGY)
-def test_a_property_the_default_conf_has_no_strategy_for_is_refused_and_no_component_starts(
-        run_main, no_run, name):
-    status, out, err = run_main("--prop", str(ROOT / "tests" / "properties" / f"{name}.prp"))
+def test_a_property_the_conf_has_no_strategy_for_is_refused_and_no_component_starts(
+        run_main, no_run, name, tmp_path):
+    conf = write_no_data_race_only(tmp_path)
+    status, out, err = run_main("--conf", conf, "--prop", str(ROOT / "tests" / "properties" / f"{name}.prp"))
 
     assert (status, out) == (1, "")
     #Not even the line on the missing --arch: the runner is not made
@@ -133,8 +145,9 @@ def test_the_property_is_recognized_by_its_content_and_not_by_its_name(run_main,
     (tmp_path / "anything.txt").write_text("CHECK(init(main()),\n  LTL(G !   data-race))\n\n")
     (tmp_path / "no-data-race.prp").write_text("CHECK( init(main()), LTL(G ! overflow) )")
 
-    accepted = run_main("--prop", "anything.txt")
-    refused = run_main("--prop", "no-data-race.prp")
+    conf = write_no_data_race_only(tmp_path)
+    accepted = run_main("--conf", conf, "--prop", "anything.txt")
+    refused = run_main("--conf", conf, "--prop", "no-data-race.prp")
 
     assert accepted[0] == 0
     assert_refused(refused, "unsupported property no-overflow: the conf has no strategy for it")
@@ -491,7 +504,8 @@ def test_the_launcher_without_prop_exits_with_status_2(tmp_path):
 def test_the_launcher_refuses_a_property_without_a_strategy_with_status_1_and_no_verdict_line(tmp_path):
     (tmp_path / "foo.c").touch()
 
-    result = launch(tmp_path, "--prop", str(ROOT / "tests/properties/no-overflow.prp"), "foo.c")
+    conf = write_no_data_race_only(tmp_path)
+    result = launch(tmp_path, "--conf", conf, "--prop", str(ROOT / "tests/properties/no-overflow.prp"), "foo.c")
 
     assert result.returncode == 1
     assert result.stdout == ""

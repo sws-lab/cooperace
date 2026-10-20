@@ -21,15 +21,15 @@ ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_CONFS = sorted(path for path in [*ROOT.glob("conf/*.json"), *ROOT.glob("tests/integration/conf/*.json")]
                        if path != ROOT / "conf" / "witnesses.json")
 
-# The two examples of conf/README.md, "Two examples".
+# Two strategies of the default conf, conf/svcomp27.json, which conf/README.md shows.
 NO_DATA_RACE = {
-    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 60}, ["Goblint", "Dartagnan"]],
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Goblint", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30},
     "answers": [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["sv-sanitizers", "Dartagnan"],
 }
 VALID_MEMSAFETY = {
-    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 60}, ["Deagle"]],
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
     "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
     "witnesses": ["Deagle", "sv-sanitizers"],
@@ -74,20 +74,23 @@ def test_every_shipped_conf_loads(path, known):
     assert all(isinstance(strategy, Strategy) for strategy in strategies.values())
 
 
-def test_the_examples_of_the_conf_readme_are_the_examples_this_file_loads():
+def test_the_conf_readme_shows_the_default_conf_whose_strategies_this_file_loads():
     text = (ROOT / "conf" / "README.md").read_text()
-    block = re.search(r"## Two examples\n\n```json\n(.*?)```", text, re.DOTALL).group(1)
+    block = re.search(r"## The default conf: `conf/svcomp27.json`\n\n.*?```json\n(.*?)```", text, re.DOTALL).group(1)
+    shipped = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
 
-    assert json.loads(block) == {"properties": {"no-data-race": NO_DATA_RACE, "valid-memsafety": VALID_MEMSAFETY}}
+    assert json.loads(block) == shipped
+    assert shipped["properties"]["no-data-race"] == NO_DATA_RACE
+    assert shipped["properties"]["valid-memsafety"] == VALID_MEMSAFETY
 
 
-# --- the two examples ----------------------------------------------------------
+# --- two strategies of the default conf ---------------------------------------
 
 def test_the_no_data_race_example_loads(known):
     strategy = config.load(NO_DATA_RACE, known)
 
     assert strategy == Strategy(
-        phases=(Phase(("sv-sanitizers", "Goblint"), 60), Phase(("Goblint", "Dartagnan"))),
+        phases=(Phase(("sv-sanitizers", "Goblint"), 45), Phase(("Goblint", "Dartagnan"))),
         answers=(frozenset({Entry("Goblint", "true")}),
                  frozenset({Entry("sv-sanitizers", "false")}),
                  frozenset({Entry("Dartagnan", "true"), Entry("Dartagnan", "false")})),
@@ -101,7 +104,7 @@ def test_the_valid_memsafety_example_loads(known):
     strategy = config.load(VALID_MEMSAFETY, known)
 
     assert strategy == Strategy(
-        phases=(Phase(("sv-sanitizers", "Goblint"), 60), Phase(("Deagle",))),
+        phases=(Phase(("sv-sanitizers", "Goblint"), 45), Phase(("Deagle",))),
         answers=(frozenset({Entry("Goblint", "true")}),
                  frozenset({Entry("Deagle", "false"), Entry("sv-sanitizers", "false")}),
                  frozenset({Entry("Deagle", "true")})),

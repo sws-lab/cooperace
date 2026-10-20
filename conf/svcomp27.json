@@ -1,22 +1,32 @@
 {
     "properties": {
         "no-data-race": {
-            "phases":        [["sv-sanitizers", "Goblint"], ["Goblint", "Dartagnan"]],
+            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
+                              ["Goblint", "Dartagnan"]],
             "cpuTimeLimits": {"sv-sanitizers": 30},
-            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan:false"]],
+            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
             "witnesses":     ["sv-sanitizers", "Dartagnan"]
         },
         "unreach-call": {
-            "phases":        [["sv-sanitizers", "Goblint"], ["Deagle", "Dartagnan"]],
-            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
-            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Deagle:true", "Dartagnan:false"]],
-            "witnesses":     ["sv-sanitizers", "Dartagnan", "Goblint", "Deagle"]
+            "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
+                              ["ULTIMATE GemCutter", "Dartagnan"]],
+            "cpuTimeLimits": {"Goblint": 30},
+            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Dartagnan:false"]],
+            "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Dartagnan"]
+        },
+        "no-overflow": {
+            "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
+                              ["ULTIMATE GemCutter", "Deagle"]],
+            "cpuTimeLimits": {"Goblint": 30},
+            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Deagle:false"]],
+            "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Deagle"]
         },
         "valid-memsafety": {
-            "phases":        [["sv-sanitizers", "Goblint"], ["Deagle"]],
+            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
+                              ["Deagle"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
-            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Deagle"]],
-            "witnesses":     ["sv-sanitizers", "Deagle"]
+            "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
+            "witnesses":     ["Deagle", "sv-sanitizers"]
         }
     }
 }

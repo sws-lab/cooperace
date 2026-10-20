@@ -2,20 +2,36 @@
 
 A conf is a JSON object whose only key is `properties`, which maps a property to its strategy. A strategy says three things for its property: when each tool runs (`phases`), whose verdict wins (`answers`), and whose witness is delivered (`witnesses`). `conf/svcomp27.json` is the default conf, read when CoOpeRace is started without `--conf`. `conf/witnesses.json` is not a conf: it is the witness table, which says which witness each verdict of each property needs (see [The witness table](#the-witness-table-confwitnessesjson)).
 
-## Two examples
+## The default conf: `conf/svcomp27.json`
+
+The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Goblint, trusted for `true`, beside sv-sanitizers, trusted for `false`, where it can answer, each limited to 30 s of CPU time; phase 2 runs the best `true` verifier and the best `false` falsifier of the property in SV-COMP 2026 whose 2027 version writes the witness 2027 requires.
 
 ```json
 {
     "properties": {
         "no-data-race": {
-            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 60},
+            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
                               ["Goblint", "Dartagnan"]],
             "cpuTimeLimits": {"sv-sanitizers": 30},
             "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
             "witnesses":     ["sv-sanitizers", "Dartagnan"]
         },
+        "unreach-call": {
+            "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
+                              ["ULTIMATE GemCutter", "Dartagnan"]],
+            "cpuTimeLimits": {"Goblint": 30},
+            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Dartagnan:false"]],
+            "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Dartagnan"]
+        },
+        "no-overflow": {
+            "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
+                              ["ULTIMATE GemCutter", "Deagle"]],
+            "cpuTimeLimits": {"Goblint": 30},
+            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Deagle:false"]],
+            "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Deagle"]
+        },
         "valid-memsafety": {
-            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 60},
+            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
                               ["Deagle"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
             "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
@@ -25,7 +41,9 @@ A conf is a JSON object whose only key is `properties`, which maps a property to
 }
 ```
 
-In no-data-race, sv-sanitizers and Goblint start together. Goblint's `true` is trusted most, then sv-sanitizers' `false`, then either answer of Dartagnan. Phase 1 ends when sv-sanitizers has ended, or after 60 s of wall time, which stops sv-sanitizers; Goblint, also in phase 2, keeps running, and Dartagnan starts. In valid-memsafety, Deagle's `false` is trusted as much as sv-sanitizers' `false`, and its `true` less. The 60 s are a placeholder, not a measured value.
+In no-data-race, sv-sanitizers and Goblint start together. Goblint's `true` is trusted most, then sv-sanitizers' `false`, then either answer of Dartagnan. Phase 1 ends when sv-sanitizers has ended, or after 45 s of wall time, which stops sv-sanitizers; Goblint, also in phase 2, keeps running without a CPU-time limit of its own, and Dartagnan starts. In unreach-call and no-overflow, phase 1 is Goblint alone: sv-sanitizers gave no `false` in these two properties in SV-COMP 2026, and the witness its 2027 version writes for a violation with one target is of format 2.0, which the witness table does not accept there. ULTIMATE GemCutter's `true` and Dartagnan's (unreach-call) or Deagle's (no-overflow) `false` share the second bracket, so a disagreement between them is a contradiction. Goblint is first in `witnesses`, so that GemCutter is not started for a witness when Goblint's `true` already has one. In valid-memsafety, Deagle's `false` is trusted as much as sv-sanitizers' `false`, and its `true` less.
+
+**The wall-time limit of phase 1, 45 s,** ends phase 1 when a tool waits without using CPU time, which a CPU-time limit does not end. It must not stop a phase-1 tool that is still within its 30 s of CPU time. In the integration suite on `goblint` (BenchExec 3.35, 2 cores per run, cgroups v2), sv-sanitizers reached its 30 s limit on four tasks after 30.8 to 30.9 s of CPU time and 31.4 to 32.2 s of wall time, since BenchExec ends a tool up to about 1 s after its limit and the tool shares the run's cores with Goblint; Goblint needs about 1.1 s of wall time per second of CPU time. 45 s is 13 s above the slowest of these, and 1.5 times the CPU-time limit. The orders of the brackets and of `witnesses` are the fits of the replay on the SV-COMP 2026 results of the notebook finding 1020-imp-revised-baseline-replay; in unreach-call and no-overflow every order replayed scores the same.
 
 The properties are named as the property files of sv-benchmarks are: `unreach-call`, `no-overflow`, `valid-memsafety` and `no-data-race`. CoOpeRace recognizes the property of a task from the formulas in the property file given with `--prop`, with white space and the order of the formulas ignored, never from the file's name or the task's path (`src/cooperace/properties.py`):
 
@@ -36,7 +54,7 @@ The properties are named as the property files of sv-benchmarks are: `unreach-ca
 | `valid-memsafety` | `CHECK( init(main()), LTL(G valid-free) )`, `CHECK( init(main()), LTL(G valid-deref) )` and `CHECK( init(main()), LTL(G valid-memtrack) )` |
 | `no-data-race` | `CHECK( init(main()), LTL(G ! data-race) )` |
 
-A property the conf gives no strategy for is refused before any tool starts, so a conf can leave out a property it should not answer. `conf/svcomp27.json` has no strategy for no-overflow.
+A property the conf gives no strategy for is refused before any tool starts, so a conf can leave out a property it should not answer. `conf/svcomp27.json` has a strategy for each of the four.
 
 ## `phases`: when each tool runs
 
@@ -149,6 +167,6 @@ CoOpeRace checks the property file, the conf and the witness table before it sta
 - `cpuTimeLimits` or `memoryLimits` has a key that is in no phase, or a `wallTimeLimit`, a `cpuTimeLimits` value or a `memoryLimits` value is not a positive number (for `memoryLimits`, nor a percentage above 0 and at most 100);
 - the witness table `conf/witnesses.json` of CoOpeRace's directory cannot be read or is not JSON; it is not an object with exactly the keys `highestVersion` and `properties`; `properties` names a property that is not one of the four or lacks one of them; a property's object does not have exactly the keys `"true"` and `"false"`; a verdict's value is neither `null` nor an object with `minimumVersion` and `required` and optionally `subproperties`; `required` is not `true` or `false`; `highestVersion` or a `minimumVersion` is not a string `"major.minor"`; a `minimumVersion` is above `highestVersion`; or `subproperties` is given anywhere but valid-memsafety's `false`, names another sub-property than `valid-free`, `valid-deref` and `valid-memtrack`, or gives one another key than `minimumVersion`.
 
-Every strategy of the conf is checked, not only the one for the task's property. CoOpeRace also stops this way, before any tool starts, if the executable of a tool that any strategy of the conf names is not under the `tools/` directory of CoOpeRace; a conf that names a tool that is not installed (for example Deagle, which `scripts/download-tools.py` fetches only with `--pool`, since it is not in `tools.txt`) is refused as a whole, for every property. The same holds for a tool of any strategy whose `tools/<name>/.doi` is not the DOI that `tools-options.json` holds its options for.
+Every strategy of the conf is checked, not only the one for the task's property. CoOpeRace also stops this way, before any tool starts, if the executable of a tool that any strategy of the conf names is not under the `tools/` directory of CoOpeRace; a conf that names a tool that is not installed (for example ULTIMATE Automizer, which `scripts/download-tools.py` fetches only with `--pool`, since it is not in `tools.txt`) is refused as a whole, for every property. The same holds for a tool of any strategy whose `tools/<name>/.doi` is not the DOI that `tools-options.json` holds its options for.
 
 A conf given with `--conf` is a path relative to the working directory; without it, CoOpeRace reads `conf/svcomp27.json` from its own directory.
