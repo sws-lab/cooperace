@@ -12,13 +12,6 @@
     "version": "svcomp27",
     "options": []
   },
-  "uautomizer": {
-    "doi": "10.5281/zenodo.23295622",
-    "version": "svcomp27",
-    "options": [
-      "--full-output"
-    ]
-  },
   "sv-sanitizers": {
     "doi": "10.5281/zenodo.23342909",
     "version": "svcomp27",
@@ -29,17 +22,24 @@
     "version": "svcomp27",
     "options": []
   },
+  "ugemcutter": {
+    "doi": "10.5281/zenodo.23295738",
+    "version": "svcomp27",
+    "options": [
+      "--full-output"
+    ]
+  },
+  "uautomizer": {
+    "doi": "10.5281/zenodo.23295622",
+    "version": "svcomp27",
+    "options": [
+      "--full-output"
+    ]
+  },
   "iekke": {
     "doi": "10.5281/zenodo.23243599",
     "version": "2.0",
     "options": []
-  },
-  "ugemcutter": {
-    "doi": "10.5281/zenodo.17735380",
-    "version": "svcomp26",
-    "options": [
-      "--full-output"
-    ]
   },
   "utaipan": {
     "doi": "10.5281/zenodo.17735313",
