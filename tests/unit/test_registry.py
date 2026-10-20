@@ -60,11 +60,11 @@ def test_every_component_has_its_directory():
     assert {name: spec.directory for name, spec in REGISTRY.items()} == DIRECTORIES
 
 
-def test_the_options_of_the_archive_components_are_those_of_their_fm_tools_entries():
+def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():
     """The benchexec_toolinfo_options of version svcomp27 of goblint.yml,
-    dartagnan.yml, uautomizer.yml and sv-sanitizers.yml and of version 2.0
-    of iekke.yml in fm-tools main 7a1697a1, and of version svcomp27 of
-    deagle.yml, as proposed in fm-tools merge request !1181 (head
+    dartagnan.yml, uautomizer.yml, ugemcutter.yml and sv-sanitizers.yml and
+    of version 2.0 of iekke.yml in fm-tools main 7a1697a1, and of version
+    svcomp27 of deagle.yml, as proposed in fm-tools merge request !1181 (head
     a67bf666)."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
@@ -75,6 +75,7 @@ def test_the_options_of_the_archive_components_are_those_of_their_fm_tools_entri
     assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.23342909", "svcomp27", ())
     assert versions["deagle"] == ComponentVersion("10.5281/zenodo.23462830", "svcomp27", ())
     assert versions["iekke"] == ComponentVersion("10.5281/zenodo.23243599", "2.0", ())
+    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.23295738", "svcomp27", ("--full-output",))
 
 
 def test_every_component_has_options_and_the_options_file_matches_the_lock_files():
@@ -86,8 +87,6 @@ def test_every_component_has_options_and_the_options_file_matches_the_lock_files
     assert list(versions) == [*archive, *pool]
 
 
-@pytest.mark.xfail(strict=True, reason="conf/svcomp27.json runs neither ULTIMATE Automizer nor iekke, which "
-                                       "tools.txt names")
 def test_the_archive_lock_holds_the_components_of_the_default_conf_only():
     archive, _pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
     conf = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
