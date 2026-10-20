@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2024-2026 University of Tartu
+#
+# SPDX-License-Identifier: MIT
+#
+# The Ubuntu packages that the SV-COMP archive needs for its own code, apart
+# from what its components declare in their fm-tools entries:
+# scripts/sv-comp/required-packages.py adds these to the components'
+# required_ubuntu_packages. One package per line, then '#' and the reason.
+#
+# Checked on 2026-10-20 in docker.io/ubuntu:26.04 (image created 2026-10-06,
+# x86-64, on the machine goblint) with only these two packages installed by
+# `apt-get install --no-install-recommends`: `./cooperace --version` and
+# `--help` run in the unpacked archive files, every module of src/cooperace,
+# the tool-info module of every component in its registry and BenchExec's
+# runexecutor, containerexecutor, container, model and seccomp modules import
+# from the bundled wheel, and the wheel's runexec, under `docker run
+# --privileged` with fm-tools' cgroup setup, runs a command in its container
+# with returnvalue=0. Without python3-yaml, `./cooperace --help` and the
+# imports fail with "No module named 'yaml'". Not checked there: a run of a
+# component, which needs the components' own packages.
+#
+# Not listed, because the base image has them: bash (smoketest.sh) and
+# libseccomp2 (BenchExec's seccomp filter). git is not in the image and not
+# needed: `--version` reads the archive's VERSION and runs `git describe` only
+# in a checkout without one.
+python3  # the launcher cooperace (#!/usr/bin/env python3) and the bundled BenchExec; python3-minimal lacks queue (src/cooperace/strategy.py), ctypes (BenchExec) and xml.dom.minidom (smoketest.sh)
+python3-yaml  # PyYAML: src/cooperace/witnesses.py imports yaml, the bundled BenchExec requires PyYAML>=3.12 (benchexec.model imports it), and smoketest.sh parses witness.yml with it
