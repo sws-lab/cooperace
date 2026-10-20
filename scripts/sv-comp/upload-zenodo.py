@@ -29,6 +29,11 @@ Configuration defaults to environment variables for the token so you can export
 ZENODO_TOKEN once and run the script without flags. The record ID must be
 provided explicitly via --record-id.
 
+The draft's "version" is the line of cooperace/VERSION in the archive (for
+example "svcomp27 745cd85": the fm-tools version and the commit the archive was
+built from), so that several uploads can be told apart.  --version overrides it;
+without an archive, the "version" of the metadata file is kept.
+
 --metadata-only sets the draft's metadata and uploads nothing, so it needs no
 archive.
 """
@@ -41,6 +46,7 @@ import json
 import os
 import sys
 import time
+import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
@@ -95,6 +101,10 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_METADATA,
         help=f'JSON file {{"metadata": {{...}}}} for the draft (default: {DEFAULT_METADATA.name} next to this script)',
+    )
+    parser.add_argument(
+        "--version",
+        help="Version string of the record (default: the line of cooperace/VERSION in the archive)",
     )
     parser.add_argument(
         "--metadata-only",
@@ -155,6 +165,7 @@ def update_metadata(
     base_url: str,
     draft: dict[str, Any],
     metadata_path: Path,
+    version: str | None = None,
 ) -> dict[str, Any]:
     """Replace the draft's metadata with the "metadata" object in metadata_path.
 
@@ -162,6 +173,8 @@ def update_metadata(
     file are cleared.  Zenodo's validation errors are reported in ZenodoError.
     """
     payload = json.loads(metadata_path.read_text())
+    if version:
+        payload["metadata"]["version"] = version
     url = f"{base_url}/deposit/depositions/{draft['id']}"
     response = session.put(url, json=payload, timeout=60)
     if response.status_code >= 400:
@@ -316,6 +329,16 @@ def reported_checksum(
     return ""
 
 
+def archive_version(archive_path: Path) -> str | None:
+    """The line of cooperace/VERSION in the archive, or None if the archive is
+    missing or has no such entry."""
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            return archive.read("cooperace/VERSION").decode().strip() or None
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return None
+
+
 def main() -> None:
     args = parse_args()
     if not args.token:
@@ -331,13 +354,14 @@ def main() -> None:
         print(f"Archive '{archive_path}' does not exist. Run make svcomp first?", file=sys.stderr)
         sys.exit(2)
 
+    version = args.version or archive_version(archive_path)
     base_url = SANDBOX_API if args.sandbox else PRODUCTION_API
     session = zenodo_session(args.token)
 
     try:
         draft = ensure_draft(session, base_url, int(args.record_id))
         if not args.no_metadata:
-            update_metadata(session, base_url, draft, args.metadata)
+            update_metadata(session, base_url, draft, args.metadata, version)
         if args.metadata_only:
             return
         delete_existing(session, base_url, draft, archive_path.name)
