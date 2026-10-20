@@ -28,6 +28,9 @@ draft's metadata as it is.
 Configuration defaults to environment variables for the token so you can export
 ZENODO_TOKEN once and run the script without flags. The record ID must be
 provided explicitly via --record-id.
+
+--metadata-only sets the draft's metadata and uploads nothing, so it needs no
+archive.
 """
 
 from __future__ import annotations
@@ -94,6 +97,11 @@ def parse_args() -> argparse.Namespace:
         help=f'JSON file {{"metadata": {{...}}}} for the draft (default: {DEFAULT_METADATA.name} next to this script)',
     )
     parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Set the draft's metadata and upload no file",
+    )
+    parser.add_argument(
         "--no-metadata",
         action="store_true",
         help="Do not touch the draft's metadata",
@@ -108,25 +116,23 @@ def parse_args() -> argparse.Namespace:
 
 def zenodo_session(token: str) -> requests.Session:
     session = requests.Session()
-    session.headers.update({
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "cooperace-zenodo-upload/1.0",
-    })
+    session.headers.update(
+        {
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "cooperace-zenodo-upload/1.0",
+        }
+    )
     return session
 
 
 def fetch_json(session: requests.Session, url: str) -> dict[str, Any]:
     response = session.get(url, timeout=60)
     if response.status_code >= 400:
-        raise ZenodoError(
-            f"GET {url} failed with {response.status_code}: {response.text}"
-        )
+        raise ZenodoError(f"GET {url} failed with {response.status_code}: {response.text}")
     return response.json()
 
 
-def ensure_draft(
-    session: requests.Session, base_url: str, record_id: int
-) -> dict[str, Any]:
+def ensure_draft(session: requests.Session, base_url: str, record_id: int) -> dict[str, Any]:
     deposition_url = f"{base_url}/deposit/depositions/{record_id}"
     deposition = fetch_json(session, deposition_url)
     if deposition.get("state") in EDITABLE_STATES:
@@ -135,24 +141,21 @@ def ensure_draft(
     latest_draft = deposition.get("links", {}).get("latest_draft")
     if not latest_draft:
         raise ZenodoError(
-            "The requested record is not editable and has no latest draft. "
-            "Create a new version in the Zenodo UI first."
+            "The requested record is not editable and has no latest draft. Create a new version in the Zenodo UI first."
         )
 
     draft = fetch_json(session, latest_draft)
     if draft.get("state") not in EDITABLE_STATES:
-        raise ZenodoError(
-            f"Unable to obtain an editable draft from latest_draft link. State: {draft.get('state')}"
-        )
+        raise ZenodoError(f"Unable to obtain an editable draft from latest_draft link. State: {draft.get('state')}")
     return draft
 
 
 def update_metadata(
     session: requests.Session,
     base_url: str,
-    draft: Dict[str, Any],
+    draft: dict[str, Any],
     metadata_path: Path,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Replace the draft's metadata with the "metadata" object in metadata_path.
 
     The deposit API's PUT replaces all metadata, so fields missing from the
@@ -168,9 +171,7 @@ def update_metadata(
     return updated
 
 
-def delete_existing(
-    session: requests.Session, base_url: str, draft: dict[str, Any], filename: str
-) -> None:
+def delete_existing(session: requests.Session, base_url: str, draft: dict[str, Any], filename: str) -> None:
     files = draft.get("files", []) or []
     for entry in files:
         if entry.get("filename") == filename:
@@ -178,9 +179,7 @@ def delete_existing(
             delete_url = f"{base_url}/deposit/depositions/{draft['id']}/files/{file_id}"
             response = session.delete(delete_url, timeout=60)
             if response.status_code not in {204, 404}:
-                raise ZenodoError(
-                    f"DELETE {delete_url} failed with {response.status_code}: {response.text}"
-                )
+                raise ZenodoError(f"DELETE {delete_url} failed with {response.status_code}: {response.text}")
             if response.status_code == 204:
                 print(f"Removed existing file '{filename}' (id={file_id}).")
             return
@@ -241,8 +240,7 @@ class ProgressFile:
         ):
             percent = self._read / self._total * 100
             print(
-                f"{self._label} progress: {percent:5.1f}% "
-                f"({self._read:,}/{self._total:,} bytes)",
+                f"{self._label} progress: {percent:5.1f}% ({self._read:,}/{self._total:,} bytes)",
                 flush=True,
             )
             self._last_report = self._read
@@ -292,9 +290,7 @@ def upload_file(
             timeout=(60, 900),
         )
     if response.status_code >= 400:
-        raise ZenodoError(
-            f"PUT {target_url} failed with {response.status_code}: {response.text}"
-        )
+        raise ZenodoError(f"PUT {target_url} failed with {response.status_code}: {response.text}")
     return response.json()
 
 
@@ -313,9 +309,7 @@ def reported_checksum(
         return checksum
     listing = session.get(f"{base_url}/deposit/depositions/{draft_id}/files", timeout=60)
     if listing.status_code >= 400:
-        raise ZenodoError(
-            f"GET files of record {draft_id} failed with {listing.status_code}: {listing.text}"
-        )
+        raise ZenodoError(f"GET files of record {draft_id} failed with {listing.status_code}: {listing.text}")
     for entry in listing.json():
         if entry.get("filename") == filename:
             return normalize_checksum(entry.get("checksum"))
@@ -329,7 +323,11 @@ def main() -> None:
         sys.exit(2)
 
     archive_path: Path = args.file
-    if not archive_path.exists():
+    if args.metadata_only:
+        if args.no_metadata:
+            print("--metadata-only and --no-metadata contradict each other.", file=sys.stderr)
+            sys.exit(2)
+    elif not archive_path.exists():
         print(f"Archive '{archive_path}' does not exist. Run make svcomp first?", file=sys.stderr)
         sys.exit(2)
 
@@ -340,6 +338,8 @@ def main() -> None:
         draft = ensure_draft(session, base_url, int(args.record_id))
         if not args.no_metadata:
             update_metadata(session, base_url, draft, args.metadata)
+        if args.metadata_only:
+            return
         delete_existing(session, base_url, draft, archive_path.name)
         uploaded = upload_file(session, draft, archive_path)
         remote_md5 = reported_checksum(session, base_url, draft["id"], uploaded, archive_path.name)

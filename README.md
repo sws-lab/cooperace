@@ -148,7 +148,9 @@ package (`pip install requests`).
    ```bash
    python scripts/sv-comp/upload-zenodo.py --record-id <draft-or-record-id>
    ```
-   Pass `--sandbox` if you want to test against `https://sandbox.zenodo.org` or
+   The draft's metadata is first replaced by `scripts/sv-comp/zenodo-metadata.json`
+   (`--metadata FILE` to use another, `--no-metadata` to leave it, `--metadata-only` to set
+   it and upload nothing). Pass `--sandbox` if you want to test against `https://sandbox.zenodo.org` or
    override the archive path with `--file`. The helper sends the archive with one `PUT` to the
    draft's `links.bucket` URL, streamed from disk, and prints the bytes sent so you can keep an eye
    on Zenodo's slow ingestion. Afterwards it compares the MD5 of the local file with the checksum
