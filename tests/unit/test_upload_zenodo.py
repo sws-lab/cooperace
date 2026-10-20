@@ -155,3 +155,25 @@ def test_metadata_only_puts_the_metadata_and_needs_no_archive(tmp_path, monkeypa
     assert path == "/api/deposit/depositions/1"
     assert json.loads(body)["metadata"]["version"] == "svcomp27"
     assert "Updated metadata of record 1" in capsys.readouterr().out
+
+
+def test_version_is_the_archives_version_file_unless_given(tmp_path, monkeypatch):
+    import zipfile
+
+    archive = tmp_path / "cooperace.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("cooperace/VERSION", "svcomp27 745cd85\n")
+    assert uz.archive_version(archive) == "svcomp27 745cd85"
+    assert uz.archive_version(tmp_path / "missing.zip") is None
+
+    for extra, want in [([], "svcomp27 745cd85"), (["--version", "x1"], "x1")]:
+        with StubZenodo() as stub:
+            monkeypatch.setattr(uz, "PRODUCTION_API", stub.url + "/api")
+            monkeypatch.setattr(
+                sys,
+                "argv",
+                ["upload-zenodo.py", "--record-id", "1", "--token", "t", "--file", str(archive), "--metadata-only", *extra],
+            )
+            uz.main()
+        [(path, headers, body)] = stub.puts
+        assert json.loads(body)["metadata"]["version"] == want
