@@ -92,7 +92,7 @@ def run_upload(monkeypatch, tmp_path, stub):
     archive = tmp_path / "cooperace.zip"
     archive.write_bytes(CONTENT)
     monkeypatch.setattr(uz, "PRODUCTION_API", stub.url + "/api")
-    monkeypatch.setattr(sys, "argv", ["upload-zenodo.py", "--record-id", "1", "--token", "t", "--file", str(archive)])
+    monkeypatch.setattr(sys, "argv", ["upload-zenodo.py", "--record-id", "1", "--token", "t", "--file", str(archive), "--no-metadata"])
     uz.main()
 
 
@@ -139,3 +139,19 @@ def test_normalize_checksum():
     assert uz.normalize_checksum("md5:ABCdef") == "abcdef"
     assert uz.normalize_checksum("abcdef") == "abcdef"
     assert uz.normalize_checksum(None) == ""
+
+
+def test_metadata_only_puts_the_metadata_and_needs_no_archive(tmp_path, monkeypatch, capsys):
+    with StubZenodo() as stub:
+        monkeypatch.setattr(uz, "PRODUCTION_API", stub.url + "/api")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["upload-zenodo.py", "--record-id", "1", "--token", "t",
+             "--file", str(tmp_path / "missing.zip"), "--metadata-only"],
+        )
+        uz.main()
+    [(path, headers, body)] = stub.puts
+    assert path == "/api/deposit/depositions/1"
+    assert json.loads(body)["metadata"]["version"] == "svcomp27"
+    assert "Updated metadata of record 1" in capsys.readouterr().out
