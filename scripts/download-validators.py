@@ -11,9 +11,10 @@ validators/ (git-ignored), one directory per validator version, named
 The validators are grouped by the witness format they read, the formats of
 WITNESS_FORMATS in tests/integration/run.py:
 
-- yaml-2.2 (the default): the versions proposed for the SV-COMP 2027 track
-  "Validation of Violation Witnesses v2" that check no-data-race witnesses,
-  and WitnessLint, which checks the format;
+- yaml-2.2 (the default): the SV-COMP 2027 versions of the violation
+  validators (track "Validation of Violation Witnesses v2") and of the
+  correctness validators (track "Validation of Correctness Witnesses v2")
+  that the suite uses, and WitnessLint, which checks the format of both;
 - graphml-1.0: the versions SV-COMP 2026 ran on the violation witnesses of
   the no-data-race category, track "Validation of Violation Witnesses v1".
 
@@ -35,18 +36,19 @@ from fm_tools.fmtoolversion import FmToolVersion
 
 FM_TOOLS_REPO = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/main/data/"
 
-# Witness format -> {fm-tools entry: version}
+# Witness format -> {fm-tools entry: [version, ...]}
 VALIDATORS = {
     "yaml-2.2": {
-        "uautomizer": "svcomp27-violation",
-        "theta": "svcomp27-validator",
-        "concurrentwitness2test": "svcomp27",
-        "witnesslint": "2.3-violation-witnesses-v2",
+        "uautomizer": ["svcomp27-violation", "svcomp27-correctness"],
+        "theta": ["svcomp27-validator"],
+        "concurrentwitness2test": ["svcomp27"],
+        "ugemcutter": ["svcomp27-correctness"],
+        "witnesslint": ["2.3-violation-witnesses-v2", "2.3-correctness-witnesses-v2"],
     },
     "graphml-1.0": {
-        "cpachecker": "4.2.2-validation-violation",
-        "dartagnan": "svcomp26-validation",
-        "uautomizer": "svcomp26-violation",
+        "cpachecker": ["4.2.2-validation-violation"],
+        "dartagnan": ["svcomp26-validation"],
+        "uautomizer": ["svcomp26-violation"],
     },
 }
 
@@ -63,6 +65,11 @@ def fm_tool_data(tool, fm_tools_dir, delegate):
     return yaml.safe_load(response.content)
 
 
+def doi(data, version):
+    """The DOI of `version` in the fm-tools entry `data`, or None."""
+    return next((v.get("doi") for v in data.get("versions", []) if str(v.get("version")) == version), None)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dir", default="validators", type=Path)
@@ -74,15 +81,24 @@ def main():
     delegate = DownloadDelegate()
     formats = list(VALIDATORS) if args.format == "all" else [args.format]
     for fmt in formats:
-        for tool, version in VALIDATORS[fmt].items():
-            target = args.dir / f"{tool}-{version}"
-            if target.exists():
-                print(f"{target} exists")
-                continue
-            v = FmToolVersion(FmTool(fm_tool_data(tool, args.fm_tools_dir, delegate)), version)
-            print(f"{tool} {version}: {v.get_archive_location().raw}", flush=True)
-            v.download_and_install_into(target, delegate=delegate, show_loading_bar=False)
-
+        for tool, versions in VALIDATORS[fmt].items():
+            data = None
+            for version in versions:
+                target = args.dir / f"{tool}-{version}"
+                if target.exists():
+                    print(f"{target} exists")
+                    continue
+                data = data or fm_tool_data(tool, args.fm_tools_dir, delegate)
+                v = FmToolVersion(FmTool(data), version)
+                same = [args.dir / f"{tool}-{other}" for other in versions
+                        if other != version and (args.dir / f"{tool}-{other}").is_dir()
+                        and doi(data, other) == doi(data, version)]
+                if same:
+                    target.symlink_to(same[0].name)
+                    print(f"{target} -> {same[0].name} (same DOI {doi(data, version)})")
+                    continue
+                print(f"{tool} {version}: {v.get_archive_location().raw}", flush=True)
+                v.download_and_install_into(target, delegate=delegate, show_loading_bar=False)
 
 if __name__ == "__main__":
     main()
