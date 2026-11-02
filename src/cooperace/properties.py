@@ -61,6 +61,29 @@ def same_formulas(text: str, formulas: tuple[str, ...]) -> bool:
     return expected is not None and _formulas(text) == expected
 
 
+def ltl_formula(formula: str) -> str | None:
+    """The LTL formula of the CHECK formula `formula` with all white space
+    removed ("G!data-race" for no-data-race's), or None if `formula` is not
+    of the form CHECK( init(main()), LTL(...) )."""
+    compact = "".join(formula.split())
+    prefix, suffix = "CHECK(init(main()),LTL(", "))"
+    if not (compact.startswith(prefix) and compact.endswith(suffix)):
+        return None
+    return compact[len(prefix):-len(suffix)] or None
+
+
+def names_formulas(text: str, formulas: tuple[str, ...]) -> bool:
+    """Whether `text`, the metadata.task.specification of a witness, names
+    the formulas `formulas`: same_formulas, or, for a single formula, its LTL
+    formula alone (ltl_formula), white space ignored. Both forms occur: most
+    components write the CHECK formula, IKOS-ConC svcomp27 writes
+    "G ! data-race", and the SV-COMP 2027 pre-run confirmed witnesses of
+    both (the witness format's schema says only "the SV-COMP format")."""
+    if same_formulas(text, formulas):
+        return True
+    return len(formulas) == 1 and ltl_formula(formulas[0]) == "".join(text.split())
+
+
 def recognize(text: str) -> str | None:
     """The name (a key of FORMULAS) of the property whose formulas are those
     of `text`, the content of a property file, or None if they are those of

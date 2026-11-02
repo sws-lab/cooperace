@@ -71,7 +71,19 @@ MEMTRACK = "CHECK( init(main()), LTL(G valid-memtrack) )"
 def test_the_fixtures_are_there():
     assert [path.relative_to(FIXTURES).as_posix() for path in PASSING] == [
         "dartagnan/fib_safe-5-racy.witness.yml", "dartagnan/lamport-b.witness.yml",
+        "ikos-conc/00-sanity_09-include.witness.yml",
         "sv-sanitizers/09-regions_18-nested_rc.witness.yml", "sv-sanitizers/lamport-b.witness.yml"]
+
+
+def test_a_specification_of_the_ltl_formula_alone_passes():
+    """IKOS-ConC svcomp27 names the specification "G ! data-race" (its
+    fixture); the SV-COMP 2027 pre-run confirmed such witnesses."""
+    ikos = (FIXTURES / "ikos-conc" / "00-sanity_09-include.witness.yml").read_text()
+    assert '"specification": "G ! data-race"' in ikos
+    assert witnesses.passes(changed(LAMPORT, "CHECK( init(main()), LTL(G ! data-race) )", "G!data-race"),
+                            "no-data-race", "false")
+    assert not witnesses.passes(changed(ikos, '"G ! data-race"', '"G ! overflow"'), "no-data-race", "false")
+    assert not witnesses.passes(changed(ikos, '"G ! data-race"', '"LTL(G ! data-race)"'), "no-data-race", "false")
 
 
 @pytest.mark.parametrize("path", PASSING, ids=lambda path: path.relative_to(FIXTURES).as_posix())

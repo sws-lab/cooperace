@@ -91,3 +91,18 @@ def test_same_formulas_compares_as_recognize_does():
 def test_the_sub_properties_of_valid_memsafety_are_its_three_formulas():
     assert sorted(properties.SUBPROPERTY_FORMULAS.values()) == sorted(properties.FORMULAS["valid-memsafety"])
     assert properties.SUBPROPERTY_FORMULAS["valid-deref"] == "CHECK( init(main()), LTL(G valid-deref) )"
+
+
+def test_ltl_formula_is_the_formula_inside_ltl():
+    assert properties.ltl_formula("CHECK( init(main()), LTL(G ! data-race) )") == "G!data-race"
+    assert properties.ltl_formula("CHECK( init(main()), LTL(G ! call(reach_error())) )") == "G!call(reach_error())"
+    assert properties.ltl_formula("G ! data-race") is None
+
+
+def test_names_formulas_takes_the_check_formulas_or_the_single_ltl_formula():
+    formulas = properties.FORMULAS[properties.NO_DATA_RACE]
+    assert properties.names_formulas("CHECK( init(main()), LTL(G ! data-race) )", formulas)
+    assert properties.names_formulas("G ! data-race", formulas)
+    assert not properties.names_formulas("G ! overflow", formulas)
+    assert not properties.names_formulas("G valid-free", properties.FORMULAS[properties.VALID_MEMSAFETY])
+    assert properties.names_formulas("G valid-free", (properties.SUBPROPERTY_FORMULAS["valid-free"],))

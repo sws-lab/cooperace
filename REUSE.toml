@@ -38,7 +38,7 @@ path = [
 SPDX-FileCopyrightText = "2024-2026 University of Tartu"
 SPDX-License-Identifier = "MIT"
 
-# Witnesses that sv-sanitizers and Dartagnan svcomp27 wrote on no-data-race
+# Witnesses that sv-sanitizers, Dartagnan and IKOS-ConC svcomp27 wrote on no-data-race
 # tasks of SV-Benchmarks, copied unchanged as fixtures of the unit tests
 # (tests/unit/test_witness_check.py).
 [[annotations]]

@@ -10,8 +10,8 @@ entries, of which those of the verdict's kind (WITNESS_ENTRY_TYPES: a
 "violation_sequence" for false; an "invariant_set", a
 "ghost_instrumentation" or both for true) each have a different entry_type,
 one metadata.format_version in the bounds of the WitnessFormat, and a
-metadata.task.specification whose formulas are those of the property, or of
-the sub-property for valid-memsafety (properties.same_formulas). A GraphML
+metadata.task.specification that names the formulas of the property, or of
+the sub-property for valid-memsafety (properties.names_formulas). A GraphML
 file never counts. passing_witness picks the file of a run that counts.
 
 The check reads the witness's kind, version and property and nothing else:
@@ -41,7 +41,7 @@ from .properties import (
     FORMULAS,
     SUBPROPERTY_FORMULAS,
     VALID_MEMSAFETY,
-    same_formulas,
+    names_formulas,
 )
 
 VIOLATION = "violation_sequence"
@@ -281,8 +281,8 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     and have different entry types; they have one and the same
     metadata.format_version (version_of), as WitnessLint requires of the
     entries of a witness, and it is in the format's bounds; and the
-    metadata.task.specification of each is a string with the formulas of
-    `specification` (properties.same_formulas); a ghost_instrumentation entry
+    metadata.task.specification of each is a string that names the formulas
+    of `specification` (properties.names_formulas); a ghost_instrumentation entry
     needs version GHOST_SINCE or higher. GraphML text does not parse to a
     list, so it never passes."""
     format_ = witness_format(property_name, verdict, subproperty)
@@ -308,7 +308,7 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
         versions.add(version_of(metadata.get("format_version")))
         task = metadata.get("task")
         spec = task.get("specification") if isinstance(task, dict) else None
-        if not (isinstance(spec, str) and same_formulas(spec, formulas)):
+        if not (isinstance(spec, str) and names_formulas(spec, formulas)):
             return False
     if len(versions) != 1:
         return False
