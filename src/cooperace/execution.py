@@ -32,14 +32,28 @@ from .processes import ComponentGroup
 POLL_SECONDS = 0.1
 
 
-def container_dir_modes(tool_directory: str, writable_dirs: Sequence[str] = ()) -> dict[str, str]:
+def container_dir_modes(tool_directory: str, writable_dirs: Sequence[str] = (),
+                        input_files: Sequence[str] = ()) -> dict[str, str]:
     """The directory modes of a component's container: `/` read-only and
     `/home` hidden, as the competition gives a tool, `/run` and `/tmp`
-    hidden, as BenchExec does by default, `tool_directory` an overlay, and
-    `writable_dirs` with full access, so that what the component writes there
-    is visible outside."""
-    modes = {"/": DIR_READ_ONLY, "/run": DIR_HIDDEN, "/tmp": DIR_HIDDEN, "/home": DIR_HIDDEN,
-             tool_directory: DIR_OVERLAY}
+    hidden, as BenchExec does by default, `tool_directory` an overlay,
+    the directory of each of `input_files` (the task and the property file)
+    read-only, and `writable_dirs` with full access, so that what the
+    component writes there is visible outside.
+
+    The input directories must be visible: in the competition the run's
+    directory, which holds both CoOpeRace and the tasks, is under `/home`
+    (`/home/cwd`, with the tasks in `/home/cwd/sv-benchmarks`), so hiding
+    `/home` alone hides the task and the property file from every component.
+    A task's directory, not only its file, is made visible, because a task
+    may include files beside it. A directory that already has a mode keeps
+    it."""
+    modes = {"/": DIR_READ_ONLY, "/run": DIR_HIDDEN, "/tmp": DIR_HIDDEN, "/home": DIR_HIDDEN}
+    for path in input_files:
+        directory = os.path.dirname(os.path.abspath(path))
+        if directory != "/":
+            modes[directory] = DIR_READ_ONLY
+    modes[tool_directory] = DIR_OVERLAY
     modes.update(dict.fromkeys(writable_dirs, DIR_FULL_ACCESS))
     return modes
 

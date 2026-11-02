@@ -8,7 +8,9 @@ cli.run end to end with stub components in BenchExec's container (the
 fixture `container`)."""
 import os
 import shlex
+import shutil
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -230,6 +232,26 @@ def test_container_dir_modes():
                      "/tools/x": DIR_OVERLAY, "/work/run": DIR_FULL_ACCESS}
 
 
+def test_container_dir_modes_make_the_directories_of_the_input_files_readable():
+    # In the competition, the run's directory is /home/cwd: the task and the
+    # property file are under the hidden /home (the pre-run of 26 Oct 2026).
+    modes = execution.container_dir_modes(
+        "/home/cwd/bin/c/tools/x", ["/tmp/w"],
+        ["/home/cwd/sv-benchmarks/c/pthread/t.i", "/home/cwd/sv-benchmarks/c/properties/p.prp"])
+
+    assert modes == {"/": DIR_READ_ONLY, "/run": DIR_HIDDEN, "/tmp": DIR_HIDDEN, "/home": DIR_HIDDEN,
+                     "/home/cwd/sv-benchmarks/c/pthread": DIR_READ_ONLY,
+                     "/home/cwd/sv-benchmarks/c/properties": DIR_READ_ONLY,
+                     "/home/cwd/bin/c/tools/x": DIR_OVERLAY, "/tmp/w": DIR_FULL_ACCESS}
+
+
+def test_container_dir_modes_keep_the_overlay_and_the_writable_directories():
+    modes = execution.container_dir_modes("/tools/x", ["/work/run"], ["/tools/x/t.i", "/work/run/p.prp", "/t.i"])
+
+    assert modes["/tools/x"] == DIR_OVERLAY and modes["/work/run"] == DIR_FULL_ACCESS
+    assert modes["/"] == DIR_READ_ONLY
+
+
 def test_run_lines():
     run = execution.FinishedRun(["x"], -9, "", cpu_time=3.061, termination_reason="cputime", wall_time=3.07,
                                 memory=4096)
@@ -329,3 +351,28 @@ def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale
     assert (run_dir / "witness.yml").read_text() == PASSING_WITNESS.read_text()
     assert stale.read_text() == OTHER_PASSING_WITNESS.read_text()
     assert not (tmp_path / "stubs" / "Stub_A" / "fresh-witness.yml").exists()
+
+
+def test_a_component_reads_a_task_and_a_property_file_in_a_hidden_directory(tmp_path, run_dir, capsys):
+    # The pre-run of SV-COMP 2027 ran every task from /home/cwd/sv-benchmarks,
+    # which a component's container hid: every component failed to read its
+    # input and CoOpeRace answered unknown for all 3,345 tasks. /tmp is
+    # hidden in a component's container as /home is.
+    hidden = Path(tempfile.mkdtemp(prefix="cooperace-hidden-", dir="/tmp"))
+    try:
+        (hidden / "tasks").mkdir()
+        (hidden / "properties").mkdir()
+        task = hidden / "tasks" / "task.i"
+        task.write_text("int main(void) { return 0; }\n")
+        prop = hidden / "properties" / "no-data-race.prp"
+        prop.write_text("CHECK( init(main()), LTL(G ! data-race) )\n")
+        runner = ComponentRunner(str(task), str(prop), "ILP32")
+        body = (f"test -r {shlex.quote(str(task))} && test -r {shlex.quote(str(prop))} "
+                '&& echo "STUB-STATUS: true"\n')
+        register_stub(runner, "Stub A", make_script(tmp_path / "stubs" / "Stub_A", body))
+
+        verdict = Run(runner, data_race_conf(one_after_another("Stub A"))).execute()
+    finally:
+        shutil.rmtree(hidden)
+
+    assert verdict == "true"

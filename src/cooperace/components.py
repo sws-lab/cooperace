@@ -445,7 +445,8 @@ class ComponentRunner:
             command.cmdline, command.cwd, command.environments, group,
             log_file=witness_dir + ".log",
             dir_modes=execution.container_dir_modes(os.path.join(self.tools_dir, spec.directory),
-                                                    [] if spec.witness.directory == "component" else [witness_dir]),
+                                                    [] if spec.witness.directory == "component" else [witness_dir],
+                                                    [self.file, self.property_file]),
             memory=memory, cpu_time=cpu, output_dir=witness_dir,
             result_files_patterns=result_files_patterns(spec.witness))
         witness_files = witness_files_in(spec.witness, witness_dir)
