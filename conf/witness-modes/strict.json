@@ -1,0 +1,22 @@
+{
+    "highestVersion": "2.3",
+    "properties": {
+        "no-data-race": {
+            "true": null,
+            "false": {"minimumVersion": "2.2", "required": true}
+        },
+        "unreach-call": {
+            "true": {"minimumVersion": "2.1", "required": true},
+            "false": {"minimumVersion": "2.2", "required": true}
+        },
+        "no-overflow": {
+            "true": {"minimumVersion": "2.1", "required": true},
+            "false": {"minimumVersion": "2.2", "required": true}
+        },
+        "valid-memsafety": {
+            "true": null,
+            "false": {"minimumVersion": "2.2", "required": false,
+                      "subproperties": {"valid-memtrack": {"minimumVersion": "2.3"}}}
+        }
+    }
+}

@@ -6,11 +6,11 @@
             "false": {"minimumVersion": "2.2", "required": true}
         },
         "unreach-call": {
-            "true": {"minimumVersion": "2.1", "required": true},
+            "true": {"minimumVersion": "2.0", "required": true},
             "false": {"minimumVersion": "2.2", "required": true}
         },
         "no-overflow": {
-            "true": {"minimumVersion": "2.1", "required": true},
+            "true": {"minimumVersion": "2.0", "required": true},
             "false": {"minimumVersion": "2.2", "required": true}
         },
         "valid-memsafety": {

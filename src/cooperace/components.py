@@ -123,15 +123,15 @@ REGISTRY = {spec.name: spec for spec in (
     # its fm-tools options name (--portfolio-conf conf/svcomp27/seq.txt, a path
     # relative to Goblint's directory, the working directory of its run).
     #Witness: witness.yaml.path; the svcomp26 configuration writes no graphml witness.
-    #witness.yaml.entry-types: by default the svcomp27 configuration writes a
-    #ghost_instrumentation entry of format 2.1 beside an invariant_set entry of 2.0,
-    #which WitnessLint 2.3 rejects and witnesses.passes refuses; the ghost entry alone
-    #passes both. Goblint's verdicts are the same with and without it.
+    #Goblint 23770235 (svcomp27-0-gdc055dbfb) writes its default correctness witness:
+    #an invariant_set of format 2.0, or, where an invariant uses a ghost variable,
+    #ghost_instrumentation and invariant_set both of format 2.1. Restricting it to
+    #ghost_instrumentation (witness.yaml.entry-types) writes [] where it has no ghost,
+    #and the ghost entry alone states no invariant, which validators rarely confirm.
     #exp.region-offsets: the svcomp27 configuration turns it on, and it gives a wrong
     #no-data-race true on races between fields of one struct; it is turned off here.
     ComponentSpec("Goblint", "benchexec.tools.goblint", "goblint",
                   witness=WitnessSpec("run", ("--set", "witness.yaml.path", "{dir}/witness.yml",
-                                              "--set", "witness.yaml.entry-types", '["ghost_instrumentation"]',
                                               "--set", "exp.region-offsets", "false"),
                                       ("witness.yml",))),
     #The wrapper deagle runs deagle_exe with --yaml-witness error-witness.yml in its

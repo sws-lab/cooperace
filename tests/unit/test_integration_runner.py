@@ -170,7 +170,7 @@ def test_the_suite_reads_the_accepted_versions_from_the_witness_table():
     assert run.WITNESS_TABLE == Path(run.__file__).resolve().parents[2] / "conf" / "witnesses.json"
     assert run.accepted_versions("no-data-race", "false") == ((2, 2), (2, 3))
     assert run.accepted_versions("no-data-race", "true") is None
-    assert run.accepted_versions("unreach-call", "true") == ((2, 1), (2, 3))
+    assert run.accepted_versions("unreach-call", "true") == ((2, 0), (2, 3))
 
 
 @pytest.mark.parametrize("version", ['"2.2"', '"2.3"', "2.3"])
@@ -401,7 +401,7 @@ def test_a_true_of_unreach_call_delivers_a_correctness_witness_of_one_accepted_v
     assert run.protocol_problems(true_run(tmp_path / "c", {"witness.yml": default}), TRUE_OUTPUT, YAML_FORMAT,
                                  "no-overflow") == [
         "witness.yml has no single format_version of invariant_set and ghost_instrumentation entries, "
-        "but witnesses.json accepts 2.1 to 2.3 for a no-overflow true"]
+        "but witnesses.json accepts 2.0 to 2.3 for a no-overflow true"]
     assert run.protocol_problems(true_run(tmp_path / "d", {}), TRUE_OUTPUT, YAML_FORMAT, "no-data-race") == []
 
 

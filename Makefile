@@ -10,6 +10,10 @@ SVCOMP_YEAR := 2027
 # CoOpeRace's fm-tools entry, a path or a URL; the default is the file on
 # fm-tools' branch cooperace-2027 (scripts/sv-comp/fmtools-entry.py).
 FMTOOLS_ENTRY ?=
+# The witness table packed as conf/witnesses.json: default or strict
+# (scripts/svcomp-dist.sh, conf/README.md "The witness table").
+WITNESS_MODE ?= default
+export WITNESS_MODE
 # Further options of `docker run`, for example --cpuset-cpus 0-3.
 DOCKER_RUN_OPTIONS ?=
 

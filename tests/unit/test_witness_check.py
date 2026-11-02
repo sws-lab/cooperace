@@ -137,10 +137,10 @@ def test_the_versions_in_bounds_pass_and_an_unquoted_version_is_read_as_a_number
     assert witnesses.passes(violation("CHECK(init(main()),LTL(G!data-race))"), "no-data-race", "false")
 
 
-def test_a_correctness_witness_of_2_1_to_2_3_passes_for_a_true_of_unreach_call():
-    for version in ('"2.1"', '"2.2"', '"2.3"'):
+def test_a_correctness_witness_of_2_0_to_2_3_passes_for_a_true_of_unreach_call():
+    for version in ('"2.0"', '"2.1"', '"2.2"', '"2.3"'):
         assert witnesses.passes(correctness(version), "unreach-call", "true")
-    for version in ('"2.0"', '"2.4"'):
+    for version in ('"1.0"', '"2.4"'):
         assert not witnesses.passes(correctness(version), "unreach-call", "true")
     assert not witnesses.passes(correctness(), "unreach-call", "false")
     assert not witnesses.passes(correctness(), "no-overflow", "true")
@@ -269,15 +269,29 @@ def test_the_shipped_table_is_the_svcomp27_concurrency_table():
     assert table.highest == highest
     assert table.formats == {
         ("no-data-race", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
-        ("unreach-call", "true"): witnesses.WitnessFormat(C, (2, 1), highest, True),
+        ("unreach-call", "true"): witnesses.WitnessFormat(C, (2, 0), highest, True),
         ("unreach-call", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
-        ("no-overflow", "true"): witnesses.WitnessFormat(C, (2, 1), highest, True),
+        ("no-overflow", "true"): witnesses.WitnessFormat(C, (2, 0), highest, True),
         ("no-overflow", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
         ("valid-memsafety", "false"): witnesses.WitnessFormat(V, (2, 2), highest, False),
     }
     assert table.subproperty_formats == {
         ("valid-memsafety", "false", "valid-memtrack"): witnesses.WitnessFormat(V, (2, 3), highest, False),
     }
+
+
+def test_the_strict_table_differs_from_the_shipped_one_in_the_two_true_cells_only():
+    """conf/witness-modes/strict.json, which WITNESS_MODE=strict packs as
+    conf/witnesses.json, is the shipped table with 2.1, as the SV-COMP 2027
+    benchmarks page states it, for a true in unreach-call and no-overflow."""
+    strict = json.loads((ROOT / "conf" / "witness-modes" / "strict.json").read_text())
+    expected = copy.deepcopy(SHIPPED_TABLE)
+    for prop in ("unreach-call", "no-overflow"):
+        expected["properties"][prop]["true"]["minimumVersion"] = "2.1"
+
+    assert strict == expected
+    table = witnesses.read_table(str(ROOT / "conf" / "witness-modes" / "strict.json"))
+    assert table.formats[("unreach-call", "true")].lowest == (2, 1)
 
 
 def test_the_conf_readme_shows_the_shipped_table():

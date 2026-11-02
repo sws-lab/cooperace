@@ -55,6 +55,10 @@ GHOST = "ghost_instrumentation"
 # that entry, which WitnessLint 2.3 accepts as a correctness witness.
 WITNESS_ENTRY_TYPES = {VIOLATION: (VIOLATION,), CORRECTNESS: (CORRECTNESS, GHOST)}
 
+# The first format version that has the entry type ghost_instrumentation: a
+# ghost entry of a lower version never passes, whatever the witness table says.
+GHOST_SINCE = (2, 1)
+
 # The entry_type a witness of each verdict has.
 ENTRY_TYPES = {"true": CORRECTNESS, "false": VIOLATION}
 
@@ -278,8 +282,9 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     metadata.format_version (version_of), as WitnessLint requires of the
     entries of a witness, and it is in the format's bounds; and the
     metadata.task.specification of each is a string with the formulas of
-    `specification` (properties.same_formulas). GraphML text does not parse
-    to a list, so it never passes."""
+    `specification` (properties.same_formulas); a ghost_instrumentation entry
+    needs version GHOST_SINCE or higher. GraphML text does not parse to a
+    list, so it never passes."""
     format_ = witness_format(property_name, verdict, subproperty)
     formulas = specification(property_name, verdict, subproperty)
     if format_ is None or formulas is None:
@@ -308,6 +313,8 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     if len(versions) != 1:
         return False
     version = versions.pop()
+    if version is not None and version < GHOST_SINCE and GHOST in types:
+        return False
     return version is not None and format_.lowest <= version <= format_.highest
 
 

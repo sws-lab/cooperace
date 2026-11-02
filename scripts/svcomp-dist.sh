@@ -21,6 +21,13 @@
 # ALLOW_DIRTY=1 overrides that for development: the archive is then made from
 # the tracked files as they are in the working tree, and its VERSION ends in
 # "-dirty". Never submit such an archive.
+#
+# WITNESS_MODE selects the witness table the archive carries as
+# conf/witnesses.json (conf/README.md, "The witness table"): "default" (or
+# unset) keeps conf/witnesses.json, which accepts a true witness of format 2.0
+# in unreach-call and no-overflow; "strict" packs conf/witness-modes/strict.json
+# in its place, which accepts 2.1 or higher there, as the SV-COMP 2027
+# benchmarks page states, and ends VERSION with "witnesses-strict".
 
 set -euo pipefail
 
@@ -28,6 +35,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 FMTOOLS_VERSION="${1:-${FMTOOLS_VERSION:-fmtools-version-unset}}"
+WITNESS_MODE="${WITNESS_MODE:-default}"
+case "${WITNESS_MODE}" in
+  default|strict) ;;
+  *) echo "WITNESS_MODE must be default or strict, not ${WITNESS_MODE}" >&2; exit 1 ;;
+esac
 DIST="${ROOT}/dist/cooperace"
 
 TREE=HEAD
@@ -66,7 +78,12 @@ while IFS=: read -r name _; do
   cp -a "tools/${name}" "${DIST}/tools/${name}"
 done < "${DIST}/tools.txt"
 
-echo "${FMTOOLS_VERSION} ${DESCRIBE}" > "${DIST}/VERSION"
+if [ "${WITNESS_MODE}" = strict ]; then
+  cp "${DIST}/conf/witness-modes/strict.json" "${DIST}/conf/witnesses.json"
+  echo "${FMTOOLS_VERSION} ${DESCRIBE} witnesses-strict" > "${DIST}/VERSION"
+else
+  echo "${FMTOOLS_VERSION} ${DESCRIBE}" > "${DIST}/VERSION"
+fi
 find "${DIST}" -name '.DS_Store' -delete
 
 # The same commit gives the same zip: every file gets the commit's time, and
