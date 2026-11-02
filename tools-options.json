@@ -23,7 +23,7 @@
     "options": []
   },
   "ugemcutter": {
-    "doi": "10.5281/zenodo.23757807",
+    "doi": "10.5281/zenodo.23884792",
     "version": "svcomp27",
     "options": [
       "--full-output"
