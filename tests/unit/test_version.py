@@ -5,6 +5,7 @@
 """The version that `cooperace --version` prints (cli.version_string): the
 file VERSION beside the launcher, else git describe, else "unknown"."""
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,9 @@ import pytest
 from src.cooperace import cli
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# The competition image has no git; there, cooperace reads only VERSION.
+requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="needs git, which the competition image lacks")
 
 
 @pytest.fixture(autouse=True)
@@ -36,12 +40,14 @@ def test_version_file_is_read(tmp_path):
     assert cli.version_string(tmp_path) == "svcomp27 abc1234"
 
 
+@requires_git
 def test_version_file_wins_over_git(tmp_path):
     git(tmp_path, "init", "-q")
     (tmp_path / "VERSION").write_text("svcomp27 abc1234\n")
     assert cli.version_string(tmp_path) == "svcomp27 abc1234"
 
 
+@requires_git
 def test_git_describe_without_version_file(tmp_path):
     git(tmp_path, "init", "-q")
     (tmp_path / "f").write_text("x")
