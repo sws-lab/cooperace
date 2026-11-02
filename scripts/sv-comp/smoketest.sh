@@ -8,7 +8,7 @@
 # archive, as fm-tools' CI runs this script (as root, where BenchExec can make
 # each component's container without runexec), and fails unless
 # the task gets the verdict it is known to have:
-# the last line of the output is exactly "CoOpeRace verdict: false" (the line
+# the last line of the output is exactly "CoOpeRace verdict: false(no-data-race)" (the line
 # BenchExec's tool-info module reads) and a witness is written to the working
 # directory: a well-formed witness.graphml, or a witness.yml that parses as
 # YAML (Dartagnan svcomp27 writes YAML violation witnesses).
@@ -17,7 +17,7 @@ set -euo pipefail
 
 PROPERTY="tests/properties/no-data-race.prp"
 TASK="tests/no-data-race/00-sanity_09-include.i"
-EXPECTED="CoOpeRace verdict: false"
+EXPECTED="CoOpeRace verdict: false(no-data-race)"
 
 echo "== CoOpeRace version =="
 ./cooperace --version
