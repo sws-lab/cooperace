@@ -282,7 +282,7 @@ def test_the_shipped_table_is_the_svcomp27_concurrency_table():
     assert table.formats == {
         ("no-data-race", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
         ("unreach-call", "true"): witnesses.WitnessFormat(C, (2, 0), highest, True),
-        ("unreach-call", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
+        ("unreach-call", "false"): witnesses.WitnessFormat(V, (2, 0), highest, True),
         ("no-overflow", "true"): witnesses.WitnessFormat(C, (2, 0), highest, True),
         ("no-overflow", "false"): witnesses.WitnessFormat(V, (2, 2), highest, True),
         ("valid-memsafety", "false"): witnesses.WitnessFormat(V, (2, 2), highest, False),
@@ -292,14 +292,16 @@ def test_the_shipped_table_is_the_svcomp27_concurrency_table():
     }
 
 
-def test_the_strict_table_differs_from_the_shipped_one_in_the_two_true_cells_only():
+def test_the_strict_table_differs_from_the_shipped_one_in_three_cells_only():
     """conf/witness-modes/strict.json, which WITNESS_MODE=strict packs as
     conf/witnesses.json, is the shipped table with 2.1, as the SV-COMP 2027
-    benchmarks page states it, for a true in unreach-call and no-overflow."""
+    benchmarks page states it, for a true in unreach-call and no-overflow, and
+    2.2 for a false in unreach-call."""
     strict = json.loads((ROOT / "conf" / "witness-modes" / "strict.json").read_text())
     expected = copy.deepcopy(SHIPPED_TABLE)
     for prop in ("unreach-call", "no-overflow"):
         expected["properties"][prop]["true"]["minimumVersion"] = "2.1"
+    expected["properties"]["unreach-call"]["false"]["minimumVersion"] = "2.2"
 
     assert strict == expected
     table = witnesses.read_table(str(ROOT / "conf" / "witness-modes" / "strict.json"))

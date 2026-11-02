@@ -16,16 +16,18 @@ The default conf is the SV-COMP 2027 strategy: in each property, phase 1 runs Go
             "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"],
                               ["Dartagnan"]],
-            "witnesses":     ["IKOS-ConC", "sv-sanitizers", "Dartagnan"]
+            "witnesses":     ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
+            "ignoreIfCalls": {"Dartagnan:true": ["pthread_mutexattr_settype"]}
         },
         "unreach-call": {
-            "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
+            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
                               ["ULTIMATE GemCutter", "Dartagnan"]],
-            "cpuTimeLimits": {"Goblint": 30},
+            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
             "memoryLimits":  {"ULTIMATE GemCutter": "80%"},
             "runCpuTimeBudget": 870,
-            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Dartagnan:false"]],
-            "witnesses":     ["ULTIMATE GemCutter", "Goblint", "Dartagnan"]
+            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Dartagnan:false"],
+                              ["sv-sanitizers:false"]],
+            "witnesses":     ["ULTIMATE GemCutter", "Goblint", "Dartagnan", "sv-sanitizers"]
         },
         "no-overflow": {
             "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
@@ -34,7 +36,9 @@ The default conf is the SV-COMP 2027 strategy: in each property, phase 1 runs Go
             "memoryLimits":  {"ULTIMATE GemCutter": "80%"},
             "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["ULTIMATE GemCutter", "Deagle:false"]],
-            "witnesses":     ["ULTIMATE GemCutter", "Goblint", "Deagle"]
+            "witnesses":     ["ULTIMATE GemCutter", "Goblint", "Deagle"],
+            "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
+                                        "pthread_once", "pthread_mutexattr_settype"]}
         },
         "valid-memsafety": {
             "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
@@ -43,13 +47,16 @@ The default conf is the SV-COMP 2027 strategy: in each property, phase 1 runs Go
             "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"],
                               ["Dartagnan"]],
-            "witnesses":     ["Deagle", "sv-sanitizers", "Dartagnan"]
+            "witnesses":     ["Deagle", "sv-sanitizers", "Dartagnan"],
+            "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
+                                        "pthread_once", "pthread_mutexattr_settype"],
+                              "Dartagnan:true": ["pthread_mutexattr_settype"]}
         }
     }
 }
 ```
 
-In no-data-race, sv-sanitizers, Goblint and IKOS-ConC start together. Goblint's and IKOS-ConC's `true` are trusted most, then IKOS-ConC's and sv-sanitizers' `false`, then either answer of Dartagnan; IKOS-ConC is first in `witnesses`. Phase 1 ends when sv-sanitizers has ended, or after 45 s of wall time, which stops sv-sanitizers; Goblint, also in phase 2, keeps running without a CPU-time limit of its own, IKOS-ConC keeps running until its own limit of 60 s of CPU time (it is in phase 2 so that the wall-time limit of phase 1 does not stop it), and Dartagnan starts. In the pre-run IKOS-ConC answered every task it answered within 21 s of CPU time, with no wrong answer. In unreach-call and no-overflow, phase 1 is Goblint alone: sv-sanitizers gave no `false` in these two properties in SV-COMP 2026, its 2027 version gave two wrong `false`s in unreach-call in the 2027 pre-run (`weaver/unroll-cond-3` and `-5`), and the witness it writes for a violation with one target is of format 2.0, which the witness table does not accept there. ULTIMATE GemCutter's `true` and Dartagnan's (unreach-call) or Deagle's (no-overflow) `false` share the second bracket, so a disagreement between them is a contradiction; in no-overflow GemCutter's `false` is trusted too. ULTIMATE GemCutter is first in `witnesses`: after Goblint's `true` it is started for its witness (rule 3 of "When a tool is stopped"), which is delivered if it proves `true`, else Goblint's. Since GemCutter now runs after every Goblint `true`, it has a memory limit of 80% of the run's: a GemCutter that exceeds it is killed alone, and Goblint's answer and witness are still delivered, where without it the whole run would end `OUT OF MEMORY`. In the pre-run, GemCutter's witness was confirmed on 26 no-overflow and 3 unreach-call tasks where Goblint's was not, and never failed where Goblint's was confirmed. In valid-memsafety, Deagle's `false` is trusted as much as sv-sanitizers' `false`, its `true` less, and Dartagnan, which runs beside Deagle in phase 2, least.
+In no-data-race, sv-sanitizers, Goblint and IKOS-ConC start together. Goblint's and IKOS-ConC's `true` are trusted most, then IKOS-ConC's and sv-sanitizers' `false`, then either answer of Dartagnan; IKOS-ConC is first in `witnesses`. Phase 1 ends when sv-sanitizers has ended, or after 45 s of wall time, which stops sv-sanitizers; Goblint, also in phase 2, keeps running without a CPU-time limit of its own, IKOS-ConC keeps running until its own limit of 60 s of CPU time (it is in phase 2 so that the wall-time limit of phase 1 does not stop it), and Dartagnan starts. In the pre-run IKOS-ConC answered every task it answered within 21 s of CPU time, with no wrong answer. In unreach-call, sv-sanitizers runs beside Goblint in phase 1 with 30 s of CPU time and its `false` is trusted least: its two `false`s in the 2027 pre-run that contradict the expected verdict (`weaver/unroll-cond-3` and `-5`) are benchmark defects, where `false` is right, and it needed 318 s and 402 s for them. Its violation witness for one target is of format 2.0, which only the default witness mode accepts. In no-overflow, phase 1 is Goblint alone. ULTIMATE GemCutter's `true` and Dartagnan's (unreach-call) or Deagle's (no-overflow) `false` share the second bracket, so a disagreement between them is a contradiction; in no-overflow GemCutter's `false` is trusted too. ULTIMATE GemCutter is first in `witnesses`: after Goblint's `true` it is started for its witness (rule 3 of "When a tool is stopped"), which is delivered if it proves `true`, else Goblint's. Since GemCutter now runs after every Goblint `true`, it has a memory limit of 80% of the run's: a GemCutter that exceeds it is killed alone, and Goblint's answer and witness are still delivered, where without it the whole run would end `OUT OF MEMORY`. In the pre-run, GemCutter's witness was confirmed on 26 no-overflow and 3 unreach-call tasks where Goblint's was not, and never failed where Goblint's was confirmed. In valid-memsafety, Deagle's `false` is trusted as much as sv-sanitizers' `false`, its `true` less, and Dartagnan, which runs beside Deagle in phase 2, least. `ignoreIfCalls` drops Deagle's answers wherever the program calls a barrier, `pthread_once` or `pthread_mutexattr_settype`, and Dartagnan's `true` wherever it calls `pthread_mutexattr_settype`: CBMC's library model, which Deagle uses, treats `pthread_barrier_wait` as a no-op, has no model of `pthread_once` and ignores recursive mutexes, and Dartagnan locks a recursive mutex as a plain one, which gave it four wrong no-data-race `true`s in the 2027 pre-run. In the pre-run simulation the guards cost nothing.
 
 **The wall-time limit of phase 1, 45 s,** ends phase 1 when a tool waits without using CPU time, which a CPU-time limit does not end. It must not stop a phase-1 tool that is still within its 30 s of CPU time. In the integration suite on `goblint` (BenchExec 3.35, 2 cores per run, cgroups v2), sv-sanitizers reached its 30 s limit on four tasks after 30.8 to 30.9 s of CPU time and 31.4 to 32.2 s of wall time, since BenchExec ends a tool up to about 1 s after its limit and the tool shares the run's cores with Goblint; Goblint needs about 1.1 s of wall time per second of CPU time. 45 s is 13 s above the slowest of these, and 1.5 times the CPU-time limit. The orders of the brackets and of `witnesses` are the fits of the replay on the SV-COMP 2026 results of the notebook finding 1020-imp-revised-baseline-replay; in unreach-call and no-overflow every order replayed scores the same.
 
@@ -103,7 +110,7 @@ In valid-memsafety, `false(valid-deref)` and `false(valid-free)` in one bracket 
         },
         "unreach-call": {
             "true": {"minimumVersion": "2.0", "required": true},
-            "false": {"minimumVersion": "2.2", "required": true}
+            "false": {"minimumVersion": "2.0", "required": true}
         },
         "no-overflow": {
             "true": {"minimumVersion": "2.0", "required": true},
@@ -127,7 +134,7 @@ In valid-memsafety, `false(valid-deref)` and `false(valid-free)` in one bracket 
 | Property | `true` | `false` |
 | --- | --- | --- |
 | no-data-race | not supported | required, YAML 2.2 to 2.3 |
-| unreach-call | required, YAML 2.0 to 2.3 (2.1 to 2.3 in the strict mode) | required, YAML 2.2 to 2.3 |
+| unreach-call | required, YAML 2.0 to 2.3 (2.1 to 2.3 in the strict mode) | required, YAML 2.0 to 2.3 (2.2 to 2.3 in the strict mode) |
 | no-overflow | required, YAML 2.0 to 2.3 (2.1 to 2.3 in the strict mode) | required, YAML 2.2 to 2.3 |
 | valid-memsafety | not supported | demo mode, YAML 2.2 to 2.3; 2.3 only for `valid-memtrack` |
 
@@ -135,7 +142,7 @@ The content is the `C.*.Concurrency` rows of "Supported Witness Formats" on the 
 
 The table describes the `C.*.Concurrency` sub-categories only. In `C.Huawei-Concurrency-Challenges` every cell is in demo mode, but CoOpeRace cannot tell at run time whether a task belongs to it, and applies the `C.*.Concurrency` table to every task. On a Huawei task this changes the score in one case: a `false` of no-data-race, unreach-call or no-overflow, or a `true` of unreach-call or no-overflow, for which no supplier wrote a witness that passes, ends as `unknown` and scores 0. Under the Huawei rows, CoOpeRace would have delivered the answer without a witness: if right, it would have scored its points, which are lost; if wrong, it would have cost the penalty, which is avoided. A witness that passes is delivered on either table.
 
-**The witness mode: a `true` witness of format 2.0 in unreach-call and no-overflow.** The page requires correctness witnesses of format 2.1 or higher in `C.unreach-call.Concurrency` and `C.no-overflow.Concurrency`. The SV-COMP 2027 pre-run did not enforce that: of Goblint's own pre-run answers (`svcomp27-0-gdc055dbfb`, Zenodo 23770235), 34 unreach-call and 59 no-overflow `true`s with an `invariant_set` of format 2.0 were confirmed and scored. Goblint writes format 2.0 wherever none of its invariants uses a ghost variable, and 2.1 otherwise. `conf/witnesses.json` therefore accepts 2.0 for these two cells (the default mode). `conf/witness-modes/strict.json` is the table as the page states it, with 2.1; it differs from `conf/witnesses.json` in these two cells only. The archive carries one table as `conf/witnesses.json`: `WITNESS_MODE=strict scripts/svcomp-dist.sh` (or `make svcomp WITNESS_MODE=strict`) packs the strict table in its place and ends the archive's `VERSION` with `witnesses-strict`. In the strict mode a Goblint `true` with a 2.0 witness keeps the verdict, but the witness does not pass, so ULTIMATE GemCutter, which comes first in `witnesses` anyway, must supply one, or the run prints `unknown`.
+**The witness mode: witnesses of format 2.0 in unreach-call and no-overflow.** The page requires correctness witnesses of format 2.1 or higher in `C.unreach-call.Concurrency` and `C.no-overflow.Concurrency`, and violation witnesses of 2.2 or higher in `C.unreach-call.Concurrency`. The SV-COMP 2027 pre-run did not enforce that: of Goblint's own pre-run answers (`svcomp27-0-gdc055dbfb`, Zenodo 23770235), 34 unreach-call and 59 no-overflow `true`s with an `invariant_set` of format 2.0 were confirmed and scored, and so were sv-sanitizers' unreach-call `false`s, whose `violation_sequence` is of format 2.0. Goblint writes format 2.0 wherever none of its invariants uses a ghost variable, and 2.1 otherwise. `conf/witnesses.json` therefore accepts 2.0 for these three cells (the default mode). `conf/witness-modes/strict.json` is the table as the page states it; it differs from `conf/witnesses.json` in these three cells only. Under the 2026 scoring rules, which 2027 keeps, a correct answer whose witness is not confirmed scores 0 and is not penalized, so the default mode can lose no points against the strict one if the final run enforces the page. The archive carries one table as `conf/witnesses.json`: `WITNESS_MODE=strict scripts/svcomp-dist.sh` (or `make svcomp WITNESS_MODE=strict`) packs the strict table in its place and ends the archive's `VERSION` with `witnesses-strict`. In the strict mode a Goblint `true` with a 2.0 witness keeps the verdict, but the witness does not pass, so ULTIMATE GemCutter, which comes first in `witnesses` anyway, must supply one, or the run prints `unknown`.
 
 When what the competition requires changes, edit `conf/witnesses.json`; the code has no copy of the table. A table that CoOpeRace refuses is listed under "What CoOpeRace refuses".
 
@@ -163,14 +170,19 @@ Every other tool is stopped. The run ends when no tool is running or still to st
 
 Both limits can be given for any tool of the strategy they are in. In a conf, each strategy has its own `memoryLimits` and `cpuTimeLimits`, which name tools of that strategy's phases and apply only when that strategy runs. Both are limits of a cgroup of the tool's run, which BenchExec makes inside its own container under cgroups v2, where CoOpeRace runs ([`../README.md`](../README.md)). BenchExec has no fallback for either: where it finds no memory or cpu cgroup, it refuses to start a tool with that limit, and the tool's status is `ERROR (RunExecutorError: ...)`.
 
+## Optional: ignoring an answer when the program calls a function
+
+`ignoreIfCalls` maps an entry of `answers` (`"Name:true"`, `"Name:false"`, or `"Name"` for the entries of Name that `answers` has) to a non-empty list of C function names. Before the strategy runs, CoOpeRace reads the task's program file: if it calls one of the names, the entry is dropped from `answers`, with a line `CoOpeRace: the task calls f: Name:verdict is ignored`. A bracket left empty is dropped; a tool left without an entry is dropped from the phases, from `witnesses` and from the limits, and a phase left empty is dropped. If no entry is left, no tool runs and the verdict is `unknown`. A call is the name followed by `(` where an expression or a statement can start (after `;`, `{`, `}`, `=`, `(`, `,`, `!`, `&`, `|`, `?`, `:`, `)` or `return`), so a declaration such as glibc's `extern int pthread_once (...)` in a preprocessed file is no call (`config.called_functions`). This is a guard against a component's known modelling gap, not an analysis: a call through a macro or a function pointer is not seen.
+
 ## What CoOpeRace refuses
 
 CoOpeRace checks the property file, the conf and the witness table before it starts any tool (`src/cooperace/properties.py`, `src/cooperace/config.py`, `src/cooperace/witnesses.py`) and stops with status 1, one line `CoOpeRace: error: ...` on stderr and no `CoOpeRace verdict:` line (so BenchExec records ERROR, not UNKNOWN, and the task scores 0), if:
 
 - the property file holds the formulas of none of the four properties, or the conf has no strategy for the property;
 - the conf is not a JSON object, has no `properties`, has another key beside it, or maps a name that is not one of the four properties;
-- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits` and `runCpuTimeBudget`, or lacks one of the first three;
+- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits`, `runCpuTimeBudget` and `ignoreIfCalls`, or lacks one of the first three;
 - `runCpuTimeBudget` is not a positive number;
+- `ignoreIfCalls` is not an object, has a key that is no entry of `answers`, or a value that is not a non-empty list of C identifiers;
 - `phases` is empty; a phase is neither a list of names nor an object; a phase object has a key other than `tools` and `wallTimeLimit`, or no `tools`; a phase is empty or names a tool twice;
 - a phase names a tool CoOpeRace does not know;
 - a tool is in two phases that are not consecutive;

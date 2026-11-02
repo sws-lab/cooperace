@@ -23,7 +23,10 @@ checked. A strategy is a JSON object with:
   bytes or a percentage of the run's memory limit ("70%");
 - "runCpuTimeBudget", optional: seconds of CPU time of the whole run (every
   component together) after which every component still running is stopped
-  and the run ends with the answers it has.
+  and the run ends with the answers it has;
+- "ignoreIfCalls", optional: an entry of "answers" ("Name:true", "Name:false"
+  or "Name") to a list of C function names; if the task's program calls one
+  of them, those entries are dropped before the strategy runs (guarded).
 
 load_strategies turns a conf into a map from property to Strategy, and load
 turns one strategy into a Strategy, refusing with ConfError whatever the
@@ -34,8 +37,8 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Container, Mapping
-from dataclasses import dataclass
+from collections.abc import Container, Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from typing import NamedTuple
 
 from .properties import FORMULAS
@@ -44,7 +47,8 @@ from .properties import FORMULAS
 VERDICTS = ("true", "false")
 
 # The keys of a strategy, and the keys of a phase given as an object.
-STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits", "runCpuTimeBudget")
+STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits", "runCpuTimeBudget",
+                 "ignoreIfCalls")
 REQUIRED_KEYS = ("phases", "answers", "witnesses")
 PHASE_KEYS = ("tools", "wallTimeLimit")
 
@@ -54,6 +58,9 @@ TREE_KEYS = ("runType", "tools")
 
 # A memory limit given as a share of the run's memory limit, "70%" or "12.5%".
 _PERCENTAGE = re.compile(r"(\d+(\.\d+)?)%")
+
+# A C identifier, the form of a function name in "ignoreIfCalls".
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 @dataclass(frozen=True)
@@ -99,7 +106,8 @@ class Strategy:
     names of "witnesses" in order. `cpu_time_limits` and `memory_limits` map a
     component's name to its limit as the conf gives it, and name only
     components of `phases`. `run_cpu_time_budget` is the conf's
-    runCpuTimeBudget in seconds, None without one.
+    runCpuTimeBudget in seconds, None without one. `ignore_if_calls` maps an
+    Entry of `answers` to the functions whose call drops it (guarded).
 
     load guarantees that every component of `phases` has at least one Entry,
     that every Entry and every name in `witnesses` names a component of
@@ -111,6 +119,7 @@ class Strategy:
     cpu_time_limits: Mapping[str, int | float]
     memory_limits: Mapping[str, int | float | str]
     run_cpu_time_budget: int | float | None = None
+    ignore_if_calls: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def tools(self) -> tuple[str, ...]:
@@ -290,7 +299,9 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     without an entry; or has a key of "cpuTimeLimits" or "memoryLimits" that
     is in no phase, or a value there that is not a positive number (or, in
     "memoryLimits", a percentage above 0 and at most 100); or has a
-    runCpuTimeBudget that is not a positive number."""
+    runCpuTimeBudget that is not a positive number; or has an
+    "ignoreIfCalls" that is not an object, a key there that is no entry of
+    answers, or a value that is not a non-empty list of C identifiers."""
     if not isinstance(strategy, dict):
         raise ConfError("the strategy must be a JSON object")
     _refuse_tree_format(strategy, "the strategy")
@@ -333,7 +344,74 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
         raise ConfError(f"runCpuTimeBudget is {budget!r}, which is not a positive number of seconds")
     return Strategy(phases, answers, witnesses,
                     _limits(strategy, "cpuTimeLimits", tools), _limits(strategy, "memoryLimits", tools),
-                    budget)
+                    budget, _ignore_if_calls(strategy.get("ignoreIfCalls", {}), answers))
+
+
+def _ignore_if_calls(value: object, answers: tuple[frozenset[Entry], ...]) -> dict[Entry, tuple[str, ...]]:
+    """The map "ignoreIfCalls", given as `value`, from each Entry it names to
+    its function names ("Name" names the entries of Name that answers has),
+    refusing an entry that is in no bracket and a value that is not a
+    non-empty list of C identifiers."""
+    if not isinstance(value, dict):
+        raise ConfError(f"ignoreIfCalls must be an object, not {value!r}")
+    entries = {entry for bracket in answers for entry in bracket}
+    guards: dict[Entry, tuple[str, ...]] = {}
+    for text, names in value.items():
+        if not (isinstance(names, list) and names
+                and all(isinstance(name, str) and _IDENTIFIER.fullmatch(name) for name in names)):
+            raise ConfError(f"ignoreIfCalls gives {text!r} {names!r}, "
+                            "which is not a non-empty list of C function names")
+        try:
+            named = _entries(text, 0)
+        except ConfError:
+            raise ConfError(f"ignoreIfCalls has the key {text!r}, "
+                            "expected 'Name:true', 'Name:false' or 'Name'") from None
+        if len(named) > 1:  # "Name": the entries of either verdict that answers has
+            named = [entry for entry in named if entry in entries] or named[:1]
+        for entry in named:
+            if entry not in entries:
+                raise ConfError(f"ignoreIfCalls names {entry.tool}:{entry.verdict}, which is in no bracket of answers")
+            guards[entry] = tuple(dict.fromkeys(guards.get(entry, ()) + tuple(names)))
+    return guards
+
+
+def called_functions(text: str, names: Iterable[str]) -> set[str]:
+    """The names of `names` that the C source `text` (a .c or preprocessed .i
+    file) calls: an occurrence of the name followed by "(" where an
+    expression or a statement can start, after ; { } = ( , ! & | ? : or ")" (a
+    cast) and white space, or "return". A declaration such as glibc's "extern
+    int pthread_once (...)" has a type name before the name, so it is no call.
+    A heuristic: a call through a macro or a function pointer is not seen."""
+    found = set()
+    for name in names:
+        if re.search(r"(?:^|[;{}=(,!&|?:)])\s*(?:return\s+)?" + re.escape(name) + r"\s*\(", text):
+            found.add(name)
+    return found
+
+
+def guarded(strategy: Strategy, called: set[str]) -> tuple[Strategy | None, dict[Entry, tuple[str, ...]]]:
+    """`strategy` without the entries whose "ignoreIfCalls" functions meet
+    `called` (the functions the task calls), and those entries with the
+    called functions. A bracket left empty is dropped; a component left
+    without an entry is dropped from the phases, `witnesses` and its limits;
+    a phase left empty is dropped. If every entry is dropped, the strategy
+    is None: no component can answer."""
+    dropped = {entry: tuple(name for name in names if name in called)
+               for entry, names in strategy.ignore_if_calls.items() if called.intersection(names)}
+    if not dropped:
+        return strategy, {}
+    answers = tuple(kept for kept in (bracket - set(dropped) for bracket in strategy.answers) if kept)
+    if not answers:
+        return None, dropped
+    with_entry = {entry.tool for bracket in answers for entry in bracket}
+    phases = tuple(replace(phase, tools=tools)
+                   for phase in strategy.phases
+                   for tools in [tuple(name for name in phase.tools if name in with_entry)] if tools)
+    return replace(strategy, phases=phases, answers=answers,
+                   witnesses=tuple(name for name in strategy.witnesses if name in with_entry),
+                   cpu_time_limits={k: v for k, v in strategy.cpu_time_limits.items() if k in with_entry},
+                   memory_limits={k: v for k, v in strategy.memory_limits.items() if k in with_entry},
+                   ignore_if_calls={k: v for k, v in strategy.ignore_if_calls.items() if k not in dropped}), dropped
 
 
 def load_strategies(conf: dict, known: Container[str]) -> dict[str, Strategy]:

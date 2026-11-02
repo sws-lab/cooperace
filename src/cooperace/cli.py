@@ -219,4 +219,27 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     problems = runner.installation_problems(list(dict.fromkeys(names))) or runner.container_problems()
     if problems:
         raise SetupError(*problems)
+    root = guard(root, runner.file)
+    if root is None:
+        print("CoOpeRace: every entry of the strategy is ignored for this task", flush=True)
+        return "unknown"
     return strategy.execute(root, runner, group)
+
+
+def guard(root: Strategy, path: str) -> Strategy | None:
+    """`root` without the entries its "ignoreIfCalls" drops for the task file
+    `path` (config.guarded, with config.called_functions on the file's text),
+    printing a line "CoOpeRace: ..." for each dropped entry; None if every
+    entry is dropped. A file that cannot be read drops nothing."""
+    names = {name for names in root.ignore_if_calls.values() for name in names}
+    if not names:
+        return root
+    try:
+        with open(path, encoding="utf-8", errors="replace") as file:
+            text = file.read()
+    except OSError:
+        return root
+    guarded, dropped = config.guarded(root, config.called_functions(text, names))
+    for entry, called in sorted(dropped.items()):
+        print(f"CoOpeRace: the task calls {', '.join(called)}: {entry.tool}:{entry.verdict} is ignored", flush=True)
+    return guarded

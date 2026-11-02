@@ -43,12 +43,16 @@ DEFAULT_NO_DATA_RACE = {
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
+    "ignoreIfCalls": {"Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
 DEFAULT_VALID_MEMSAFETY = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
     "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"], ["Dartagnan"]],
     "witnesses": ["Deagle", "sv-sanitizers", "Dartagnan"],
+    "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
+                                 "pthread_once", "pthread_mutexattr_settype"],
+                      "Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
 
 # One component in one phase, trusted for both verdicts.
@@ -437,3 +441,84 @@ def test_a_run_cpu_time_budget_that_is_not_a_positive_number_is_refused(known, b
 def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known):
     strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
     assert {name: s.run_cpu_time_budget for name, s in strategies.items()} == dict.fromkeys(strategies, 870)
+
+
+# --- ignoreIfCalls ---------------------------------------------------------------
+
+GUARDED = {**VALID_MEMSAFETY,
+           "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle", "Dartagnan"]],
+           "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"], ["Dartagnan"]],
+           "witnesses": ["Deagle", "sv-sanitizers", "Dartagnan"],
+           "memoryLimits": {"Deagle": "50%"},
+           "ignoreIfCalls": {"Deagle": ["pthread_once"], "Dartagnan:true": ["pthread_mutexattr_settype"]}}
+
+
+def test_ignore_if_calls_loads_a_name_as_its_entries_in_answers(known):
+    strategy = config.load(GUARDED, known)
+
+    assert strategy.ignore_if_calls == {Entry("Deagle", "true"): ("pthread_once",),
+                                        Entry("Deagle", "false"): ("pthread_once",),
+                                        Entry("Dartagnan", "true"): ("pthread_mutexattr_settype",)}
+
+
+def test_a_name_in_ignore_if_calls_covers_only_the_verdicts_it_has(known):
+    strategy = config.load({**GOBLINT, "answers": [["Goblint:true"]], "ignoreIfCalls": {"Goblint": ["f"]}}, known)
+
+    assert strategy.ignore_if_calls == {Entry("Goblint", "true"): ("f",)}
+
+
+@pytest.mark.parametrize("value, message", [
+    ([], "ignoreIfCalls must be an object, not []"),
+    ({"Goblint": []}, "ignoreIfCalls gives 'Goblint' [], which is not a non-empty list of C function names"),
+    ({"Goblint": ["not a name"]}, "which is not a non-empty list of C function names"),
+    ({"Goblint:maybe": ["f"]}, "ignoreIfCalls has the key 'Goblint:maybe'"),
+    ({"Deagle": ["f"]}, "ignoreIfCalls names Deagle:true, which is in no bracket of answers"),
+])
+def test_a_malformed_ignore_if_calls_is_refused(known, value, message):
+    with pytest.raises(config.ConfError, match=re.escape(message)):
+        config.load({**GOBLINT, "ignoreIfCalls": value}, known)
+
+
+def test_called_functions_finds_calls_and_not_declarations():
+    text = """extern int pthread_once (pthread_once_t *__once_control, void (*__init_routine) (void));
+extern int
+pthread_mutexattr_settype (pthread_mutexattr_t *__attr, int __kind);
+int main(void) {
+  pthread_mutexattr_init(&a);
+  if (pthread_mutexattr_settype(&a, 1) != 0) return 1;
+  (void) pthread_barrier_wait(&b);
+  return pthread_barrier_init(&b, 0, 2);
+}
+"""
+    names = ["pthread_once", "pthread_mutexattr_settype", "pthread_barrier_wait", "pthread_barrier_init"]
+    assert config.called_functions(text, names) == {"pthread_mutexattr_settype", "pthread_barrier_wait",
+                                                    "pthread_barrier_init"}
+
+
+def test_guarded_drops_the_entries_and_a_component_left_without_one(known):
+    strategy = config.load(GUARDED, known)
+
+    kept, dropped = config.guarded(strategy, {"pthread_once"})
+
+    assert dropped == {Entry("Deagle", "true"): ("pthread_once",), Entry("Deagle", "false"): ("pthread_once",)}
+    assert kept.answers == (frozenset({Entry("Goblint", "true")}), frozenset({Entry("sv-sanitizers", "false")}),
+                            frozenset({Entry("Dartagnan", "true"), Entry("Dartagnan", "false")}))
+    assert kept.phases == (Phase(("sv-sanitizers", "Goblint"), 45), Phase(("Dartagnan",)))
+    assert kept.witnesses == ("sv-sanitizers", "Dartagnan")
+    assert kept.memory_limits == {}
+    assert config.guarded(strategy, {"other"}) == (strategy, {})
+
+
+def test_guarded_keeps_a_component_with_another_entry(known):
+    kept, dropped = config.guarded(config.load(GUARDED, known), {"pthread_mutexattr_settype"})
+
+    assert dropped == {Entry("Dartagnan", "true"): ("pthread_mutexattr_settype",)}
+    assert kept.answers[-1] == frozenset({Entry("Dartagnan", "false")})
+    assert "Dartagnan" in kept.tools
+
+
+def test_guarded_gives_none_when_every_entry_is_dropped(known):
+    strategy = config.load({**GOBLINT, "ignoreIfCalls": {"Goblint": ["f"]}}, known)
+
+    assert config.guarded(strategy, {"f"}) == (None, {Entry("Goblint", "true"): ("f",),
+                                                      Entry("Goblint", "false"): ("f",)})
