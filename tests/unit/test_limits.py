@@ -259,3 +259,15 @@ def test_cpu_is_none_without_a_readable_cgroup(cgroups):
     assert cpu(cgroups) is None
     write(cgroup_file, "0::/run/job\n")
     assert cpu(cgroups) is None
+
+
+def test_v2_cpu_counts_the_run_not_the_cgroup_benchexec_moved_cooperace_into(cgroups):
+    # Inside BenchExec's container, CoOpeRace's first RunExecutor moves CoOpeRace
+    # into /benchexec_process_*, beside the components' cgroups (seen in the
+    # competition image, 2 Nov 2026).
+    cgroup_file, root = cgroups
+    write(cgroup_file, "0::/benchexec_process_0in1ggww\n")
+    write(root / "benchexec_process_0in1ggww/cpu.stat", "usage_usec 136336\n")
+    write(root / "cpu.stat", "usage_usec 30855375\n")
+
+    assert cpu(cgroups) == 30.855375

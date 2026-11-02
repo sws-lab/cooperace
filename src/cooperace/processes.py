@@ -133,6 +133,12 @@ def run_cpu_seconds(cgroup_file: str = "/proc/self/cgroup",
     for line in lines:
         _, controllers, path = line.split(":", 2)
         parts = [p for p in path.split("/") if p]
+        # BenchExec's RunExecutor, when CoOpeRace first creates one, moves this
+        # process into a fresh child cgroup `benchexec_process_*` of the run's
+        # cgroup, beside the components' cgroups. Its cpu.stat counts only
+        # CoOpeRace's own CPU time; the run's is that of its parent.
+        if parts and parts[-1].startswith("benchexec_process_"):
+            parts = parts[:-1]
         try:
             if controllers == "":
                 with open(os.path.join(cgroup_root, *parts, "cpu.stat")) as f:
