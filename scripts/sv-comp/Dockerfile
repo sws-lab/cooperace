@@ -41,7 +41,7 @@
 # fuse-overlayfs is in neither image. The archive is unpacked in a stage of
 # its own, so that neither image gets `unzip`.
 ARG CI_IMAGE=docker.io/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
-ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2027@sha256:206003f8899b72a2459f5a1cb78064996b38de04eee184b4f4f3feadc2453724
+ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2027@sha256:3f5e65605151fdb737e2d849efb00d605d862caf0e372dfaeef8a0bbb10ae79f
 
 FROM ${CI_IMAGE} AS unpacked
 RUN apt-get update \
@@ -104,9 +104,17 @@ echo "== ./cooperace under runexec with the competition's options, as BenchExec 
 fresh_copy
 # The property, the task and the expected last line of smoketest.sh.
 eval "$(grep -E '^(PROPERTY|TASK|EXPECTED)=' smoketest.sh)"
+# The task and the property are under /home, as in the competition, where the
+# run's directory is /home/cwd and the tasks are in /home/cwd/sv-benchmarks:
+# the run sees them, and every component's container must make them visible
+# again under the /home it hides (the pre-run of 26 Oct 2026 failed on this).
+rm -rf /home/cwd && mkdir -p /home/cwd/sv-benchmarks
+cp "${PROPERTY}" "${TASK}" /home/cwd/sv-benchmarks/
+PROPERTY="../../home/cwd/sv-benchmarks/$(basename "${PROPERTY}")"
+TASK="../../home/cwd/sv-benchmarks/$(basename "${TASK}")"
 rm -rf /tmp/runexec-results
 STATUS=0
-runexec --read-only-dir / --hidden-dir /home --overlay-dir /opt/cooperace \
+runexec --read-only-dir / --hidden-dir /home --read-only-dir /home/cwd/sv-benchmarks --overlay-dir /opt/cooperace \
   --set-cgroup-value pids.max=5000 --timelimit 900s --memlimit 15GB \
   --dir /opt/cooperace --output /tmp/runexec-output.log \
   --result-files 'witness*' --output-directory /tmp/runexec-results \
