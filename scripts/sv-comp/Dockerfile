@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: MIT
 
 # The two environments in which fm-tools' CI checks the archive for SV-COMP
-# 2027 (ci/.gitlab-ci.yml of sosy-lab/benchmarking/fm-tools, last changed at
-# commit 16769ef4 of 2026-10-18), one target each; `make svcomp` builds and
+# 2027 (ci/.gitlab-ci.yml of sosy-lab/benchmarking/fm-tools, read at commit
+# 76127d5 of 2026-11-02; the image digests are those of that day), one target each; `make svcomp` builds and
 # runs both. The build context is dist/: the archive dist/cooperace.zip, and
 # in dist/fmtools/ what scripts/sv-comp/fmtools-entry.py read from
 # CoOpeRace's fm-tools entry (required-packages.txt) and the note that says
@@ -40,7 +40,7 @@
 #
 # fuse-overlayfs is in neither image. The archive is unpacked in a stage of
 # its own, so that neither image gets `unzip`.
-ARG CI_IMAGE=docker.io/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+ARG CI_IMAGE=docker.io/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2027@sha256:3f5e65605151fdb737e2d849efb00d605d862caf0e372dfaeef8a0bbb10ae79f
 
 FROM ${CI_IMAGE} AS unpacked
