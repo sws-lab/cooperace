@@ -62,20 +62,21 @@ def test_every_component_has_its_directory():
 
 def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():
     """The benchexec_toolinfo_options of version svcomp27 of goblint.yml,
-    dartagnan.yml, uautomizer.yml, ugemcutter.yml and sv-sanitizers.yml and
+    ugemcutter.yml and sv-sanitizers.yml in fm-tools main 12979f1, of
+    dartagnan.yml and uautomizer.yml and
     of version 2.0 of iekke.yml in fm-tools main 7a1697a1, and of version
     svcomp27 of deagle.yml, as proposed in fm-tools merge request !1181 (head
     d76ae28f)."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23361000", "svcomp27",
+    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23770235", "svcomp27",
                                                    ("--portfolio-conf", "conf/svcomp27/seq.txt"))
     assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.23263361", "svcomp27", ())
     assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.23295622", "svcomp27", ("--full-output",))
-    assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.23342909", "svcomp27", ())
+    assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.23528053", "svcomp27", ())
     assert versions["deagle"] == ComponentVersion("10.5281/zenodo.23488039", "svcomp27", ())
     assert versions["iekke"] == ComponentVersion("10.5281/zenodo.23243599", "2.0", ())
-    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.23295738", "svcomp27", ("--full-output",))
+    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.23757807", "svcomp27", ("--full-output",))
 
 
 def test_every_component_has_options_and_the_options_file_matches_the_lock_files():
