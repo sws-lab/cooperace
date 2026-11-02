@@ -290,6 +290,67 @@ def test_an_answer_without_an_entry_is_printed_and_ignored(capsys):
     assert "CoOpeRace answer: A false, which has no entry in answers: ignored" in printed(capsys)
 
 
+# --- the run's CPU-time budget --------------------------------------------------
+
+OVERFLOW = {"phases": [{"tools": ["Goblint"], "wallTimeLimit": 45}, ["GemCutter", "Deagle"]],
+            "answers": [["Goblint:true"], ["GemCutter:true", "Deagle:false"]],
+            "witnesses": ["Goblint", "GemCutter", "Deagle"]}
+
+
+def cpu_clock(monkeypatch, per_second):
+    """Makes strategy.run_cpu_seconds a clock that counts `per_second` CPU
+    seconds per wall second from now."""
+    start = time.monotonic()
+    monkeypatch.setattr(strategy, "run_cpu_seconds", lambda: (time.monotonic() - start) * per_second)
+
+
+def test_the_budget_stops_a_tool_that_could_only_contradict_and_delivers_the_decided_false(capsys, monkeypatch):
+    cpu_clock(monkeypatch, 1000)               # the budget of 870 s passes after 0.87 s
+    result, runner = run(dict(OVERFLOW, runCpuTimeBudget=870), "no-overflow",
+                         Goblint=Script(0.01), GemCutter=Script(FOREVER),
+                         Deagle=Script(0.05, FALSE, witness=True))
+    lines = printed(capsys)
+
+    assert result == "false"
+    assert runner.stopped == ["GemCutter"]
+    assert any(line.startswith("CoOpeRace: the run has used ") and line.endswith(
+        "its budget is 870 s: stopping GemCutter") for line in lines)
+    assert ("deliver", ["Deagle.witness.yml"]) in runner.calls
+
+
+def test_without_a_budget_the_tool_that_could_contradict_runs_on(capsys, monkeypatch):
+    cpu_clock(monkeypatch, 1000)
+    conf = dict(OVERFLOW, phases=[{"tools": ["Goblint"], "wallTimeLimit": 45},
+                                  {"tools": ["GemCutter", "Deagle"], "wallTimeLimit": 1.5}])
+    started = time.monotonic()
+    result, runner = run(conf, "no-overflow", Goblint=Script(0.01), GemCutter=Script(FOREVER),
+                         Deagle=Script(0.05, FALSE, witness=True))
+
+    assert result == "false"                    # decided only when the phase's wall-time limit stopped GemCutter
+    assert time.monotonic() - started >= 1.5
+
+
+def test_the_budget_with_no_answer_ends_in_unknown_and_skips_later_phases(capsys, monkeypatch):
+    cpu_clock(monkeypatch, 1000)
+    result, runner = run(dict(OVERFLOW, runCpuTimeBudget=200), "no-overflow",
+                         Goblint=Script(FOREVER), GemCutter=Script(0.01, TRUE, witness=True),
+                         Deagle=Script(0.01))
+
+    assert result == "unknown"
+    assert runner.started == ["Goblint"]
+    assert runner.stopped == ["Goblint"]
+
+
+def test_an_unreadable_cpu_clock_disables_the_budget(capsys, monkeypatch):
+    monkeypatch.setattr(strategy, "run_cpu_seconds", lambda: None)
+    result, runner = run(dict(OVERFLOW, runCpuTimeBudget=1), "no-overflow",
+                         Goblint=Script(0.01), GemCutter=Script(0.2, TRUE, witness=True),
+                         Deagle=Script(0.05))
+
+    assert result == "true"
+    assert runner.stopped == []
+
+
 # --- execute ------------------------------------------------------------------
 
 def test_execute_prepares_delivers_and_cleans_up_in_order(capsys):

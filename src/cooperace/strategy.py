@@ -35,7 +35,7 @@ from collections import namedtuple
 from typing import Protocol
 
 from .config import Step, Strategy
-from .processes import PRINT_LOCK, ComponentGroup
+from .processes import PRINT_LOCK, ComponentGroup, run_cpu_seconds
 from .verdicts import CONTRADICTION, FALSE, RUNNING, TRUE, UNKNOWN, Actions, Answer, Schedule, Verdicts
 from .witnesses import subproperty_of
 
@@ -180,9 +180,28 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
             threads.append(thread)
             thread.start()
 
+    budget = root.run_cpu_time_budget
+
+    def over_budget() -> bool:
+        """Whether the run has used up its CPU-time budget: then every
+        component is stopped, so that the run ends with its answers before
+        the competition's CPU-time limit ends it without any."""
+        if budget is None or schedule.over:
+            return False
+        used = run_cpu_seconds()
+        if used is None or used < budget:
+            return False
+        running = [tool for tool, state in schedule.states.items() if state == RUNNING]
+        say(f"CoOpeRace: the run has used {used:.0f} s of CPU time, its budget is {budget:g} s: "
+            f"stopping {', '.join(running)}")
+        act(schedule.exhaust())
+        return True
+
     try:
         act(schedule.begin(time.monotonic()))
         while not schedule.over:
+            if over_budget():
+                continue
             deadline = schedule.deadline()
             timeout = WAIT_SECONDS if deadline is None else min(WAIT_SECONDS, max(0.0, deadline - time.monotonic()))
             try:

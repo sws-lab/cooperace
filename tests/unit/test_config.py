@@ -80,8 +80,8 @@ def test_the_conf_readme_shows_the_default_conf_whose_strategies_this_file_loads
     shipped = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
 
     assert json.loads(block) == shipped
-    assert shipped["properties"]["no-data-race"] == NO_DATA_RACE
-    assert shipped["properties"]["valid-memsafety"] == VALID_MEMSAFETY
+    assert shipped["properties"]["no-data-race"] == {**NO_DATA_RACE, "runCpuTimeBudget": 870}
+    assert shipped["properties"]["valid-memsafety"] == {**VALID_MEMSAFETY, "runCpuTimeBudget": 870}
 
 
 # --- two strategies of the default conf ---------------------------------------
@@ -322,7 +322,7 @@ def test_a_tree_strategy_inside_properties_is_refused_naming_the_property_and_th
 @pytest.mark.parametrize("strategy, message", [
     ([], "the strategy must be a JSON object"),
     ({**GOBLINT, "verdicts": []}, "the strategy has the key 'verdicts', expected only 'phases', 'answers', "
-                                  "'witnesses', 'cpuTimeLimits', 'memoryLimits'"),
+                                  "'witnesses', 'cpuTimeLimits', 'memoryLimits', 'runCpuTimeBudget'"),
     (with_changes(GOBLINT, phases=None), "the strategy has no 'phases'"),
     (with_changes(GOBLINT, answers=None), "the strategy has no 'answers'"),
     (with_changes(GOBLINT, witnesses=None), "the strategy has no 'witnesses'"),
@@ -403,3 +403,23 @@ def test_a_limit_applies_only_inside_the_strategy_that_names_it(known, limits):
     with pytest.raises(config.ConfError,
                        match=f"in the strategy for no-overflow: {limits} has a limit for 'Goblint'"):
         config.load_strategies(conf, known)
+
+
+# --- runCpuTimeBudget ---------------------------------------------------------------
+
+def test_the_run_cpu_time_budget_is_loaded_and_absent_by_default(known):
+    assert config.load(GOBLINT, known).run_cpu_time_budget is None
+    assert config.load({**GOBLINT, "runCpuTimeBudget": 870}, known).run_cpu_time_budget == 870
+
+
+@pytest.mark.parametrize("budget", [0, -1, "870", None, True], ids=["zero", "negative", "string", "null", "bool"])
+def test_a_run_cpu_time_budget_that_is_not_a_positive_number_is_refused(known, budget):
+    refuses({**GOBLINT, "runCpuTimeBudget": budget}, known,
+            f"runCpuTimeBudget is {budget!r}, which is not a positive number of seconds")
+
+
+def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known):
+    import json, os
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "conf", "svcomp27.json")
+    strategies = config.load_strategies(json.load(open(path)), known)
+    assert {name: s.run_cpu_time_budget for name, s in strategies.items()} == dict.fromkeys(strategies, 870)

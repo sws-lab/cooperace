@@ -12,7 +12,7 @@ import pytest
 
 from src.cooperace import components
 from src.cooperace.config import Step
-from src.cooperace.processes import run_memory_limit
+from src.cooperace.processes import run_cpu_seconds, run_memory_limit
 
 MEBIBYTE = 2**20
 
@@ -215,3 +215,47 @@ def test_a_cgroup_without_memory_controller_or_files_gives_none(cgroups):
 def test_a_missing_cgroup_file_gives_none(tmp_path):
     assert run_memory_limit(cgroup_file=str(tmp_path / "absent"),
                             cgroup_root=str(tmp_path)) is None
+
+
+# --- run_cpu_seconds ----------------------------------------------------------
+
+def cpu(cgroups):
+    cgroup_file, root = cgroups
+    return run_cpu_seconds(cgroup_file=str(cgroup_file), cgroup_root=str(root))
+
+
+def test_run_cpu_seconds_defaults_are_the_real_paths():
+    parameters = inspect.signature(run_cpu_seconds).parameters
+    assert parameters["cgroup_file"].default == "/proc/self/cgroup"
+    assert parameters["cgroup_root"].default == "/sys/fs/cgroup"
+
+
+def test_v2_cpu_reads_usage_usec_of_the_cgroup(cgroups):
+    cgroup_file, root = cgroups
+    write(cgroup_file, "0::/run/job\n")
+    write(root / "run/job/cpu.stat", "usage_usec 870500000\nuser_usec 800000000\nsystem_usec 70500000\n")
+
+    assert cpu(cgroups) == 870.5
+
+
+def test_v2_cpu_in_the_namespace_root(cgroups):
+    cgroup_file, root = cgroups
+    write(cgroup_file, "0::/\n")
+    write(root / "cpu.stat", "usage_usec 1000000\n")
+
+    assert cpu(cgroups) == 1.0
+
+
+def test_v1_cpu_reads_cpuacct_usage(cgroups):
+    cgroup_file, root = cgroups
+    write(cgroup_file, "4:cpu,cpuacct:/run/job\n3:memory:/run/job\n")
+    write(root / "cpu,cpuacct/run/job/cpuacct.usage", "2500000000\n")
+
+    assert cpu(cgroups) == 2.5
+
+
+def test_cpu_is_none_without_a_readable_cgroup(cgroups):
+    cgroup_file, root = cgroups
+    assert cpu(cgroups) is None
+    write(cgroup_file, "0::/run/job\n")
+    assert cpu(cgroups) is None

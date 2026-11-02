@@ -20,7 +20,10 @@ checked. A strategy is a JSON object with:
   asked for the witness of the verdict;
 - "cpuTimeLimits", optional: a component's name to a CPU-time limit in seconds;
 - "memoryLimits", optional: a component's name to a memory limit, a number of
-  bytes or a percentage of the run's memory limit ("70%").
+  bytes or a percentage of the run's memory limit ("70%");
+- "runCpuTimeBudget", optional: seconds of CPU time of the whole run (every
+  component together) after which every component still running is stopped
+  and the run ends with the answers it has.
 
 load_strategies turns a conf into a map from property to Strategy, and load
 turns one strategy into a Strategy, refusing with ConfError whatever the
@@ -41,7 +44,7 @@ from .properties import FORMULAS
 VERDICTS = ("true", "false")
 
 # The keys of a strategy, and the keys of a phase given as an object.
-STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits")
+STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits", "runCpuTimeBudget")
 REQUIRED_KEYS = ("phases", "answers", "witnesses")
 PHASE_KEYS = ("tools", "wallTimeLimit")
 
@@ -95,7 +98,8 @@ class Strategy:
     verdict) pair is in at most one bracket. `witnesses` are the component
     names of "witnesses" in order. `cpu_time_limits` and `memory_limits` map a
     component's name to its limit as the conf gives it, and name only
-    components of `phases`.
+    components of `phases`. `run_cpu_time_budget` is the conf's
+    runCpuTimeBudget in seconds, None without one.
 
     load guarantees that every component of `phases` has at least one Entry,
     that every Entry and every name in `witnesses` names a component of
@@ -106,6 +110,7 @@ class Strategy:
     witnesses: tuple[str, ...]
     cpu_time_limits: Mapping[str, int | float]
     memory_limits: Mapping[str, int | float | str]
+    run_cpu_time_budget: int | float | None = None
 
     @property
     def tools(self) -> tuple[str, ...]:
@@ -284,7 +289,8 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     component of a phase without an entry; has a name in "witnesses" twice or
     without an entry; or has a key of "cpuTimeLimits" or "memoryLimits" that
     is in no phase, or a value there that is not a positive number (or, in
-    "memoryLimits", a percentage above 0 and at most 100)."""
+    "memoryLimits", a percentage above 0 and at most 100); or has a
+    runCpuTimeBudget that is not a positive number."""
     if not isinstance(strategy, dict):
         raise ConfError("the strategy must be a JSON object")
     _refuse_tree_format(strategy, "the strategy")
@@ -322,8 +328,12 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
         if name not in with_entry:
             raise ConfError(f"witnesses names {name!r}, which has no entry in answers")
 
+    budget = strategy.get("runCpuTimeBudget")
+    if "runCpuTimeBudget" in strategy and not _is_positive_number(budget):
+        raise ConfError(f"runCpuTimeBudget is {budget!r}, which is not a positive number of seconds")
     return Strategy(phases, answers, witnesses,
-                    _limits(strategy, "cpuTimeLimits", tools), _limits(strategy, "memoryLimits", tools))
+                    _limits(strategy, "cpuTimeLimits", tools), _limits(strategy, "memoryLimits", tools),
+                    budget)
 
 
 def load_strategies(conf: dict, known: Container[str]) -> dict[str, Strategy]:

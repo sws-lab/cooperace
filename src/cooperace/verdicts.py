@@ -314,6 +314,19 @@ class Schedule:
             self.verdicts.record(tool, answer)
         return self._settle(now, [], [])
 
+    def exhaust(self) -> Actions:
+        """Ends the run now, when the run's CPU-time budget is used up:
+        stops every running component, skips every pending one and leaves
+        the last phase. The answers recorded so far decide the result."""
+        stop = [tool for tool, state in self.states.items() if state == RUNNING]
+        for tool, state in self.states.items():
+            if state == RUNNING:
+                self.states[tool] = ENDED
+            elif state == PENDING:
+                self.states[tool] = SKIPPED
+        self.phase = len(self.strategy.phases) - 1
+        return Actions(tuple(stop), ())
+
     def time_passed(self, now: float) -> Actions:
         """At the time `now`: if the current phase's deadline has passed,
         stops its running components that are not in the next phase (all of

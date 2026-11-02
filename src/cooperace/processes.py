@@ -112,3 +112,37 @@ def run_memory_limit(cgroup_file: str = "/proc/self/cgroup",
             if value.isdigit() and int(value) < 2**60:  # "max" and v1's 2**63-4096 mean no limit
                 limits.append(int(value))
     return min(limits) if limits else None
+
+
+def run_cpu_seconds(cgroup_file: str = "/proc/self/cgroup",
+                    cgroup_root: str = "/sys/fs/cgroup") -> float | None:
+    """CPU time in seconds used so far by the cgroup this process runs in,
+    with every cgroup nested in it (the components), or None if it cannot be
+    read.
+
+    Inside BenchExec's container the run's cgroup is the root of the cgroup
+    namespace, so this is the CPU time BenchExec measures for the run. Under
+    cgroups v2 it is `usage_usec` of `cpu.stat`; under cgroups v1
+    `cpuacct.usage` (nanoseconds) of the cpuacct cgroup named in
+    /proc/self/cgroup. The arguments are as for run_memory_limit."""
+    try:
+        with open(cgroup_file) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        _, controllers, path = line.split(":", 2)
+        parts = [p for p in path.split("/") if p]
+        try:
+            if controllers == "":
+                with open(os.path.join(cgroup_root, *parts, "cpu.stat")) as f:
+                    for row in f:
+                        key, _, value = row.partition(" ")
+                        if key == "usage_usec":
+                            return int(value) / 1e6
+            elif "cpuacct" in controllers.split(","):
+                with open(os.path.join(cgroup_root, controllers, *parts, "cpuacct.usage")) as f:
+                    return int(f.read().strip()) / 1e9
+        except (OSError, ValueError):
+            continue
+    return None

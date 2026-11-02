@@ -13,6 +13,7 @@ The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Go
             "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
                               ["Goblint", "Dartagnan"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+            "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
             "witnesses":     ["sv-sanitizers", "Dartagnan"]
         },
@@ -20,6 +21,7 @@ The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Go
             "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
                               ["ULTIMATE GemCutter", "Dartagnan"]],
             "cpuTimeLimits": {"Goblint": 30},
+            "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Dartagnan:false"]],
             "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Dartagnan"]
         },
@@ -27,6 +29,7 @@ The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Go
             "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
                               ["ULTIMATE GemCutter", "Deagle"]],
             "cpuTimeLimits": {"Goblint": 30},
+            "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Deagle:false"]],
             "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Deagle"]
         },
@@ -34,6 +37,7 @@ The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Go
             "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
                               ["Deagle"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+            "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
             "witnesses":     ["Deagle", "sv-sanitizers"]
         }
@@ -133,6 +137,8 @@ When what the competition requires changes, edit `conf/witnesses.json`; the code
 
 A tool is stopped, or not started when its phase comes, only when no answer it could give changes what CoOpeRace prints — the verdict, the error, the witness delivered or the sub-property — whatever the tools still running or still to start answer. So stopping tools early gives the result that letting every tool run to its end would give; the one difference is that a contradiction names only the entries that answered before the run ended.
 
+The exception is the run's CPU-time budget, `runCpuTimeBudget` (seconds, optional). The competition's limit, 900 s of CPU time for all processes of the run, ends a run that is still waiting for a tool, and BenchExec then scores it `TIMEOUT` even if a bracket had decided long before (for example, Deagle's `false` in no-overflow while GemCutter, which could contradict it, runs on). Once the CPU time of the run's cgroup (every tool together, read from `cpu.stat`) reaches the budget, CoOpeRace stops every tool still running, starts none, and prints the result of the answers it has, as if those tools had given up. `svcomp27.json` sets 870 s, 30 s below the limit, for the time that stopping the tools and delivering the witness take.
+
 Before there is a verdict, every tool runs as `phases` says. Once the deciding bracket `b` has a verdict `v`, let `V*` be `v` together with every verdict that a tool still running or still to start has an entry for in a bracket above `b`: each of these could still become the verdict. A tool keeps running, or is started when its phase comes, if one of these rules holds for some `u` in `V*`, with `b` the bracket that `u` would be decided in:
 
 1. **It could beat `u`**: it has an entry in a bracket above `b`.
@@ -157,7 +163,8 @@ CoOpeRace checks the property file, the conf and the witness table before it sta
 
 - the property file holds the formulas of none of the four properties, or the conf has no strategy for the property;
 - the conf is not a JSON object, has no `properties`, has another key beside it, or maps a name that is not one of the four properties;
-- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits` and `memoryLimits`, or lacks one of the first three;
+- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits` and `runCpuTimeBudget`, or lacks one of the first three;
+- `runCpuTimeBudget` is not a positive number;
 - `phases` is empty; a phase is neither a list of names nor an object; a phase object has a key other than `tools` and `wallTimeLimit`, or no `tools`; a phase is empty or names a tool twice;
 - a phase names a tool CoOpeRace does not know;
 - a tool is in two phases that are not consecutive;
