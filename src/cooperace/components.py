@@ -127,9 +127,12 @@ REGISTRY = {spec.name: spec for spec in (
     #ghost_instrumentation entry of format 2.1 beside an invariant_set entry of 2.0,
     #which WitnessLint 2.3 rejects and witnesses.passes refuses; the ghost entry alone
     #passes both. Goblint's verdicts are the same with and without it.
+    #exp.region-offsets: the svcomp27 configuration turns it on, and it gives a wrong
+    #no-data-race true on races between fields of one struct; it is turned off here.
     ComponentSpec("Goblint", "benchexec.tools.goblint", "goblint",
                   witness=WitnessSpec("run", ("--set", "witness.yaml.path", "{dir}/witness.yml",
-                                              "--set", "witness.yaml.entry-types", '["ghost_instrumentation"]'),
+                                              "--set", "witness.yaml.entry-types", '["ghost_instrumentation"]',
+                                              "--set", "exp.region-offsets", "false"),
                                       ("witness.yml",))),
     #The wrapper deagle runs deagle_exe with --yaml-witness error-witness.yml in its
     #working directory, Deagle's directory, and deletes the file unless it answers false
