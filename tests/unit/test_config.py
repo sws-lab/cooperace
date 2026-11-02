@@ -41,6 +41,7 @@ DEFAULT_NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
                ["Goblint", "IKOS-ConC", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
+    "memoryLimits": {"Dartagnan": "35%"},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
     "ignoreIfCalls": {"Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
@@ -49,6 +50,7 @@ DEFAULT_NO_DATA_RACE = {
 DEFAULT_VALID_MEMSAFETY = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+    "memoryLimits": {"Deagle": "60%", "Dartagnan": "35%"},
     "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"], ["Dartagnan"]],
     "witnesses": ["Deagle", "sv-sanitizers", "Dartagnan"],
     "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
@@ -443,6 +445,26 @@ def test_a_run_cpu_time_budget_that_is_not_a_positive_number_is_refused(known, b
 def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known):
     strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
     assert {name: s.run_cpu_time_budget for name, s in strategies.items()} == dict.fromkeys(strategies, 870)
+
+
+def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_budget(known):
+    """In every phase of conf/svcomp27.json, each tool without a CPU-time limit
+    of its own runs until the run's budget, so it has a memory limit, a
+    percentage of the run's, and the limits of the tools of one phase add up
+    to at most 95%. Two of them together then cannot reach the run's limit,
+    which would end the whole run OUT OF MEMORY (BenchExec sets the run
+    cgroup's memory.oom.group) and lose the answers already decided. Dartagnan
+    in particular, a GraalVM native image whose heap grows to 80% of the
+    memory it sees, reached 10 GB at full limits without answering."""
+    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    for name, strategy in strategies.items():
+        for phase in strategy.phases:
+            uncapped = [tool for tool in phase.tools if tool not in strategy.cpu_time_limits]
+            limits = {tool: strategy.memory_limits.get(tool) for tool in uncapped}
+            assert all(isinstance(limit, str) and limit.endswith("%") for limit in limits.values()), (name, limits)
+            assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
+        if "Dartagnan" in strategy.tools:
+            assert "Dartagnan" in strategy.memory_limits, name
 
 
 # --- ignoreIfCalls ---------------------------------------------------------------
