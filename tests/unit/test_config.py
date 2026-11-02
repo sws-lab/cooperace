@@ -43,7 +43,8 @@ DEFAULT_NO_DATA_RACE = {
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
-    "ignoreIfCalls": {"Dartagnan:true": ["pthread_mutexattr_settype"]},
+    "ignoreIfCalls": {"Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
+                      "Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
 DEFAULT_VALID_MEMSAFETY = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle", "Dartagnan"]],
@@ -52,6 +53,7 @@ DEFAULT_VALID_MEMSAFETY = {
     "witnesses": ["Deagle", "sv-sanitizers", "Dartagnan"],
     "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
                                  "pthread_once", "pthread_mutexattr_settype"],
+                      "Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
                       "Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
 
