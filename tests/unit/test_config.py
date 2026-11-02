@@ -41,7 +41,7 @@ DEFAULT_NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
                ["Goblint", "IKOS-ConC", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
-    "memoryLimits": {"Dartagnan": "35%"},
+    "memoryLimits": {"Dartagnan": "80%"},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
     "ignoreIfCalls": {"Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],

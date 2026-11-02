@@ -4,7 +4,7 @@
             "phases":        [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
                               ["Goblint", "IKOS-ConC", "Dartagnan"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
-            "memoryLimits":  {"Dartagnan": "35%"},
+            "memoryLimits":  {"Dartagnan": "80%"},
             "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"],
                               ["Dartagnan"]],
