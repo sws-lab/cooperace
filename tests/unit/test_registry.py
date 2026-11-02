@@ -48,6 +48,7 @@ DIRECTORIES = {
     "sv-sanitizers": "sv-sanitizers",
     "RacerF": "racerf",
     "iekke": "iekke",
+    "IKOS-ConC": "ikos-conc",
 }
 
 
@@ -62,7 +63,7 @@ def test_every_component_has_its_directory():
 
 def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():
     """The benchexec_toolinfo_options of version svcomp27 of goblint.yml,
-    ugemcutter.yml and sv-sanitizers.yml in fm-tools main 12979f1, of
+    ugemcutter.yml, sv-sanitizers.yml and ikos-conc.yml in fm-tools main 12979f1, of
     dartagnan.yml and uautomizer.yml and
     of version 2.0 of iekke.yml in fm-tools main 7a1697a1, and of version
     svcomp27 of deagle.yml, as proposed in fm-tools merge request !1181 (head
@@ -77,6 +78,7 @@ def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entr
     assert versions["deagle"] == ComponentVersion("10.5281/zenodo.23488039", "svcomp27", ())
     assert versions["iekke"] == ComponentVersion("10.5281/zenodo.23243599", "2.0", ())
     assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.23757807", "svcomp27", ("--full-output",))
+    assert versions["ikos-conc"] == ComponentVersion("10.5281/zenodo.23736684", "svcomp27", ())
 
 
 def test_every_component_has_options_and_the_options_file_matches_the_lock_files():
@@ -132,7 +134,7 @@ def test_components_without_a_witness_spec_of_their_own_use_the_default():
 def test_every_tool_info_module_imports_and_names_its_component(name):
     tool = REGISTRY[name].tool()
 
-    expected = "SV-sanitizers" if name == "sv-sanitizers" else name
+    expected = {"sv-sanitizers": "SV-sanitizers", "IKOS-ConC": "ikos-conc"}.get(name, name)
     assert tool.name() == expected
 
 

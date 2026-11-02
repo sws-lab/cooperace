@@ -4,18 +4,19 @@ A conf is a JSON object whose only key is `properties`, which maps a property to
 
 ## The default conf: `conf/svcomp27.json`
 
-The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Goblint, trusted for `true`, beside sv-sanitizers, trusted for `false`, where it can answer, each limited to 30 s of CPU time; phase 2 runs the best `true` verifier and the best `false` falsifier of the property in SV-COMP 2026 whose 2027 version writes the witness 2027 requires.
+The default conf is the SV-COMP 2027 strategy: in each property, phase 1 runs Goblint, trusted for `true`, beside sv-sanitizers, trusted for `false`, where it can answer, each limited to 30 s of CPU time, and in no-data-race IKOS-ConC, trusted for both verdicts, limited to 60 s; phase 2 runs the best `true` verifier and the best `false` falsifier of the property whose 2027 version writes the witness 2027 requires. The changes over the conf of the first 2027 submission are fits on the per-task results of the SV-COMP 2027 pre-run, simulated with the strategy semantics below (IKOS-ConC in no-data-race; ULTIMATE GemCutter first in `witnesses` of unreach-call and no-overflow and trusted for `false` in no-overflow; Dartagnan as a last bracket in valid-memsafety).
 
 ```json
 {
     "properties": {
         "no-data-race": {
-            "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
-                              ["Goblint", "Dartagnan"]],
-            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+            "phases":        [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
+                              ["Goblint", "IKOS-ConC", "Dartagnan"]],
+            "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
             "runCpuTimeBudget": 870,
-            "answers":       [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan"]],
-            "witnesses":     ["sv-sanitizers", "Dartagnan"]
+            "answers":       [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"],
+                              ["Dartagnan"]],
+            "witnesses":     ["IKOS-ConC", "sv-sanitizers", "Dartagnan"]
         },
         "unreach-call": {
             "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
@@ -23,29 +24,30 @@ The default conf is the SV-COMP 2027 baseline: in each property, phase 1 runs Go
             "cpuTimeLimits": {"Goblint": 30},
             "runCpuTimeBudget": 870,
             "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Dartagnan:false"]],
-            "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Dartagnan"]
+            "witnesses":     ["ULTIMATE GemCutter", "Goblint", "Dartagnan"]
         },
         "no-overflow": {
             "phases":        [{"tools": ["Goblint"], "wallTimeLimit": 45},
                               ["ULTIMATE GemCutter", "Deagle"]],
             "cpuTimeLimits": {"Goblint": 30},
             "runCpuTimeBudget": 870,
-            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter:true", "Deagle:false"]],
-            "witnesses":     ["Goblint", "ULTIMATE GemCutter", "Deagle"]
+            "answers":       [["Goblint:true"], ["ULTIMATE GemCutter", "Deagle:false"]],
+            "witnesses":     ["ULTIMATE GemCutter", "Goblint", "Deagle"]
         },
         "valid-memsafety": {
             "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
-                              ["Deagle"]],
+                              ["Deagle", "Dartagnan"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
             "runCpuTimeBudget": 870,
-            "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
-            "witnesses":     ["Deagle", "sv-sanitizers"]
+            "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"],
+                              ["Dartagnan"]],
+            "witnesses":     ["Deagle", "sv-sanitizers", "Dartagnan"]
         }
     }
 }
 ```
 
-In no-data-race, sv-sanitizers and Goblint start together. Goblint's `true` is trusted most, then sv-sanitizers' `false`, then either answer of Dartagnan. Phase 1 ends when sv-sanitizers has ended, or after 45 s of wall time, which stops sv-sanitizers; Goblint, also in phase 2, keeps running without a CPU-time limit of its own, and Dartagnan starts. In unreach-call and no-overflow, phase 1 is Goblint alone: sv-sanitizers gave no `false` in these two properties in SV-COMP 2026, and the witness its 2027 version writes for a violation with one target is of format 2.0, which the witness table does not accept there. ULTIMATE GemCutter's `true` and Dartagnan's (unreach-call) or Deagle's (no-overflow) `false` share the second bracket, so a disagreement between them is a contradiction. Goblint is first in `witnesses`, so that GemCutter is not started for a witness when Goblint's `true` already has one. In valid-memsafety, Deagle's `false` is trusted as much as sv-sanitizers' `false`, and its `true` less.
+In no-data-race, sv-sanitizers, Goblint and IKOS-ConC start together. Goblint's and IKOS-ConC's `true` are trusted most, then IKOS-ConC's and sv-sanitizers' `false`, then either answer of Dartagnan; IKOS-ConC is first in `witnesses`. Phase 1 ends when sv-sanitizers has ended, or after 45 s of wall time, which stops sv-sanitizers; Goblint, also in phase 2, keeps running without a CPU-time limit of its own, IKOS-ConC keeps running until its own limit of 60 s of CPU time (it is in phase 2 so that the wall-time limit of phase 1 does not stop it), and Dartagnan starts. In the pre-run IKOS-ConC answered every task it answered within 21 s of CPU time, with no wrong answer. In unreach-call and no-overflow, phase 1 is Goblint alone: sv-sanitizers gave no `false` in these two properties in SV-COMP 2026, its 2027 version gave two wrong `false`s in unreach-call in the 2027 pre-run (`weaver/unroll-cond-3` and `-5`), and the witness it writes for a violation with one target is of format 2.0, which the witness table does not accept there. ULTIMATE GemCutter's `true` and Dartagnan's (unreach-call) or Deagle's (no-overflow) `false` share the second bracket, so a disagreement between them is a contradiction; in no-overflow GemCutter's `false` is trusted too. ULTIMATE GemCutter is first in `witnesses`: after Goblint's `true` it is started for its witness (rule 3 of "When a tool is stopped"), which is delivered if it proves `true`, else Goblint's. In the pre-run, GemCutter's witness was confirmed on 26 no-overflow and 3 unreach-call tasks where Goblint's was not, and never failed where Goblint's was confirmed. In valid-memsafety, Deagle's `false` is trusted as much as sv-sanitizers' `false`, its `true` less, and Dartagnan, which runs beside Deagle in phase 2, least.
 
 **The wall-time limit of phase 1, 45 s,** ends phase 1 when a tool waits without using CPU time, which a CPU-time limit does not end. It must not stop a phase-1 tool that is still within its 30 s of CPU time. In the integration suite on `goblint` (BenchExec 3.35, 2 cores per run, cgroups v2), sv-sanitizers reached its 30 s limit on four tasks after 30.8 to 30.9 s of CPU time and 31.4 to 32.2 s of wall time, since BenchExec ends a tool up to about 1 s after its limit and the tool shares the run's cores with Goblint; Goblint needs about 1.1 s of wall time per second of CPU time. 45 s is 13 s above the slowest of these, and 1.5 times the CPU-time limit. The orders of the brackets and of `witnesses` are the fits of the replay on the SV-COMP 2026 results of the notebook finding 1020-imp-revised-baseline-replay; in unreach-call and no-overflow every order replayed scores the same.
 

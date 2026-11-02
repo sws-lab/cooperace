@@ -29,6 +29,11 @@
       "--full-output"
     ]
   },
+  "ikos-conc": {
+    "doi": "10.5281/zenodo.23736684",
+    "version": "svcomp27",
+    "options": []
+  },
   "uautomizer": {
     "doi": "10.5281/zenodo.23295622",
     "version": "svcomp27",

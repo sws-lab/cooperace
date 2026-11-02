@@ -81,7 +81,7 @@ def test_the_default_witness_spec_and_the_components_with_their_own():
     assert DEFAULT_WITNESS == WitnessSpec("component", (), None)
     assert {name for name, spec in REGISTRY.items() if spec.witness != DEFAULT_WITNESS} == {
         "Goblint", "Dartagnan", "ULTIMATE Automizer", "ULTIMATE GemCutter", "ULTIMATE Taipan",
-        "Deagle", "sv-sanitizers", "iekke"}
+        "Deagle", "sv-sanitizers", "iekke", "IKOS-ConC"}
     assert REGISTRY["Goblint"].witness.directory == "run"
     assert REGISTRY["Dartagnan"].witness.directory == "component"
     assert REGISTRY["Deagle"].witness == WitnessSpec("component", (), ("error-witness.yml",))
@@ -116,6 +116,7 @@ def test_witness_options_put_the_run_directory_into_the_options():
         "--set", "exp.region-offsets", "false"]
     assert components.witness_options(witness_of("ULTIMATE Taipan"), "/w") == ["--witness-dir", "/w"]
     assert components.witness_options(witness_of("Dartagnan"), "/w") == []
+    assert components.witness_options(witness_of("IKOS-ConC"), "/w") == ["--out", "/w/witness.yml"]
     assert components.witness_options(witness_of("Unlisted"), "/w") == []
 
 

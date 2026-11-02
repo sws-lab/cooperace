@@ -21,7 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_CONFS = sorted(path for path in [*ROOT.glob("conf/*.json"), *ROOT.glob("tests/integration/conf/*.json")]
                        if path != ROOT / "conf" / "witnesses.json")
 
-# Two strategies of the default conf, conf/svcomp27.json, which conf/README.md shows.
+# Two strategies of the conf of CoOpeRace's SV-COMP 2027 submission, which the
+# tests below load as examples of the conf's semantics.
 NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Goblint", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
@@ -33,6 +34,21 @@ VALID_MEMSAFETY = {
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
     "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
     "witnesses": ["Deagle", "sv-sanitizers"],
+}
+# The same two strategies of the default conf, conf/svcomp27.json, which
+# conf/README.md shows: IKOS-ConC in no-data-race, Dartagnan last in valid-memsafety.
+DEFAULT_NO_DATA_RACE = {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
+               ["Goblint", "IKOS-ConC", "Dartagnan"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
+    "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
+    "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
+}
+DEFAULT_VALID_MEMSAFETY = {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle", "Dartagnan"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"], ["Dartagnan"]],
+    "witnesses": ["Deagle", "sv-sanitizers", "Dartagnan"],
 }
 
 # One component in one phase, trusted for both verdicts.
@@ -80,8 +96,8 @@ def test_the_conf_readme_shows_the_default_conf_whose_strategies_this_file_loads
     shipped = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
 
     assert json.loads(block) == shipped
-    assert shipped["properties"]["no-data-race"] == {**NO_DATA_RACE, "runCpuTimeBudget": 870}
-    assert shipped["properties"]["valid-memsafety"] == {**VALID_MEMSAFETY, "runCpuTimeBudget": 870}
+    assert shipped["properties"]["no-data-race"] == {**DEFAULT_NO_DATA_RACE, "runCpuTimeBudget": 870}
+    assert shipped["properties"]["valid-memsafety"] == {**DEFAULT_VALID_MEMSAFETY, "runCpuTimeBudget": 870}
 
 
 # --- two strategies of the default conf ---------------------------------------
@@ -419,7 +435,5 @@ def test_a_run_cpu_time_budget_that_is_not_a_positive_number_is_refused(known, b
 
 
 def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known):
-    import json, os
-    path = os.path.join(os.path.dirname(__file__), "..", "..", "conf", "svcomp27.json")
-    strategies = config.load_strategies(json.load(open(path)), known)
+    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
     assert {name: s.run_cpu_time_budget for name, s in strategies.items()} == dict.fromkeys(strategies, 870)

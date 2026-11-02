@@ -8,7 +8,8 @@ line, working directory and environment from its BenchExec tool-info module
 files, and the block of protocol lines it prints (print_component_run).
 ComponentRunner is the strategy.StepRunner the strategy runs steps with; it
 runs each component under BenchExec's RunExecutor (execution.py). With
-execution.py, the only module of the package that imports BenchExec.
+execution.py (and the tool-info modules of toolinfo/), the only module of the
+package that imports BenchExec.
 
 The standard output is read by programs, so its lines are a protocol: for
 each component run, "---<name> logs---", its output, "---end of <name>
@@ -157,6 +158,11 @@ REGISTRY = {spec.name: spec for spec in (
     #Version 2.0 writes only error-witness.graphml, which never counts (witnesses.py)
     ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ())),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
+    #IKOS-ConC svcomp27: bin/svcomp_witness.py writes a violation witness of format 2.2 to
+    #--out (default witness.yml in its working directory) only for a confirmed race. The
+    #tool-info module is not in the bundled BenchExec 3.35; toolinfo/ holds the bench-defs' copy.
+    ComponentSpec("IKOS-ConC", "src.cooperace.toolinfo.ikos_conc", "ikos-conc",
+                  witness=WitnessSpec("run", ("--out", "{dir}/witness.yml"), ("witness.yml",))),
 )}
 
 # The file in TOOL_DIR that holds the ComponentVersion of every component of
