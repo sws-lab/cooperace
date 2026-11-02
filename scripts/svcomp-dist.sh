@@ -9,8 +9,8 @@
 #
 #   FMTOOLS_VERSION=svcomp27 scripts/svcomp-dist.sh
 #
-# The archive holds the tracked files cooperace, src/, conf/, lib/, LICENSE,
-# README.md, tools.txt and tools-options.json, the smoke-test script and the
+# The archive holds the tracked files cooperace, src/, conf/, lib/, LICENSE, the
+# GPL texts of LICENSES/, README.md, THIRD-PARTY-SOURCES.md, tools.txt and tools-options.json, the smoke-test script and the
 # two files it runs on, exactly as committed, and the components that
 # tools.txt names, copied from tools/<name> with their record .doi. The
 # components of tools-pool.txt are not packed. The file VERSION in it holds
@@ -58,7 +58,8 @@ DESCRIBE="$(git describe --always --dirty)"
 rm -rf "${DIST}"
 mkdir -p "${DIST}/tools"
 
-git archive "${TREE}" cooperace src conf lib LICENSE README.md tools.txt tools-options.json \
+git archive "${TREE}" cooperace src conf lib LICENSE LICENSES/GPL-2.0-only.txt LICENSES/GPL-3.0-or-later.txt \
+  README.md THIRD-PARTY-SOURCES.md tools.txt tools-options.json \
   tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i \
   | tar -x -C "${DIST}"
 git show "${TREE}:scripts/sv-comp/smoketest.sh" > "${DIST}/smoketest.sh"

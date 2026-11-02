@@ -19,6 +19,7 @@ path = [
     ".gitignore",
     ".github/**",
     "README.md",
+    "THIRD-PARTY-SOURCES.md",
     "REUSE.toml",
     "pyproject.toml",
     "conf/**",
