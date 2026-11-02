@@ -69,7 +69,7 @@ def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entr
     d76ae28f)."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23770235", "svcomp27",
+    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23361000", "svcomp27",
                                                    ("--portfolio-conf", "conf/svcomp27/seq.txt"))
     assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.23263361", "svcomp27", ())
     assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.23295622", "svcomp27", ("--full-output",))
