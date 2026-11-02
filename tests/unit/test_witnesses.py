@@ -174,3 +174,20 @@ def test_remove_old_witness_files_without_files_does_nothing(tmp_path, monkeypat
     components.remove_old_witness_files()
 
     assert list(tmp_path.iterdir()) == []
+
+
+def test_witness_files_to_file_root_names_the_task_as_given(tmp_path, monkeypatch):
+    """Goblint writes the task's path as it was given, which for a component
+    is the absolute path; the delivered witness names the path BenchExec gave
+    CoOpeRace, under which the validators run."""
+    yaml = tmp_path / "w" / "witness.yml"
+    write(yaml, "file_name: /home/cwd/sv-benchmarks/c/a/t.i\ninput_files:\n- /home/cwd/sv-benchmarks/c/a/t.i\n")
+    monkeypatch.chdir(tmp_path)
+
+    components.witness_files_to_file_root([str(yaml)],
+                                          {"/home/cwd/sv-benchmarks/c/a/t.i": "../../sv-benchmarks/c/a/t.i"})
+
+    assert (tmp_path / "witness.yml").read_text() == (
+        "file_name: ../../sv-benchmarks/c/a/t.i\ninput_files:\n- ../../sv-benchmarks/c/a/t.i\n")
+    components.witness_files_to_file_root([str(yaml)], {"/x": "/x"})
+    assert (tmp_path / "witness.yml").read_text() == yaml.read_text()

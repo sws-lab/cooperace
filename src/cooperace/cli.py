@@ -161,7 +161,8 @@ def main() -> None:
         #so that a refused conf or property gives one line there
         strategy_for(load_strategies(conf, REGISTRY), property_name)
         try:
-            runner = ComponentRunner(abs_path, args.prop, args.arch, property_name=property_name)
+            runner = ComponentRunner(abs_path, args.prop, args.arch, property_name=property_name,
+                                     task_path=args.filepath)
         except OptionsFileError as error:
             raise SetupError(str(error)) from error
         verdict = run(conf, runner)

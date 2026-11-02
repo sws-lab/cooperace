@@ -270,7 +270,7 @@ class ComponentRunner:
     def __init__(self, file: str, property_file: str, data_model: str | None,
                  registry: Mapping[str, ComponentSpec] = REGISTRY,
                  versions: Mapping[str, ComponentVersion] | None = None,
-                 property_name: str = NO_DATA_RACE):
+                 property_name: str = NO_DATA_RACE, task_path: str | None = None):
         if property_name not in FORMULAS:
             raise ValueError(f"unknown property {property_name!r}, expected one of {', '.join(FORMULAS)}")
         if data_model is None:
@@ -279,6 +279,9 @@ class ComponentRunner:
         elif data_model not in DATA_MODELS:
             raise ValueError(f"unsupported data model {data_model!r}, expected one of {', '.join(DATA_MODELS)}")
         self.file = file
+        #The task's path as CoOpeRace was given it (relative, as BenchExec gives it), which the
+        #delivered witness names instead of `file` (deliver)
+        self.task_path = task_path if task_path is not None else file
         self.property_file = os.path.abspath(property_file)
         self.property_name = property_name
         self.data_model = data_model
@@ -350,8 +353,12 @@ class ComponentRunner:
         self.work_dir = tempfile.mkdtemp(prefix="cooperace-")
 
     def deliver(self, witness_files: list[str]) -> None:
-        """Delivers `witness_files` with witness_files_to_file_root."""
-        witness_files_to_file_root(witness_files)
+        """Delivers `witness_files` with witness_files_to_file_root, with the
+        task's absolute path, which the components were given, replaced by
+        `task_path`: a validator runs on the task under the path BenchExec gave
+        CoOpeRace, and Goblint's validator locates no invariant whose
+        file_name is another path of the same file."""
+        witness_files_to_file_root(witness_files, {self.file: self.task_path})
 
     def cleanup(self) -> None:
         """Removes the work directory and everything in it."""
@@ -763,18 +770,29 @@ def witness_files_under(tool_dir: str) -> list[str]:
     return sorted(witness_files)
 
 
-def witness_files_to_file_root(witness_files: list[str]) -> None:
+def witness_files_to_file_root(witness_files: list[str], paths: Mapping[str, str] | None = None) -> None:
     """Copies the witness of one component run, the at most one file of the
     Outcome of ComponentRunner.run_component, which witnesses.passing_witness
-    accepted, to the working directory as witness.yml. Raises ValueError for
-    more than one file, and for a file whose name ends in .graphml, which
-    never passes."""
+    accepted, to the working directory as witness.yml, with every occurrence
+    of a key of `paths` replaced by its value (the task's path). Raises
+    ValueError for more than one file, and for a file whose name ends in
+    .graphml, which never passes."""
+    paths = {old: new for old, new in (paths or {}).items() if old and old != new}
     if len(witness_files) > 1:
         raise ValueError(f"more than one witness file to deliver: {', '.join(witness_files)}")
     for file in witness_files:
         if file.lower().endswith(".graphml"):
             raise ValueError(f"a GraphML file is never delivered: {file}")
-        shutil.copy2(file, os.path.join(os.getcwd(), "witness.yml"))
+        target = os.path.join(os.getcwd(), "witness.yml")
+        if not paths:
+            shutil.copy2(file, target)
+            continue
+        with open(file, encoding="utf-8", errors="surrogateescape") as source:
+            text = source.read()
+        for old, new in paths.items():
+            text = text.replace(old, new)
+        with open(target, "w", encoding="utf-8", errors="surrogateescape") as out:
+            out.write(text)
 
 
 def remove_old_witness_files() -> None:
