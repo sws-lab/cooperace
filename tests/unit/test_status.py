@@ -241,8 +241,8 @@ def test_confirm_verdict_returns_a_bool():
 # confirm_verdict accepts on each property.
 REPORTED = [
     ("no-data-race", "true", "true"),
-    ("no-data-race", "false(no-data-race)", "false"),
-    ("no-data-race", "false", "false"),
+    ("no-data-race", "false(no-data-race)", "false(no-data-race)"),
+    ("no-data-race", "false", "false(no-data-race)"),
     ("unreach-call", "true", "true"),
     ("unreach-call", "false(unreach-call)", "false(unreach-call)"),
     ("unreach-call", "false", "false(unreach-call)"),

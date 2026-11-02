@@ -683,16 +683,18 @@ def confirm_verdict(tool_acceptance_criteria: str, status: str, expected_verdict
 def reported_result(property_name: str, status: str) -> str:
     """What CoOpeRace prints after "CoOpeRace verdict: " for a status `status`
     of a component that confirm_verdict accepted on the property
-    `property_name`. For no-data-race it is "true" or "false", the line
-    BenchExec's tool-info module for CoOpeRace (BenchExec 3.31 to 3.35) maps to
-    "true" and "false(no-data-race)", for both accepted "false" statuses.
-    For another property it is `status`, the result BenchExec gives the
+    `property_name`. For no-data-race it is "true" or "false(no-data-race)",
+    for both accepted "false" statuses: BenchExec's tool-info module for
+    CoOpeRace (since sosy-lab/benchexec#1337, the module SV-COMP 2027 uses)
+    passes the line through as the result, and the organizers' scoring counts
+    a plain "false" of an active participant as correct-unconfirmed (0
+    points) whatever the validators say. For another property it is `status`, the result BenchExec gives the
     component alone, except that a plain "false" (accepted only for a
     property without sub-properties) becomes "false(<property_name>)", which
     BenchExec scores the same on a task of that property and which names the
     property in the result."""
     if property_name == NO_DATA_RACE:
-        return "true" if status == bresult.RESULT_TRUE_PROP else "false"
+        return "true" if status == bresult.RESULT_TRUE_PROP else f"{bresult.RESULT_FALSE_PROP}({NO_DATA_RACE})"
     if status == bresult.RESULT_FALSE_PROP:
         return f"{bresult.RESULT_FALSE_PROP}({property_name})"
     return status
