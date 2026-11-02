@@ -108,7 +108,7 @@ def test_a_violation_of_another_property_is_printed_as_the_status_and_is_no_verd
     verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
-    assert verdict == "false"
+    assert verdict == "false(no-data-race)"
     assert "Tool name: Stub A Status: false(unreach-call) Exit code: 0" in lines
     assert "Tool name: Stub A Result: unknown" in lines
     assert "CoOpeRace result from: Stub B" in lines
@@ -160,7 +160,7 @@ def test_exit_code_and_signal_appear_in_status_lines(make_runner, tmp_path, run_
     verdict = run.execute()
     lines = lines_of(capsys.readouterr())
 
-    assert verdict == "false"
+    assert verdict == "false(no-data-race)"
     assert "Tool name: Stub A Status: ERROR (3) Exit code: 3" in lines
     assert "Tool name: Stub A Result: unknown" in lines
     assert "Tool name: Stub B Status: KILLED Exit code: signal 15" in lines
@@ -201,7 +201,7 @@ def test_the_witness_of_the_returned_component_is_delivered_to_the_working_direc
 
     verdict = run.execute()
 
-    assert verdict == "false"
+    assert verdict == "false(no-data-race)"
     # Only the file that passes the check is delivered, as witness.yml.
     assert sorted(path.name for path in run_dir.iterdir()) == ["witness.yml"]
     assert (run_dir / "witness.yml").read_text() == PASSING_WITNESS.read_text()
@@ -294,8 +294,8 @@ def test_execute_restores_the_signal_handlers(make_runner, tmp_path, run_dir):
 # --- the result per property ---------------------------------------------------
 
 @pytest.mark.parametrize("property_name, statuses, expected", [
-    ("no-data-race", ["false(no-data-race)"], "false"),
-    ("no-data-race", ["false"], "false"),
+    ("no-data-race", ["false(no-data-race)"], "false(no-data-race)"),
+    ("no-data-race", ["false"], "false(no-data-race)"),
     ("no-data-race", ["true"], "true"),
     ("no-data-race", ["false(unreach-call)", "false(valid-deref)"], "unknown"),
     ("unreach-call", ["false(unreach-call)"], "false(unreach-call)"),

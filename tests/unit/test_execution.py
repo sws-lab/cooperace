@@ -347,7 +347,7 @@ def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale
 
     verdict = run.execute()
 
-    assert verdict == "false"
+    assert verdict == "false(no-data-race)"
     assert (run_dir / "witness.yml").read_text() == PASSING_WITNESS.read_text()
     assert stale.read_text() == OTHER_PASSING_WITNESS.read_text()
     assert not (tmp_path / "stubs" / "Stub_A" / "fresh-witness.yml").exists()
