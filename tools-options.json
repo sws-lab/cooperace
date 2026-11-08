@@ -8,7 +8,7 @@
     ]
   },
   "dartagnan": {
-    "doi": "10.5281/zenodo.23263361",
+    "doi": "10.5281/zenodo.23897433",
     "version": "svcomp27",
     "options": []
   },
@@ -35,14 +35,14 @@
     "options": []
   },
   "uautomizer": {
-    "doi": "10.5281/zenodo.23295622",
+    "doi": "10.5281/zenodo.23884773",
     "version": "svcomp27",
     "options": [
       "--full-output"
     ]
   },
   "iekke": {
-    "doi": "10.5281/zenodo.23243599",
+    "doi": "10.5281/zenodo.24013886",
     "version": "2.0",
     "options": []
   },

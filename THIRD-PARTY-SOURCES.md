@@ -51,7 +51,7 @@ Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, c
   `cvc5 --show-config`), Z3 4.15.4 (MIT), Bitwuzla 0.9.1, Golem 0.9.1 (MIT), and MathSAT5, whose
   licence (`mathsat-LICENSE`) allows research and evaluation use only.
 
-## Dartagnan (`tools/dartagnan/`, Zenodo 10.5281/zenodo.23263361)
+## Dartagnan (`tools/dartagnan/`, Zenodo 10.5281/zenodo.23897433)
 
 Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon/Dat3M.
 
