@@ -21,6 +21,7 @@ import os
 import subprocess
 import tempfile
 import threading
+import time
 from collections.abc import Mapping, Sequence
 
 from benchexec import runexecutor
@@ -30,6 +31,15 @@ from .processes import ComponentGroup
 
 # Seconds between two checks whether a running run has to be stopped.
 POLL_SECONDS = 0.1
+
+# Wall-time seconds after which execute_run gives a run up (ComponentHang):
+# a run whose RunExecutor has not started the component's process this long
+# after execute_run began, and a run that is still alive this long after a
+# stop was requested. BenchExec's RunExecutor can hang while it sets up or
+# takes down its container, with no process of the component to kill; a
+# component given up is a step without a verdict, and the run goes on.
+START_TIMEOUT_SECONDS = 60.0
+STOP_GRACE_SECONDS = 30.0
 
 
 def container_dir_modes(tool_directory: str, writable_dirs: Sequence[str] = (),
@@ -80,6 +90,17 @@ class RunExecutorError(Exception):
     refused it."""
 
 
+class ComponentHang(RunExecutorError):
+    """execute_run gave a run up: its RunExecutor did not start the
+    component's process within START_TIMEOUT_SECONDS ("start timed out"), or
+    the run did not end within STOP_GRACE_SECONDS after a stop ("did not
+    stop"). `status` is the component's status, "ERROR (<reason>)"."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.status = f"ERROR ({reason})"
+
+
 class FinishedRun(subprocess.CompletedProcess):
     """A component's run: `returncode` is negative for the signal that ended
     it and None if it was not started, `stdout` holds its output and standard
@@ -105,6 +126,15 @@ class ExecutorRun:
         self.executor = executor
         self.stop_requested = threading.Event()
         self.killed = False
+        self.has_started = False
+
+    def started(self) -> bool:
+        """Whether the executor has started the component's process, now or
+        at an earlier call."""
+        with self.executor.SUB_PROCESS_PIDS_LOCK:
+            if self.executor.SUB_PROCESS_PIDS:
+                self.has_started = True
+        return self.has_started
 
     def stop(self) -> None:
         self.stop_requested.set()
@@ -139,11 +169,17 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     files matching `result_files_patterns` under `cwd` are moved to
     `output_dir`.
 
-    The run executes in a thread of its own, which this thread waits for,
-    calling ExecutorRun.kill every POLL_SECONDS once a stop is requested. An
-    exception in this thread while it waits (strategy.StopSignal) stops the
-    run, waits for it and is re-raised. Raises RunExecutorError if
-    BenchExec could not start the run or refused it."""
+    The run executes in a daemon thread of its own, which this thread waits
+    for, calling ExecutorRun.kill every POLL_SECONDS once a stop is
+    requested. It gives the run up, raising ComponentHang, if the executor has
+    not started the component's process START_TIMEOUT_SECONDS after this call
+    began, or if the run is still alive STOP_GRACE_SECONDS after the stop was
+    first seen; a daemon thread then goes on calling ExecutorRun.kill until
+    the run's thread ends, so that a process that starts late is still
+    killed. An exception in this thread while it waits (strategy.StopSignal)
+    stops the run, waits for it at most STOP_GRACE_SECONDS and is re-raised.
+    Raises RunExecutorError if BenchExec could not start the run or refused
+    it."""
     if group.stopped:
         return FinishedRun(command, None, "")
     executor = runexecutor.RunExecutor(use_namespaces=True, dir_modes=dict(dir_modes))
@@ -164,18 +200,36 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
         except BaseException as error:  # noqa: B036 - re-raised in the waiting thread
             outcome["error"] = error
 
-    worker = threading.Thread(target=execute, name=f"RunExecutor run of {command[0]}")
+    worker = threading.Thread(target=execute, name=f"RunExecutor run of {command[0]}", daemon=True)
+    began = time.monotonic()
+    stop_seen = None
     try:
         worker.start()
-        while worker.is_alive():
+        while True:
             worker.join(POLL_SECONDS)
+            if not worker.is_alive():
+                break
+            now = time.monotonic()
             if run.stop_requested.is_set():
                 run.kill()
+                if stop_seen is None:
+                    stop_seen = now
+                elif now - stop_seen >= STOP_GRACE_SECONDS:
+                    raise ComponentHang("did not stop")
+            elif not run.started() and now - began >= START_TIMEOUT_SECONDS:
+                run.stop()
+                raise ComponentHang("start timed out")
+    except ComponentHang:
+        _keep_killing(run, worker)
+        raise
     except BaseException:
         run.stop_requested.set()
-        while worker.is_alive():
+        deadline = time.monotonic() + STOP_GRACE_SECONDS
+        while worker.is_alive() and time.monotonic() < deadline:
             run.kill()
             worker.join(POLL_SECONDS)
+        if worker.is_alive():
+            _keep_killing(run, worker)
         raise
     finally:
         group.remove(run)
@@ -194,3 +248,15 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
                        termination_reason=result.get("terminationreason"),
                        wall_time=None if result.get("walltime") is None else float(result["walltime"]),
                        memory=result.get("memory"))
+
+
+def _keep_killing(run: ExecutorRun, worker: threading.Thread) -> None:
+    """Calls run.kill every POLL_SECONDS in a daemon thread until `worker`,
+    the thread of a run that execute_run gave up, ends."""
+
+    def loop():
+        while worker.is_alive():
+            run.kill()
+            worker.join(POLL_SECONDS)
+
+    threading.Thread(target=loop, name=f"{worker.name}, given up", daemon=True).start()

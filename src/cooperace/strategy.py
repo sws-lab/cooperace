@@ -55,6 +55,13 @@ NO_OUTCOME = Outcome("unknown", None, [], "unknown")
 # component to end, so that a stop signal is not held up by a long wait.
 WAIT_SECONDS = 1.0
 
+# Seconds run_strategy waits, in all, for the threads of the components when
+# it ends. execution.execute_run gives a run up STOP_GRACE_SECONDS (30 s)
+# after its stop, so a thread that has not ended after this is stuck
+# elsewhere; it is a daemon thread, and is left behind with a line that says
+# so, rather than keep the run from delivering its result.
+JOIN_SECONDS = 45.0
+
 
 class StopSignal(BaseException):
     """Raised in the main thread by the handler that execute installs for
@@ -129,7 +136,7 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
     """Runs the config.Strategy `root` with `runner` in the ComponentGroup
     `group` and returns the Outcome whose result execute returns. Every
     component it started has ended, and its block has been printed, when it
-    returns or raises.
+    returns or raises, unless its thread was left behind (see the end).
 
     Each component runs in a thread of its own that calls runner.run_step
     with root.step(component) in a new ComponentGroup nested in `group`; a
@@ -153,7 +160,11 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
     and the result "ERROR (contradiction: <name> <verdict>, ...)", naming
     the disagreeing entries; for UNKNOWN NO_OUTCOME. An exception of a
     component's thread (a defect of the runner) or of this thread, and
-    StopSignal, stop `group` and every component in it and propagate."""
+    StopSignal, stop `group` and every component in it and propagate.
+
+    The component threads are daemon threads. When it ends, it waits for
+    them at most JOIN_SECONDS in all, and names those still alive in a line
+    "CoOpeRace: ... left behind"."""
     verdicts = Verdicts(root, runner.property_name)
     schedule = Schedule(verdicts)
     events = queue.Queue()
@@ -176,7 +187,8 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
             groups[tool].stop()
         for tool in actions.start:
             groups[tool] = ComponentGroup(group)
-            thread = threading.Thread(target=run, args=(tool, groups[tool]), name=f"CoOpeRace run of {tool}")
+            thread = threading.Thread(target=run, args=(tool, groups[tool]), name=f"CoOpeRace run of {tool}",
+                                      daemon=True)
             threads.append(thread)
             thread.start()
 
@@ -223,8 +235,12 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
         group.stop()
         raise
     finally:
+        deadline = time.monotonic() + JOIN_SECONDS
         for thread in threads:
-            thread.join()
+            thread.join(max(0.0, deadline - time.monotonic()))
+        stuck = [thread.name.removeprefix("CoOpeRace run of ") for thread in threads if thread.is_alive()]
+        if stuck:
+            say(f"CoOpeRace: {', '.join(stuck)} did not end within {JOIN_SECONDS:g} s: left behind")
     return outcome_of(verdicts, outcomes)
 
 

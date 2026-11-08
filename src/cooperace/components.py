@@ -386,9 +386,12 @@ class ComponentRunner:
             name = actor.name()
             return self.run_component(actor, step, group)
         except Exception as error:
-            traceback.print_exc()
-            print_component_run(name, subprocess.CompletedProcess(None, None, "", ""),
-                                f"ERROR ({type(error).__name__}: {error})", "unknown")
+            #A run that execute_run gave up (execution.ComponentHang) has a status of its own
+            status = getattr(error, "status", None)
+            if status is None:
+                traceback.print_exc()
+                status = f"ERROR ({type(error).__name__}: {error})"
+            print_component_run(name, subprocess.CompletedProcess(None, None, "", ""), status, "unknown")
             return NO_OUTCOME
 
     def command(self, actor: BaseTool2, spec: ComponentSpec, witness_dir: str) -> ComponentCommand:
