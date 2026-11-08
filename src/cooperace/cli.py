@@ -203,8 +203,9 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     every strategy of the conf is installed in the version whose options
     `runner` has (ComponentRunner.installation_problems) and that BenchExec
     can run a component in its container here
-    (ComponentRunner.container_problems), and runs the strategy taken with
-    strategy.execute in the ComponentGroup `group` (a new one if None).
+    (ComponentRunner.container_problems), determines the versions of its
+    ULTIMATE components once (ComponentRunner.probe_versions), and runs the
+    strategy taken with strategy.execute in the ComponentGroup `group` (a new one if None).
     Returns the result strategy.execute returns, which main prints after
     "CoOpeRace verdict: ".
 
@@ -224,6 +225,7 @@ def run(conf: dict, runner: ComponentRunner, group: ComponentGroup | None = None
     if root is None:
         print("CoOpeRace: every entry of the strategy is ignored for this task", flush=True)
         return "unknown"
+    runner.probe_versions(root.tools)
     return strategy.execute(root, runner, group)
 
 

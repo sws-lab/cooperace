@@ -48,8 +48,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from benchexec import model as bmodel
@@ -175,6 +176,11 @@ OPTIONS_FILE = "tools-options.json"
 # from, written by scripts/download-tools.py after the installation.
 DOI_RECORD = ".doi"
 
+# Seconds probe_versions waits for the version of an ULTIMATE component, and
+# the version its tool-info object reports if the probe did not give one.
+VERSION_PROBE_SECONDS = 60
+UNKNOWN_VERSION = "unknown"
+
 
 @dataclass(frozen=True)
 class ComponentVersion:
@@ -297,6 +303,9 @@ class ComponentRunner:
         #The directory that holds the components' directories
         self.tools_dir = os.path.join(TOOL_DIR, "tools")
         self.work_dir = None
+        #The tool-info object of each component, by name (tool_of)
+        self.tools = {}
+        self.tools_lock = threading.Lock()
 
     def installation_problems(self, names: list[str]) -> list[str]:
         """One message for each component of `names` (conf names, keys of
@@ -382,7 +391,7 @@ class ComponentRunner:
         StopSignal is a BaseException and propagates."""
         name = step.component
         try:
-            actor = self.registry[step.component].tool()
+            actor = self.tool_of(step.component)
             name = actor.name()
             return self.run_component(actor, step, group)
         except Exception as error:
@@ -393,6 +402,62 @@ class ComponentRunner:
                 status = f"ERROR ({type(error).__name__}: {error})"
             print_component_run(name, subprocess.CompletedProcess(None, None, "", ""), status, "unknown")
             return NO_OUTCOME
+
+    def tool_of(self, name: str) -> BaseTool2:
+        """The tool-info object of the component `name`, made once
+        (ComponentSpec.tool) and kept, so that what it caches, such as the
+        version probe_versions found, is used by every later call."""
+        with self.tools_lock:
+            if name not in self.tools:
+                self.tools[name] = self.registry[name].tool()
+            return self.tools[name]
+
+    def probe_versions(self, names: Iterable[str]) -> None:
+        """Determines, before any component starts, the version of each
+        component of `names` whose tool-info module is one of ULTIMATE's
+        (benchexec.tools.ultimate.UltimateTool). Its cmdline asks for the
+        version, which starts the tool's wrapper and several Java processes
+        in CoOpeRace's own process, outside any container and limit; done
+        when the component starts, that ran beside the stopping of the
+        previous phase's components. The probe runs once here, in a daemon
+        thread, for at most VERSION_PROBE_SECONDS, and the object of tool_of
+        keeps the result (the module caches version() per object). If the
+        probe fails or takes longer, the object's version() returns
+        UNKNOWN_VERSION instead, with a line "CoOpeRace: ..." on stderr;
+        cmdline then takes the default (wrapper) command line, which is the
+        one CoOpeRace's options give in any case, since only the
+        SV-COMP 2017 version is treated otherwise. Any exception from making
+        the object or finding the executable is left to run_step."""
+        from benchexec.tools.ultimate import UltimateTool
+
+        for name in names:
+            try:
+                actor = self.tool_of(name)
+                if not isinstance(actor, UltimateTool):
+                    continue
+                spec = self.registry[name]
+                executable = actor.executable(
+                    BaseTool2.ToolLocator(tool_directory=os.path.join(self.tools_dir, spec.directory)))
+            except Exception:
+                continue
+            outcome = {}
+
+            def probe(actor=actor, executable=executable, outcome=outcome):
+                try:
+                    outcome["version"] = actor.version(executable)
+                except Exception as error:
+                    outcome["error"] = error
+
+            thread = threading.Thread(target=probe, name=f"version probe of {name}", daemon=True)
+            thread.start()
+            thread.join(VERSION_PROBE_SECONDS)
+            if outcome.get("version"):
+                continue
+            reason = (f"{type(outcome['error']).__name__}: {outcome['error']}" if "error" in outcome
+                      else "no version" if not thread.is_alive() else f"no answer in {VERSION_PROBE_SECONDS:g} s")
+            print(f"CoOpeRace: the version of {name} could not be determined ({reason}): going on without it",
+                  file=sys.stderr, flush=True)
+            actor.version = lambda executable: UNKNOWN_VERSION
 
     def command(self, actor: BaseTool2, spec: ComponentSpec, witness_dir: str) -> ComponentCommand:
         """The ComponentCommand that starts the component `actor`, the
