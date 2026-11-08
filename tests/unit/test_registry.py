@@ -62,22 +62,21 @@ def test_every_component_has_its_directory():
 
 
 def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():
-    """The benchexec_toolinfo_options of version svcomp27 of goblint.yml,
-    sv-sanitizers.yml and ikos-conc.yml in fm-tools main 12979f1, of ugemcutter.yml in c39c0b2, of
-    dartagnan.yml and uautomizer.yml and
-    of version 2.0 of iekke.yml in fm-tools main 78fa3ed, and of version
+    """The benchexec_toolinfo_options of version svcomp27 of ikos-conc.yml in fm-tools main 12979f1,
+    of dartagnan.yml and of version 2.0 of iekke.yml in fm-tools main 78fa3ed, of goblint.yml,
+    sv-sanitizers.yml, ugemcutter.yml and uautomizer.yml in fm-tools main 9b709d6d, and of version
     svcomp27 of deagle.yml, as proposed in fm-tools merge request !1181 (head
     d76ae28f)."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.23770235", "svcomp27",
+    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24040934", "svcomp27",
                                                    ("--portfolio-conf", "conf/svcomp27/seq.txt"))
     assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.23897433", "svcomp27", ())
-    assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.23884773", "svcomp27", ("--full-output",))
-    assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.23528053", "svcomp27", ())
+    assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.24059988", "svcomp27", ("--full-output",))
+    assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.24041366", "svcomp27", ())
     assert versions["deagle"] == ComponentVersion("10.5281/zenodo.23488039", "svcomp27", ())
     assert versions["iekke"] == ComponentVersion("10.5281/zenodo.24013886", "2.0", ())
-    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.23884792", "svcomp27", ("--full-output",))
+    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.24060016", "svcomp27", ("--full-output",))
     assert versions["ikos-conc"] == ComponentVersion("10.5281/zenodo.23736684", "svcomp27", ())
 
 

@@ -30,9 +30,9 @@ https://github.com/2393591260/ikos-conc, commit 3d3b027d5a8669c45dc7b998f971aa5d
   Source: https://github.com/antoinemine/apron. The archive does not record which APRON revision
   was built; ask IKOS-ConC's author for it.
 
-## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.23770235)
+## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.24040934)
 
-Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit dc055dbfb.
+Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit f793261a3.
 
 - **APRON**, LGPL-2.1 with a linking exception: the shared objects `tools/goblint/lib/libapron.so`,
   `libboxD.so`, `liboctD.so`, `libpolkaMPQ.so`. Licence: `tools/goblint/lib/LICENSE.APRON`.
@@ -40,11 +40,11 @@ Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, c
 - The OCaml libraries linked statically into `tools/goblint/goblint` that are under the LGPL carry
   the OCaml static-linking exception.
 
-## ULTIMATE GemCutter (`tools/ugemcutter/`, Zenodo 10.5281/zenodo.23884792)
+## ULTIMATE GemCutter (`tools/ugemcutter/`, Zenodo 10.5281/zenodo.24060016)
 
 - **Ultimate**, LGPL-3.0 (`tools/ugemcutter/LICENSE`, `LICENSE.GPL.LESSER`, `LICENSE.GPL`).
-  Source: https://github.com/ultimate-pa/ultimate, commit 9cad674c44 (version
-  0.3.2-dev-9cad674c44).
+  Source: https://github.com/ultimate-pa/ultimate, commit 991986cc09 (version
+  0.3.2-dev-991986cc09).
 - **LTL2BA** 1.x, GPL-2.0-or-later: `tools/ugemcutter/ltl2ba`. Licence: `ltl2ba-LICENSE` and
   `LICENSE.GPL` (version 3, which "or later" permits). Source: http://www.lsv.fr/~gastin/ltl2ba/.
 - Not under the GPL: cvc5 1.4.2 (BSD-3-Clause; built without its optional GPL libraries, per

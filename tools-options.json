@@ -1,6 +1,6 @@
 {
   "goblint": {
-    "doi": "10.5281/zenodo.23770235",
+    "doi": "10.5281/zenodo.24040934",
     "version": "svcomp27",
     "options": [
       "--portfolio-conf",
@@ -13,7 +13,7 @@
     "options": []
   },
   "sv-sanitizers": {
-    "doi": "10.5281/zenodo.23528053",
+    "doi": "10.5281/zenodo.24041366",
     "version": "svcomp27",
     "options": []
   },
@@ -23,7 +23,7 @@
     "options": []
   },
   "ugemcutter": {
-    "doi": "10.5281/zenodo.23884792",
+    "doi": "10.5281/zenodo.24060016",
     "version": "svcomp27",
     "options": [
       "--full-output"
@@ -35,7 +35,7 @@
     "options": []
   },
   "uautomizer": {
-    "doi": "10.5281/zenodo.23884773",
+    "doi": "10.5281/zenodo.24059988",
     "version": "svcomp27",
     "options": [
       "--full-output"

@@ -125,7 +125,7 @@ REGISTRY = {spec.name: spec for spec in (
     # its fm-tools options name (--portfolio-conf conf/svcomp27/seq.txt, a path
     # relative to Goblint's directory, the working directory of its run).
     #Witness: witness.yaml.path; the svcomp26 configuration writes no graphml witness.
-    #Goblint 23770235 (svcomp27-0-gdc055dbfb) writes its default correctness witness:
+    #Goblint 24040934 (svcomp27-0-gf793261a3), like 23770235 before it, writes its default correctness witness:
     #an invariant_set of format 2.0, or, where an invariant uses a ghost variable,
     #ghost_instrumentation and invariant_set both of format 2.1. Restricting it to
     #ghost_instrumentation (witness.yaml.entry-types) writes [] where it has no ghost,

@@ -6,7 +6,7 @@
 # ULTIMATE Taipan (svcomp26) and CPAchecker (4.2.2) have a newer 2027 version
 # that this file does not name. scripts/download-tools.py --pool
 # installs them into tools/; scripts/svcomp-dist.sh packs only tools.txt.
-uautomizer: 10.5281/zenodo.23884773
+uautomizer: 10.5281/zenodo.24059988
 iekke: 10.5281/zenodo.24013886
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
