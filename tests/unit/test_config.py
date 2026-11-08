@@ -36,7 +36,7 @@ VALID_MEMSAFETY = {
     "witnesses": ["Deagle", "sv-sanitizers"],
 }
 # The same two strategies of the default conf, conf/svcomp27.json, which
-# conf/README.md shows: IKOS-ConC in no-data-race, Dartagnan last in valid-memsafety.
+# conf/README.md shows: IKOS-ConC in no-data-race, Deagle alone in phase 2 of valid-memsafety.
 DEFAULT_NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
                ["Goblint", "IKOS-ConC", "Dartagnan"]],
@@ -48,15 +48,13 @@ DEFAULT_NO_DATA_RACE = {
                       "Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
 DEFAULT_VALID_MEMSAFETY = {
-    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle", "Dartagnan"]],
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
-    "memoryLimits": {"Deagle": "60%", "Dartagnan": "35%"},
-    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"], ["Dartagnan"]],
-    "witnesses": ["Deagle", "sv-sanitizers", "Dartagnan"],
+    "memoryLimits": {"Deagle": "60%"},
+    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
+    "witnesses": ["Deagle", "sv-sanitizers"],
     "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
-                                 "pthread_once", "pthread_mutexattr_settype"],
-                      "Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
-                      "Dartagnan:true": ["pthread_mutexattr_settype"]},
+                                 "pthread_once", "pthread_mutexattr_settype"]},
 }
 
 # One component in one phase, trusted for both verdicts.

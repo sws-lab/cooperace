@@ -36,17 +36,14 @@
         },
         "valid-memsafety": {
             "phases":        [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
-                              ["Deagle", "Dartagnan"]],
+                              ["Deagle"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
-            "memoryLimits":  {"Deagle": "60%", "Dartagnan": "35%"},
+            "memoryLimits":  {"Deagle": "60%"},
             "runCpuTimeBudget": 870,
-            "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"],
-                              ["Dartagnan"]],
-            "witnesses":     ["Deagle", "sv-sanitizers", "Dartagnan"],
+            "answers":       [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
+            "witnesses":     ["Deagle", "sv-sanitizers"],
             "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
-                                        "pthread_once", "pthread_mutexattr_settype"],
-                              "Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
-                              "Dartagnan:true": ["pthread_mutexattr_settype"]}
+                                        "pthread_once", "pthread_mutexattr_settype"]}
         }
     }
 }
