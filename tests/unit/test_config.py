@@ -41,7 +41,7 @@ DEFAULT_NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
                ["Goblint", "IKOS-ConC", "Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
-    "memoryLimits": {"Dartagnan": "80%"},
+    "memoryLimits": {"sv-sanitizers": "30%", "Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
     "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
     "ignoreIfCalls": {"Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
@@ -50,7 +50,7 @@ DEFAULT_NO_DATA_RACE = {
 DEFAULT_VALID_MEMSAFETY = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
-    "memoryLimits": {"Deagle": "60%"},
+    "memoryLimits": {"sv-sanitizers": "45%", "Goblint": "45%", "Deagle": "60%"},
     "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
     "witnesses": ["Deagle", "sv-sanitizers"],
     "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
@@ -463,6 +463,21 @@ def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_bu
             assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
         if "Dartagnan" in strategy.tools:
             assert "Dartagnan" in strategy.memory_limits, name
+
+
+def test_the_svcomp27_conf_limits_the_memory_of_every_phase_1_tool(known):
+    """In conf/svcomp27.json every tool of phase 1 has a memory limit too, a
+    percentage of the run's, and those of phase 1 add up to at most 95%.
+    These tools have CPU-time limits, so the rule above does not cover them;
+    yet on pthread-lp64-twins/sssc12-2-lp64 (valid-memsafety) sv-sanitizers
+    alone filled the 3 GB of the run within 34 s, and the whole run was
+    killed with Goblint's answer already in."""
+    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    for name, strategy in strategies.items():
+        tools = strategy.phases[0].tools
+        limits = {tool: strategy.memory_limits.get(tool) for tool in tools}
+        assert all(isinstance(limit, str) and limit.endswith("%") for limit in limits.values()), (name, limits)
+        assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
 
 
 # --- ignoreIfCalls ---------------------------------------------------------------
