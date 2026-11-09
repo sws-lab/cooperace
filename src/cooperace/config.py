@@ -70,12 +70,14 @@ class Step:
     returns as an Outcome ("true", "false" or "all"; Strategy.step gives
     "all"), and `memory_limit` and `cpu_time_limit` its entries in the
     strategy's `memoryLimits` and `cpuTimeLimits`, as the conf gives them, or
-    None."""
+    None. `run_cpu_time_budget` is the strategy's runCpuTimeBudget (None:
+    none), within which the check of the component's witness stays."""
 
     component: str
     accept: str
     memory_limit: int | float | str | None = None
     cpu_time_limit: int | float | str | None = None
+    run_cpu_time_budget: int | float | None = None
 
 
 @dataclass(frozen=True)
@@ -152,9 +154,11 @@ class Strategy:
 
     def step(self, tool: str) -> Step:
         """The Step that runs `tool` with its limits from `cpu_time_limits`
-        and `memory_limits`, accepting both verdicts: which verdict counts is
-        the executor's to decide from `answers`."""
-        return Step(tool, "all", self.memory_limits.get(tool), self.cpu_time_limits.get(tool))
+        and `memory_limits` and the run's `run_cpu_time_budget`, accepting
+        both verdicts: which verdict counts is the executor's to decide from
+        `answers`."""
+        return Step(tool, "all", self.memory_limits.get(tool), self.cpu_time_limits.get(tool),
+                    self.run_cpu_time_budget)
 
 
 class ConfError(ValueError):

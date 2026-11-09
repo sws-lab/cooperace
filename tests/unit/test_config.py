@@ -443,6 +443,8 @@ def test_a_run_cpu_time_budget_that_is_not_a_positive_number_is_refused(known, b
 def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known):
     strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
     assert {name: s.run_cpu_time_budget for name, s in strategies.items()} == dict.fromkeys(strategies, 870)
+    # Each step has it, for the check of its witness (witnesses.check_seconds)
+    assert {s.step(tool).run_cpu_time_budget for s in strategies.values() for tool in s.tools} == {870}
 
 
 def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_budget(known):

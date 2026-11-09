@@ -26,7 +26,7 @@ import pytest
 from support import make_script, register_stub
 
 import src.cooperace
-from src.cooperace import witnesses
+from src.cooperace import components, witnesses
 from src.cooperace.config import Step
 
 FIXTURES = Path(__file__).resolve().parent / "witnesses"
@@ -277,16 +277,84 @@ def padded(text, size):
 @pytest.fixture
 def checks(monkeypatch):
     """Records the command of every process subprocess.run starts, as the
-    checks of file_passes in a process of their own."""
-    commands = []
+    checks of file_passes in a process of their own; the keyword arguments
+    of each are in the attribute `kwargs` of the returned list."""
+    commands = Recorded()
     run = subprocess.run
 
     def record(command, **kwargs):
         commands.append(command)
+        commands.kwargs.append(kwargs)
         return run(command, **kwargs)
 
     monkeypatch.setattr(witnesses.subprocess, "run", record)
     return commands
+
+
+class Recorded(list):
+    """The commands the fixture `checks` records."""
+
+    def __init__(self):
+        super().__init__()
+        self.kwargs = []
+
+
+def large_witness(tmp_path, name="large-witness.yml"):
+    """A passing witness of more than IN_PROCESS_BYTES, as a path."""
+    path = tmp_path / name
+    path.write_text(padded(LAMPORT, witnesses.IN_PROCESS_BYTES + 1))
+    return str(path)
+
+
+@pytest.mark.parametrize("run_limit, address_space", [
+    (None, 1 << 30), (3_000_000_000, 300_000_000), (15_000_000_000, 1 << 30)])
+def test_a_check_in_a_process_of_its_own_gets_a_tenth_of_the_runs_memory_at_most(
+        tmp_path, checks, monkeypatch, run_limit, address_space):
+    # At the pre-run's 3 GB, 1 GiB beside a tool of 80% would end the whole run by its memory limit.
+    monkeypatch.setattr(witnesses, "run_memory_limit", lambda: run_limit)
+
+    assert witnesses.file_passes(large_witness(tmp_path), "no-data-race", "false")
+    assert checks[0][3] == str(address_space)
+
+
+@pytest.mark.parametrize("used, budget, timeout", [
+    (None, 870, 20.0), (100.0, 870, 20.0), (860.0, 870, 5.0), (100.0, None, 20.0)])
+def test_a_check_in_a_process_of_its_own_takes_no_more_than_the_budget_leaves(
+        tmp_path, checks, monkeypatch, used, budget, timeout):
+    monkeypatch.setattr(witnesses, "run_cpu_seconds", lambda: used)
+
+    assert witnesses.file_passes(large_witness(tmp_path), "no-data-race", "false", cpu_time_budget=budget)
+    assert checks.kwargs[0]["timeout"] == timeout
+
+
+def test_no_check_in_a_process_of_its_own_starts_once_the_budget_is_reached(tmp_path, checks, monkeypatch,
+                                                                            capsys):
+    monkeypatch.setattr(witnesses, "run_cpu_seconds", lambda: 866.0)
+
+    assert not witnesses.file_passes(large_witness(tmp_path), "no-data-race", "false", cpu_time_budget=870)
+    assert checks == []
+    assert ("was not started: the run's CPU-time budget of 870 s leaves it no time: it does not pass"
+            in capsys.readouterr().err)
+
+
+def test_checks_in_processes_of_their_own_run_one_at_a_time(tmp_path, monkeypatch):
+    # Two components that answer at once: their checks together must not take twice the time past the budget.
+    log = tmp_path / "checks.log"
+    monkeypatch.setattr(witnesses, "_CHECK", f"import time\nlog = open({str(log)!r}, 'a')\n"
+                        "log.write(f'{time.time()} start\\n'); log.flush()\ntime.sleep(0.5)\n"
+                        "log.write(f'{time.time()} end\\n'); log.flush()\nprint(1)\n")
+    paths = [large_witness(tmp_path, f"{name}-witness.yml") for name in ("a", "b")]
+    results = {}
+    threads = [threading.Thread(target=lambda path=path: results.setdefault(path, witnesses.file_passes(
+        path, "no-data-race", "false"))) for path in paths]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+
+    assert results == dict.fromkeys(paths, True)
+    events = [line.split()[1] for line in sorted(log.read_text().splitlines(), key=lambda line: float(line.split()[0]))]
+    assert events == ["start", "end", "start", "end"]
 
 
 def test_a_witness_above_in_process_bytes_is_checked_in_a_process_of_its_own(tmp_path, checks):
@@ -544,6 +612,29 @@ def fake_execution(monkeypatch):
         monkeypatch.setattr(src.cooperace, "execution", fake, raising=False)
 
     return install
+
+
+def test_the_check_of_a_components_witness_keeps_to_the_runs_budget(make_runner, group, fake_execution, tmp_path,
+                                                                    monkeypatch):
+    budgets = []
+    check = components.passing_witness
+
+    def record(*args, **kwargs):
+        budgets.append(kwargs.get("cpu_time_budget"))
+        return check(*args, **kwargs)
+
+    monkeypatch.setattr(components, "passing_witness", record)
+    runner = make_runner()
+    register_stub(runner, "Stub A", make_script(tmp_path / "stub", ""))
+    fake_execution({"a-witness.yml": LAMPORT}, "STUB-STATUS: false\n")
+    runner.prepare()
+    try:
+        outcome = runner.run_step(Step("Stub A", "all", run_cpu_time_budget=870), group)
+    finally:
+        runner.cleanup()
+
+    assert outcome.verdict == "false"
+    assert budgets == [870]
 
 
 @pytest.mark.parametrize("files, status, delivered", [

@@ -34,12 +34,14 @@ import os
 import re
 import subprocess
 import sys
+import threading
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import yaml
 
 from . import TOOL_DIR
+from .processes import run_cpu_seconds, run_memory_limit
 from .properties import (
     FORMULAS,
     SUBPROPERTY_FORMULAS,
@@ -124,19 +126,31 @@ _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 # components are far smaller (at most 44 KB in the E7 sweep).
 IN_PROCESS_BYTES = 1 << 20
 
-# Seconds the check in a process of its own may take; a file whose check
-# takes longer does not pass. The run's CPU-time budget (runCpuTimeBudget of
-# conf/svcomp27.json, 870 s) is 30 s below the competition's 900 s, and a
+# Seconds the check in a process of its own may take at most; a file whose
+# check takes longer does not pass. The run's CPU-time budget (runCpuTimeBudget
+# of conf/svcomp27.json, 870 s) is 30 s below the competition's 900 s, and a
 # check still running when the budget is reached uses CPU time the run does
-# not have, so this is shorter: with libyaml it covers about 40 MB.
+# not have, so this is shorter: with libyaml it covers about 40 MB. Such
+# checks run one at a time (_APART_LOCK), and each may take no more than the
+# run's CPU-time budget has left, less CHECK_MARGIN_SECONDS (check_seconds),
+# so that once the budget is reached no check starts, and the run uses at
+# most CHECK_SECONDS of CPU time past it for checks.
 CHECK_SECONDS = 20.0
+CHECK_MARGIN_SECONDS = 5.0
 
-# The address space in bytes the process of such a check may take; a file
-# whose check needs more does not pass. The check takes about 30 times the
-# file's size (440 MB for 14 MB), outside every component's memory limit and
-# inside the run's, so this keeps a large witness from ending the whole run
-# by its memory limit; it covers about 30 MB.
+# The address space in bytes the process of such a check may take at most,
+# and the share of the run's memory limit (processes.run_memory_limit) it may
+# take at most; a file whose check needs more does not pass. The check takes
+# about 29 times the file's size (593 MB for 21 MB), outside every component's
+# memory limit and inside the run's, beside components that may hold most of
+# it (80% for GemCutter in no-overflow): so a large witness does not end the
+# whole run by its memory limit. At the pre-run's 3 GB, 300 MB cover a witness
+# of about 7 MB; at the competition's 15 GB, 1 GiB about 30 MB.
 CHECK_MEMORY_BYTES = 1 << 30
+CHECK_MEMORY_SHARE = 0.1
+
+# Held while a check runs in a process of its own (_passes_apart).
+_APART_LOCK = threading.Lock()
 
 # The program of a check in a process of its own (_passes_apart). argv: the
 # limit of its address space in bytes, TOOL_DIR, the file, and the
@@ -379,15 +393,17 @@ def read_witness(path: str) -> str | None:
         return None
 
 
-def file_passes(path: str, property_name: str, verdict: str, subproperty: str | None = None) -> bool:
+def file_passes(path: str, property_name: str, verdict: str, subproperty: str | None = None,
+                cpu_time_budget: int | float | None = None) -> bool:
     """`passes` for the file `path`, read as UTF-8; False for a file whose
     name ends in .graphml, and for one that cannot be read or decoded. A file
     of more than IN_PROCESS_BYTES is checked in a process of its own
     (_passes_apart), so that the thread that waits for it does not hold the
-    GIL; it does not pass if that check takes longer than CHECK_SECONDS or
-    more address space than CHECK_MEMORY_BYTES, or fails. This never raises,
-    so a witness can cost the component its witness but not CoOpeRace its
-    verdict line."""
+    GIL; it does not pass if that check takes longer than check_seconds
+    (CHECK_SECONDS, or less within the run's CPU-time budget
+    `cpu_time_budget`) or more address space than check_memory_bytes, or
+    fails. This never raises, so a witness can cost the component its
+    witness but not CoOpeRace its verdict line."""
     if path.lower().endswith(".graphml"):
         return False
     format_ = witness_format(property_name, verdict, subproperty)
@@ -399,45 +415,75 @@ def file_passes(path: str, property_name: str, verdict: str, subproperty: str | 
     except OSError:
         return False
     if size > IN_PROCESS_BYTES:
-        return _passes_apart(path, size, format_, formulas)
+        return _passes_apart(path, size, format_, formulas, cpu_time_budget)
     text = read_witness(path)
     return text is not None and text_passes(text, format_, formulas)
 
 
-def _passes_apart(path: str, size: int, format_: WitnessFormat, formulas: tuple[str, ...]) -> bool:
+def check_seconds(cpu_time_budget: int | float | None) -> float:
+    """The seconds a check in a process of its own may take: CHECK_SECONDS,
+    or the CPU time the run's budget `cpu_time_budget` has left
+    (processes.run_cpu_seconds), less CHECK_MARGIN_SECONDS, if that is less;
+    0 or less once the budget is reached. CHECK_SECONDS where the run has no
+    budget or its CPU time cannot be read."""
+    used = None if cpu_time_budget is None else run_cpu_seconds()
+    if used is None:
+        return CHECK_SECONDS
+    return min(CHECK_SECONDS, cpu_time_budget - used - CHECK_MARGIN_SECONDS)
+
+
+def check_memory_bytes() -> int:
+    """The address space in bytes a check in a process of its own may take:
+    CHECK_MEMORY_BYTES, or CHECK_MEMORY_SHARE of the run's memory limit
+    (processes.run_memory_limit) if that is less."""
+    run_limit = run_memory_limit()
+    if run_limit is None:
+        return CHECK_MEMORY_BYTES
+    return min(CHECK_MEMORY_BYTES, int(run_limit * CHECK_MEMORY_SHARE))
+
+
+def _passes_apart(path: str, size: int, format_: WitnessFormat, formulas: tuple[str, ...],
+                  cpu_time_budget: int | float | None = None) -> bool:
     """text_passes for the file `path` of `size` bytes, checked by _CHECK in
-    a process of its own (sys.executable, in TOOL_DIR) with the address
-    space CHECK_MEMORY_BYTES, which subprocess.run kills after
-    CHECK_SECONDS. False, with a line "CoOpeRace: ..." on stderr, if the
-    process cannot be started, takes longer, or does not print 0 or 1 and
-    end with status 0."""
+    a process of its own (sys.executable, in TOOL_DIR), one such check at a
+    time, with the address space check_memory_bytes, which subprocess.run
+    kills after check_seconds of `cpu_time_budget`, counted from when the
+    check starts. False, with a line "CoOpeRace: ..." on stderr, if the
+    budget leaves it no time, if the process cannot be started, takes
+    longer, or does not print 0 or 1 and end with status 0."""
     data = json.dumps({"entry_type": format_.entry_type, "lowest": format_.lowest, "highest": format_.highest,
                        "required": format_.required, "formulas": list(formulas)})
-    command = [sys.executable, "-c", _CHECK, str(CHECK_MEMORY_BYTES), TOOL_DIR, os.path.abspath(path), data]
-    try:
-        done = subprocess.run(command, cwd=TOOL_DIR, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                              errors="replace", timeout=CHECK_SECONDS)
-    except subprocess.TimeoutExpired:
-        problem = f"took longer than {CHECK_SECONDS:g} s"
-    except (OSError, subprocess.SubprocessError) as error:
-        problem = f"could not run ({type(error).__name__}: {error})"
-    else:
-        printed = done.stdout.strip()
-        if done.returncode == 0 and printed in ("0", "1"):
-            return printed == "1"
-        last = (done.stderr.strip().splitlines() or [f"printed {printed[-60:]!r}"])[-1]
-        problem = f"ended with exit code {done.returncode} ({last})"
+    with _APART_LOCK:
+        seconds = check_seconds(cpu_time_budget)
+        command = [sys.executable, "-c", _CHECK, str(check_memory_bytes()), TOOL_DIR, os.path.abspath(path), data]
+        if seconds <= 0:
+            problem = f"was not started: the run's CPU-time budget of {cpu_time_budget:g} s leaves it no time"
+        else:
+            try:
+                done = subprocess.run(command, cwd=TOOL_DIR, stdin=subprocess.DEVNULL, capture_output=True,
+                                      text=True, errors="replace", timeout=seconds)
+            except subprocess.TimeoutExpired:
+                problem = f"took longer than {seconds:g} s"
+            except (OSError, subprocess.SubprocessError) as error:
+                problem = f"could not run ({type(error).__name__}: {error})"
+            else:
+                printed = done.stdout.strip()
+                if done.returncode == 0 and printed in ("0", "1"):
+                    return printed == "1"
+                last = (done.stderr.strip().splitlines() or [f"printed {printed[-60:]!r}"])[-1]
+                problem = f"ended with exit code {done.returncode} ({last})"
     print(f"CoOpeRace: the check of the witness {path} ({size} bytes) {problem}: it does not pass",
           file=sys.stderr, flush=True)
     return False
 
 
 def passing_witness(paths: Iterable[str], property_name: str, verdict: str,
-                    subproperty: str | None = None) -> str | None:
+                    subproperty: str | None = None, cpu_time_budget: int | float | None = None) -> str | None:
     """The first of the witness files `paths` of one component run for which
     file_passes holds, for the verdict `verdict` on `property_name` with
-    `subproperty`; None if none does."""
+    `subproperty`, within the run's CPU-time budget `cpu_time_budget`; None
+    if none does."""
     for path in paths:
-        if file_passes(path, property_name, verdict, subproperty):
+        if file_passes(path, property_name, verdict, subproperty, cpu_time_budget):
             return path
     return None

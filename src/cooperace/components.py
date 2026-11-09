@@ -589,7 +589,8 @@ class ComponentRunner:
         if verdict == "unknown":
             return NO_OUTCOME
         result = reported_result(self.property_name, status)
-        witness = passing_witness(witness_files, self.property_name, verdict, subproperty_of(result))
+        witness = passing_witness(witness_files, self.property_name, verdict, subproperty_of(result),
+                                  cpu_time_budget=step.run_cpu_time_budget)
         return Outcome(verdict, actor.name(), [] if witness is None else [witness], result)
 
 
