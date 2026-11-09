@@ -7,6 +7,7 @@ container_works with a fake RunExecutor (the stopping and the result), and
 cli.run end to end with stub components in BenchExec's container (the
 fixture `container`)."""
 import dataclasses
+import logging
 import os
 import shlex
 import shutil
@@ -152,6 +153,116 @@ def test_execute_run_ignores_the_task_limit_without_the_pids_controller(fake_exe
     assert result.returncode == 0
     assert FakeExecutor.instances[0].additional_cgroup_subsystems == []
     assert FakeExecutor.instances[0].kwargs["cgroupValues"] == {}
+
+
+def refuse_pids_when_made(monkeypatch):
+    """Makes FakeExecutor exit as RunExecutor does when it is made with a
+    controller it cannot use (Cgroups.handle_errors); returns the list of
+    the controllers asked for, one entry per executor made."""
+    asked = []
+    make = FakeExecutor.__init__
+
+    def init(self, **kwargs):
+        asked.append(list(kwargs.get("additional_cgroup_subsystems", ())))
+        if "pids" in asked[-1]:
+            sys.exit("Required cgroups are not available because of missing permissions.")
+        make(self, **kwargs)
+
+    monkeypatch.setattr(FakeExecutor, "__init__", init)
+    return asked
+
+
+def test_a_task_limit_that_benchexec_refuses_when_it_is_made_is_dropped_for_one_more_run(
+        fake_executor, tmp_path, monkeypatch, capsys):
+    asked = refuse_pids_when_made(monkeypatch)
+
+    result = run_fake(tmp_path, ComponentGroup(), tasks=1024)
+
+    assert (result.returncode, result.stdout) == (0, "out\n")
+    assert asked == [["pids"], []]
+    assert FakeExecutor.instances[0].kwargs["cgroupValues"] == {}
+    assert ("CoOpeRace: running tool once more without its limit of 1024 tasks: BenchExec refused to run tool: "
+            "Required cgroups are not available because of missing permissions.\n") in capsys.readouterr().err
+
+
+def test_a_refusal_when_benchexec_is_made_is_an_error_of_the_run(fake_executor, tmp_path, monkeypatch):
+    # Without a task limit there is nothing to drop: the SystemExit must not end CoOpeRace.
+    def init(self, **kwargs):
+        sys.exit("Required cgroups are not available because of missing permissions.")
+
+    monkeypatch.setattr(FakeExecutor, "__init__", init)
+
+    with pytest.raises(execution.RunExecutorError, match="refused to run tool: Required cgroups") as error:
+        run_fake(tmp_path, ComponentGroup())
+    assert error.value.refused
+
+
+def test_a_task_limit_that_benchexec_cannot_set_is_dropped_for_one_more_run(fake_executor, tmp_path, monkeypatch,
+                                                                             capsys):
+    # RunExecutor._setup_cgroups exits when it cannot write pids.max.
+    run = FakeExecutor.execute_run
+
+    def execute_run(self, args, output_filename, **kwargs):
+        if kwargs["cgroupValues"]:
+            self.kwargs = kwargs
+            sys.exit('Permission denied for setting cgroup option pids.max to "1024" (error code 13).')
+        return run(self, args, output_filename, **kwargs)
+
+    monkeypatch.setattr(FakeExecutor, "execute_run", execute_run)
+
+    result = run_fake(tmp_path, ComponentGroup(), tasks=1024)
+
+    assert (result.returncode, result.stdout) == (0, "out\n")
+    assert [executor.kwargs["cgroupValues"] for executor in FakeExecutor.instances] == [
+        {("pids", "max"): "1024"}, {}]
+    assert [executor.additional_cgroup_subsystems for executor in FakeExecutor.instances] == [["pids"], []]
+    assert "without its limit of 1024 tasks: BenchExec refused to run tool: Permission denied" in (
+        capsys.readouterr().err)
+
+
+def test_a_refusal_after_the_process_started_is_not_run_again(fake_executor, tmp_path, monkeypatch):
+    def execute_run(self, args, output_filename, **kwargs):
+        with self.SUB_PROCESS_PIDS_LOCK:
+            self.SUB_PROCESS_PIDS.add(4711)
+        time.sleep(3 * execution.POLL_SECONDS)
+        sys.exit("refused late")
+
+    monkeypatch.setattr(FakeExecutor, "execute_run", execute_run)
+
+    with pytest.raises(execution.RunExecutorError, match="refused late") as error:
+        run_fake(tmp_path, ComponentGroup(), tasks=1024)
+    assert not error.value.refused
+    assert len(FakeExecutor.instances) == 1
+
+
+class FakeCgroups:
+    """Stands in for the Cgroups that task_limit_supported gets from
+    Cgroups.initialize: lists the pids controller with pids.max, and says
+    with require_subsystem whether it is usable."""
+
+    def __init__(self, usable):
+        self.usable = usable
+        self.required = []
+
+    def __contains__(self, subsystem):
+        return subsystem == "pids"
+
+    def has_value(self, subsystem, option):
+        return (subsystem, option) == ("pids", "max")
+
+    def require_subsystem(self, subsystem, log_method=None):
+        self.required.append((subsystem, log_method))
+        return self.usable
+
+
+@pytest.mark.parametrize("usable", [True, False])
+def test_task_limit_supported_requires_a_usable_pids_controller(monkeypatch, usable):
+    # Under cgroups v1 the pids hierarchy can be there but not writable: RunExecutor then exits when it is made.
+    cgroups = FakeCgroups(usable)
+    monkeypatch.setattr(execution.Cgroups, "initialize", staticmethod(lambda: cgroups))
+
+    assert execution.task_limit_supported() is usable
+    assert cgroups.required == [("pids", logging.debug)]
 
 
 def test_execute_run_gives_a_signal_as_a_negative_returncode(fake_executor, tmp_path):

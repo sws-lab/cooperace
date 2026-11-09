@@ -19,7 +19,9 @@ execute_run first call guard_clone, which keeps the start of a container from
 deadlocking CoOpeRace's process."""
 from __future__ import annotations
 
+import functools
 import gc
+import logging
 import os
 import subprocess
 import sys
@@ -113,14 +115,17 @@ def guard_clone() -> None:
 def task_limit_supported() -> bool:
     """Whether a RunExecutor can limit the tasks of a run here: whether the
     cgroup in which BenchExec makes the runs' cgroups has the pids
-    controller with its file pids.max. RunExecutor finds that cgroup with
-    Cgroups.initialize, which finds it once and returns it again later, and
-    refuses a run whose cgroup values need a controller it lacks, so
-    execute_run limits the tasks only where this is true. False where the
-    cgroups cannot be read."""
+    controller, usable as RunExecutor requires it (Cgroups.require_subsystem,
+    which under cgroups v1 makes a cgroup of it to find out, and logs at
+    debug level why not), with its file pids.max. RunExecutor finds that
+    cgroup with Cgroups.initialize, and refuses to be made, with SystemExit,
+    when a controller it is asked for is not usable, so execute_run limits
+    the tasks only where this is true (and runs the component once more
+    without the limit where BenchExec refuses it all the same). False where
+    the cgroups cannot be read."""
     try:
         cgroups = Cgroups.initialize()
-        return PIDS in cgroups and cgroups.has_value(PIDS, "max")
+        return cgroups.require_subsystem(PIDS, log_method=logging.debug) and cgroups.has_value(PIDS, "max")
     except Exception:  # noqa: BLE001 - no limit rather than no run
         return False
 
@@ -171,7 +176,13 @@ def container_works(tools_dir: str) -> bool:
 
 class RunExecutorError(Exception):
     """BenchExec could not start a run (its result has no exit code), or
-    refused it."""
+    refused it. `refused` is true where BenchExec refused the run before the
+    component's process started: a SystemExit of RunExecutor, when it is
+    made or when it sets the run up, as for a cgroup value it cannot set."""
+
+    def __init__(self, message: str, refused: bool = False):
+        super().__init__(message)
+        self.refused = refused
 
 
 class ComponentHang(RunExecutorError):
@@ -245,7 +256,7 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
                 tasks: int | None = None) -> FinishedRun:
     """Runs `command` in `cwd` under a RunExecutor in its container, in the
     ComponentGroup `group`, and returns its FinishedRun, not started if
-    `group` was stopped first.
+    `group` was stopped first (_execute_once).
 
     The run's environment is what `environments` (a tool-info module's
     environment()) makes of CoOpeRace's, with HOME and TMPDIR of its own;
@@ -254,7 +265,13 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     counts every thread of every process of the run (None: none; `tasks` is
     ignored where task_limit_supported is false). A process of the run that
     would exceed `tasks` cannot fork or start a thread (EAGAIN); nothing is
-    killed. Its output goes to `log_file`, and the
+    killed. If BenchExec refuses the run with the task limit before the
+    component's process starts (RunExecutorError.refused: a pids controller
+    it cannot use, or a pids.max it cannot write), the component runs once
+    more without the limit, after a line "CoOpeRace: ..." on stderr that
+    says why, as where the limit is not supported: one component without a
+    limit rather than every component without a verdict. Its output goes to
+    `log_file`, and the
     files matching `result_files_patterns` under `cwd` are moved to
     `output_dir`.
 
@@ -268,16 +285,40 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     killed. An exception in this thread while it waits (strategy.StopSignal)
     stops the run, waits for it at most STOP_GRACE_SECONDS and is re-raised.
     Raises RunExecutorError if BenchExec could not start the run or refused
-    it. Calls guard_clone first: the hang guard cannot end a deadlock of the
-    whole process."""
+    it (also when RunExecutor is made). Calls guard_clone first: the hang
+    guard cannot end a deadlock of the whole process."""
     guard_clone()
-    if group.stopped:
-        return FinishedRun(command, None, "")
     cgroup_values = {}
     if tasks is not None and task_limit_supported():
         cgroup_values[(PIDS, "max")] = str(tasks)
-    executor = runexecutor.RunExecutor(use_namespaces=True, dir_modes=dict(dir_modes),
-                                       additional_cgroup_subsystems=[PIDS] if cgroup_values else [])
+    attempt = functools.partial(_execute_once, command, cwd, environments, group, log_file, dir_modes, memory,
+                                cpu_time, output_dir, result_files_patterns)
+    if cgroup_values:
+        try:
+            return attempt(cgroup_values)
+        except RunExecutorError as error:
+            if not error.refused:
+                raise
+            print(f"CoOpeRace: running {command[0]} once more without its limit of {tasks} tasks: "
+                  f"{' '.join(str(error).split())}", file=sys.stderr, flush=True)
+    return attempt({})
+
+
+def _execute_once(command: list[str], cwd: str, environments: Mapping, group: ComponentGroup, log_file: str,
+                  dir_modes: Mapping[str, str], memory: int | None, cpu_time: int | None, output_dir: str | None,
+                  result_files_patterns: Sequence[str], cgroup_values: Mapping) -> FinishedRun:
+    """execute_run's run of `command` with the cgroup values `cgroup_values`
+    (a task limit or none), not started if `group` is stopped. A SystemExit
+    of RunExecutor, when it is made or while it sets the run up, raises
+    RunExecutorError with `refused` true, unless the component's process had
+    started."""
+    if group.stopped:
+        return FinishedRun(command, None, "")
+    try:
+        executor = runexecutor.RunExecutor(use_namespaces=True, dir_modes=dict(dir_modes),
+                                           additional_cgroup_subsystems=[PIDS] if cgroup_values else [])
+    except SystemExit as error:
+        raise RunExecutorError(f"BenchExec refused to run {command[0]}: {error}", refused=True) from None
     run = ExecutorRun(executor)
     if not group.add(run):
         return FinishedRun(command, None, "")
@@ -290,9 +331,10 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
                 list(command), log_file, write_header=False, workingDir=cwd,
                 environments=dict(environments), memlimit=memory, hardtimelimit=cpu_time,
                 output_dir=output_dir, result_files_patterns=list(result_files_patterns),
-                cgroupValues=cgroup_values)
+                cgroupValues=dict(cgroup_values))
         except SystemExit as error:
-            outcome["error"] = RunExecutorError(f"BenchExec refused to run {command[0]}: {error}")
+            outcome["error"] = RunExecutorError(f"BenchExec refused to run {command[0]}: {error}",
+                                                refused=not run.started())
         except BaseException as error:  # noqa: B036 - re-raised in the waiting thread
             outcome["error"] = error
 
