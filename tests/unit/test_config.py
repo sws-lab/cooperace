@@ -39,7 +39,7 @@ VALID_MEMSAFETY = {
 # conf/README.md shows: IKOS-ConC in no-data-race, Deagle alone in phase 2 of valid-memsafety.
 DEFAULT_NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
-               ["Goblint", "IKOS-ConC"], ["Dartagnan"]],
+               {"tools": ["Goblint", "IKOS-ConC"], "wallTimeLimit": 120}, ["Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
     "memoryLimits": {"sv-sanitizers": "30%", "Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
@@ -495,6 +495,28 @@ def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known)
             limits = {tool: strategy.memory_limits.get(tool) for tool in phase.tools}
             assert all(isinstance(limit, str) and limit.endswith("%") for limit in limits.values()), (name, limits)
             assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
+
+
+def test_the_svcomp27_conf_ends_every_phase_of_tools_with_cpu_time_limits_by_a_wall_time_limit(known):
+    """In conf/svcomp27.json a phase whose tools all have CPU-time limits,
+    so that none runs on to the run's CPU-time budget, has a wall-time limit:
+    a tool that waits without using CPU time, or a RunExecutor that does not
+    return, would otherwise keep the next phase from starting until the
+    run's own wall-time limit, which ends it without a verdict. After phase
+    1 the limit must not stop a tool before its CPU-time limit even on one
+    core that the phase's tools share: it is at least 1.1 s of wall time per
+    second of their CPU-time limits together, plus 1 s for each (BenchExec
+    ends a tool up to about 1 s after its limit). Phase 1's 45 s stop only
+    tools of phase 1 alone; conf/README.md says why they need no more."""
+    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    for name, strategy in strategies.items():
+        for index, phase in enumerate(strategy.phases):
+            if not all(tool in strategy.cpu_time_limits for tool in phase.tools):
+                continue
+            assert phase.wall_time_limit is not None, (name, index + 1)
+            if index > 0:
+                cpu = sum(strategy.cpu_time_limits[tool] for tool in phase.tools)
+                assert phase.wall_time_limit >= 1.1 * cpu + len(phase.tools), (name, index + 1, cpu)
 
 
 def test_the_svcomp27_conf_keeps_the_task_limits_of_every_phase_to_4096(known):
