@@ -13,9 +13,12 @@ the machine they were run on). The 2027 validators confirmed each of them.
 The failing witnesses below are made from them by changing one field."""
 import copy
 import json
+import os
 import re
 import subprocess
 import sys
+import threading
+import time
 import types
 from pathlib import Path
 
@@ -262,6 +265,120 @@ def test_passing_witness_is_the_first_file_that_passes(tmp_path):
     assert witnesses.passing_witness(paths[:2], "no-data-race", "false") is None
     assert witnesses.passing_witness(paths, "no-data-race", "true") is None
     assert witnesses.passing_witness([], "no-data-race", "false") is None
+
+
+# --- a large witness, checked in a process of its own -------------------------
+
+def padded(text, size):
+    """`text` followed by a YAML comment that makes it `size` bytes long."""
+    return text + "\n#" + "x" * (size - len(text.encode()) - 3) + "\n"
+
+
+@pytest.fixture
+def checks(monkeypatch):
+    """Records the command of every process subprocess.run starts, as the
+    checks of file_passes in a process of their own."""
+    commands = []
+    run = subprocess.run
+
+    def record(command, **kwargs):
+        commands.append(command)
+        return run(command, **kwargs)
+
+    monkeypatch.setattr(witnesses.subprocess, "run", record)
+    return commands
+
+
+def test_a_witness_above_in_process_bytes_is_checked_in_a_process_of_its_own(tmp_path, checks):
+    large = tmp_path / "large-witness.yml"
+    large.write_text(padded(LAMPORT, witnesses.IN_PROCESS_BYTES + 1))
+    small = tmp_path / "small-witness.yml"
+    small.write_text(LAMPORT)
+
+    assert witnesses.file_passes(str(large), "no-data-race", "false")
+    assert not witnesses.file_passes(str(large), "unreach-call", "false")
+    assert not witnesses.file_passes(str(large), "valid-memsafety", "false", "valid-deref")
+    assert [command[0] for command in checks] == [sys.executable] * 3
+    assert witnesses.file_passes(str(small), "no-data-race", "false")
+    assert len(checks) == 3
+
+
+def test_a_check_in_a_process_of_its_own_leaves_the_other_threads_running(tmp_path, monkeypatch):
+    # CoOpeRace's switch interval of 1000 s (execution.guard_clone) lets a check in the answering component's
+    # thread hold the GIL for its whole parse; in a process of its own, a sleeping thread wakes on time.
+    monkeypatch.setattr(witnesses, "IN_PROCESS_BYTES", 100_000)
+    path = tmp_path / "large-witness.yml"
+    path.write_text(LAMPORT + "- entry_type: padding\n  items:\n" + "  - {a: 1, b: two}\n" * 30_000)
+    lateness = []
+    checked = threading.Event()
+
+    def sleep():
+        while not checked.is_set():
+            began = time.monotonic()
+            time.sleep(0.05)
+            lateness.append(time.monotonic() - began - 0.05)
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1000)
+    sleeper = threading.Thread(target=sleep, daemon=True)
+    try:
+        sleeper.start()
+        began = time.monotonic()
+        assert witnesses.file_passes(str(path), "no-data-race", "false")
+        took = time.monotonic() - began
+    finally:
+        checked.set()
+        sleeper.join(5)
+        sys.setswitchinterval(interval)
+
+    assert took > 0.3, "the check was too quick to tell"
+    assert max(lateness) < 0.25, (took, max(lateness))
+
+
+def apart(tmp_path, monkeypatch, check=None, seconds=None, memory=None):
+    """file_passes of a passing witness of more than IN_PROCESS_BYTES, with
+    the program, the time limit or the memory limit of its check replaced."""
+    for name, value in (("_CHECK", check), ("CHECK_SECONDS", seconds), ("CHECK_MEMORY_BYTES", memory)):
+        if value is not None:
+            monkeypatch.setattr(witnesses, name, value)
+    path = tmp_path / "large-witness.yml"
+    path.write_text(padded(LAMPORT, witnesses.IN_PROCESS_BYTES + 1))
+    return witnesses.file_passes(str(path), "no-data-race", "false")
+
+
+def test_a_check_that_takes_too_long_does_not_pass_and_its_process_is_ended(tmp_path, monkeypatch, capsys):
+    pid_file = tmp_path / "check.pid"
+    sleep = f"import os, time\nopen({str(pid_file)!r}, 'w').write(str(os.getpid()))\ntime.sleep(60)\n"
+    began = time.monotonic()
+
+    assert not apart(tmp_path, monkeypatch, check=sleep, seconds=1)
+
+    assert time.monotonic() - began < 10
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pid_file.read_text()), 0)
+    assert "large-witness.yml (1048577 bytes) took longer than 1 s: it does not pass\n" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("check, message", [
+    ("raise SystemExit(3)", "ended with exit code 3 (printed '')"),
+    ("print('perhaps')", "ended with exit code 0 (printed 'perhaps')"),
+    ("raise MemoryError", "ended with exit code 1 (MemoryError)"),
+])
+def test_a_check_that_fails_does_not_pass(tmp_path, monkeypatch, capsys, check, message):
+    assert not apart(tmp_path, monkeypatch, check=check)
+    assert f"{message}: it does not pass" in capsys.readouterr().err
+
+
+def test_a_check_that_cannot_start_does_not_pass(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "no-python"))
+
+    assert not apart(tmp_path, monkeypatch)
+    assert "could not run (FileNotFoundError:" in capsys.readouterr().err
+
+
+def test_the_check_in_a_process_of_its_own_gets_no_more_than_its_memory(tmp_path, monkeypatch):
+    # The same witness passes with the default limit (above); with 1 MB of address space the check cannot run.
+    assert not apart(tmp_path, monkeypatch, memory=1 << 20)
 
 
 # --- the witness table ---------------------------------------------------------

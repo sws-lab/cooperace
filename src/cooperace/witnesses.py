@@ -16,7 +16,8 @@ file never counts. passing_witness picks the file of a run that counts.
 
 The check reads the witness's kind, version and property and nothing else:
 it does not establish that the file follows the format's schema or that a
-validator confirms it.
+validator confirms it. file_passes checks a file of more than
+IN_PROCESS_BYTES in a Python process of its own, for at most CHECK_SECONDS.
 
 load_table checks a witness table and raises WitnessTableError for one that
 conf/README.md says CoOpeRace refuses; table reads conf/witnesses.json once
@@ -31,6 +32,8 @@ import functools
 import json
 import os
 import re
+import subprocess
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
@@ -110,6 +113,48 @@ _VERSION = re.compile(r"(\d+)\.(\d+)")
 
 # The C loader of PyYAML where it was built with libyaml, else the Python one
 _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+# Witness files of more bytes than this are checked in a process of their own
+# (file_passes). CoOpeRace runs with a switch interval of 1000 s
+# (execution.guard_clone), so Python code that runs long in one thread holds
+# every other thread up: in the competition image, on one core, the check of
+# a 14 MB witness took 4 to 5 s with libyaml and a sleeping thread woke 5 s
+# late, and a 71 MB one took 33 s. Below this, the check takes about 0.25 s
+# with libyaml and 1.6 s with the Python loader; the witnesses of the
+# components are far smaller (at most 44 KB in the E7 sweep).
+IN_PROCESS_BYTES = 1 << 20
+
+# Seconds the check in a process of its own may take; a file whose check
+# takes longer does not pass. The run's CPU-time budget (runCpuTimeBudget of
+# conf/svcomp27.json, 870 s) is 30 s below the competition's 900 s, and a
+# check still running when the budget is reached uses CPU time the run does
+# not have, so this is shorter: with libyaml it covers about 40 MB.
+CHECK_SECONDS = 20.0
+
+# The address space in bytes the process of such a check may take; a file
+# whose check needs more does not pass. The check takes about 30 times the
+# file's size (440 MB for 14 MB), outside every component's memory limit and
+# inside the run's, so this keeps a large witness from ending the whole run
+# by its memory limit; it covers about 30 MB.
+CHECK_MEMORY_BYTES = 1 << 30
+
+# The program of a check in a process of its own (_passes_apart). argv: the
+# limit of its address space in bytes, TOOL_DIR, the file, and the
+# WitnessFormat and formulas to check as JSON. Prints 1 if the file passes,
+# else 0.
+_CHECK = """
+import json, resource, sys
+limit = int(sys.argv[1])
+_, hard = resource.getrlimit(resource.RLIMIT_AS)
+resource.setrlimit(resource.RLIMIT_AS, (limit if hard == resource.RLIM_INFINITY else min(limit, hard), hard))
+sys.path.insert(0, sys.argv[2])
+from src.cooperace import witnesses
+data = json.loads(sys.argv[4])
+format_ = witnesses.WitnessFormat(data["entry_type"], tuple(data["lowest"]), tuple(data["highest"]),
+                                  data["required"])
+text = witnesses.read_witness(sys.argv[3])
+print(int(text is not None and witnesses.text_passes(text, format_, tuple(data["formulas"]))))
+"""
 
 
 def _table_version(value: object, where: str) -> tuple[int, int]:
@@ -289,6 +334,12 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     formulas = specification(property_name, verdict, subproperty)
     if format_ is None or formulas is None:
         return False
+    return text_passes(text, format_, formulas)
+
+
+def text_passes(text: str, format_: WitnessFormat, formulas: tuple[str, ...]) -> bool:
+    """`passes` of `text` for the WitnessFormat `format_` and the formulas
+    `formulas` of the verdict's specification."""
     try:
         entries = yaml.load(text, Loader=_LOADER)
     except (yaml.YAMLError, RecursionError):
@@ -318,17 +369,67 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     return version is not None and format_.lowest <= version <= format_.highest
 
 
-def file_passes(path: str, property_name: str, verdict: str, subproperty: str | None = None) -> bool:
-    """`passes` for the file `path`, read as UTF-8; False for a file whose
-    name ends in .graphml, and for one that cannot be read or decoded."""
-    if path.lower().endswith(".graphml"):
-        return False
+def read_witness(path: str) -> str | None:
+    """The text of the file `path`, read as UTF-8; None if it cannot be
+    read or decoded."""
     try:
         with open(path, encoding="utf-8") as file:
-            text = file.read()
+            return file.read()
     except (OSError, UnicodeDecodeError):
+        return None
+
+
+def file_passes(path: str, property_name: str, verdict: str, subproperty: str | None = None) -> bool:
+    """`passes` for the file `path`, read as UTF-8; False for a file whose
+    name ends in .graphml, and for one that cannot be read or decoded. A file
+    of more than IN_PROCESS_BYTES is checked in a process of its own
+    (_passes_apart), so that the thread that waits for it does not hold the
+    GIL; it does not pass if that check takes longer than CHECK_SECONDS or
+    more address space than CHECK_MEMORY_BYTES, or fails. This never raises,
+    so a witness can cost the component its witness but not CoOpeRace its
+    verdict line."""
+    if path.lower().endswith(".graphml"):
         return False
-    return passes(text, property_name, verdict, subproperty)
+    format_ = witness_format(property_name, verdict, subproperty)
+    formulas = specification(property_name, verdict, subproperty)
+    if format_ is None or formulas is None:
+        return False
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return False
+    if size > IN_PROCESS_BYTES:
+        return _passes_apart(path, size, format_, formulas)
+    text = read_witness(path)
+    return text is not None and text_passes(text, format_, formulas)
+
+
+def _passes_apart(path: str, size: int, format_: WitnessFormat, formulas: tuple[str, ...]) -> bool:
+    """text_passes for the file `path` of `size` bytes, checked by _CHECK in
+    a process of its own (sys.executable, in TOOL_DIR) with the address
+    space CHECK_MEMORY_BYTES, which subprocess.run kills after
+    CHECK_SECONDS. False, with a line "CoOpeRace: ..." on stderr, if the
+    process cannot be started, takes longer, or does not print 0 or 1 and
+    end with status 0."""
+    data = json.dumps({"entry_type": format_.entry_type, "lowest": format_.lowest, "highest": format_.highest,
+                       "required": format_.required, "formulas": list(formulas)})
+    command = [sys.executable, "-c", _CHECK, str(CHECK_MEMORY_BYTES), TOOL_DIR, os.path.abspath(path), data]
+    try:
+        done = subprocess.run(command, cwd=TOOL_DIR, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              errors="replace", timeout=CHECK_SECONDS)
+    except subprocess.TimeoutExpired:
+        problem = f"took longer than {CHECK_SECONDS:g} s"
+    except (OSError, subprocess.SubprocessError) as error:
+        problem = f"could not run ({type(error).__name__}: {error})"
+    else:
+        printed = done.stdout.strip()
+        if done.returncode == 0 and printed in ("0", "1"):
+            return printed == "1"
+        last = (done.stderr.strip().splitlines() or [f"printed {printed[-60:]!r}"])[-1]
+        problem = f"ended with exit code {done.returncode} ({last})"
+    print(f"CoOpeRace: the check of the witness {path} ({size} bytes) {problem}: it does not pass",
+          file=sys.stderr, flush=True)
+    return False
 
 
 def passing_witness(paths: Iterable[str], property_name: str, verdict: str,

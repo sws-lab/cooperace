@@ -39,7 +39,7 @@ from support import (
     write_witness,
 )
 
-from src.cooperace import cli, execution, strategy
+from src.cooperace import cli, execution, strategy, witnesses
 from src.cooperace.components import ComponentRunner
 from src.cooperace.processes import ComponentGroup
 
@@ -209,6 +209,26 @@ def test_a_component_whose_runexecutor_does_not_return_after_its_process_ended_i
     assert lines[-1] == "CoOpeRace result from: Stub B"
     assert verdict == "true"
     assert seconds < 5
+
+
+def test_a_witness_check_that_takes_too_long_costs_the_witness_and_not_the_verdict_line(
+        tmp_path, fake, capsys, monkeypatch):
+    # A witness above IN_PROCESS_BYTES whose check in a process of its own never ends: a no-data-race false
+    # needs a witness that passes, so the result is unknown, and it comes as soon as the check is given up.
+    started = tmp_path / "check-started"
+    monkeypatch.setattr(witnesses, "_CHECK", f"open({str(started)!r}, 'w').close()\nimport time\ntime.sleep(60)\n")
+    monkeypatch.setattr(witnesses, "CHECK_SECONDS", 1.0)
+    conf, runner = stub_run(tmp_path, one_after_another,
+                            Stub_A=write_witness("no-data-race", "false")
+                            + f"printf '#%0{witnesses.IN_PROCESS_BYTES}d\\n' 0 >> run-witness.yml\n"
+                            + "echo 'STUB-STATUS: false'\n")
+
+    verdict, lines, seconds = run_lines(conf, runner, capsys)
+
+    assert verdict == "unknown"
+    assert "CoOpeRace answer: Stub A false, bracket 1, no witness that passes the check" in lines
+    assert started.exists()
+    assert 1 <= seconds < 10
 
 
 def test_a_component_that_started_in_time_runs_as_long_as_it_takes(tmp_path, fake, capsys):
