@@ -120,10 +120,31 @@ def stub_run(tmp_path, strategy_of, **stubs):
     return data_race_conf(strategy_of(*names)), runner
 
 
+# Seconds after which run_lines fails a run that has not ended: a guard that
+# does not work makes the run wait for ever.
+RUN_SECONDS = 20
+
+
 def run_lines(conf, runner, capsys):
+    """cli.run in a daemon thread, which the test waits for at most
+    RUN_SECONDS: its verdict, the lines it printed and its wall time."""
+    outcome = {}
+
+    def run():
+        try:
+            outcome["verdict"] = cli.run(conf, runner, ComponentGroup())
+        except BaseException as error:  # noqa: B036 - re-raised in the test's thread
+            outcome["error"] = error
+
     began = time.monotonic()
-    verdict = cli.run(conf, runner, ComponentGroup())
-    return verdict, capsys.readouterr().out.splitlines(), time.monotonic() - began
+    thread = threading.Thread(target=run, name="cli.run of the test", daemon=True)
+    thread.start()
+    thread.join(RUN_SECONDS)
+    if thread.is_alive():
+        pytest.fail(f"the run did not end within {RUN_SECONDS} s")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["verdict"], capsys.readouterr().out.splitlines(), time.monotonic() - began
 
 
 def test_a_component_whose_start_hangs_is_an_error_and_the_next_one_decides(tmp_path, fake, capsys):
