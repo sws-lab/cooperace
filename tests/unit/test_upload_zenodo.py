@@ -4,16 +4,22 @@
 
 """scripts/sv-comp/upload-zenodo.py against a stub of Zenodo's deposit API on
 127.0.0.1: the archive goes in one PUT to the draft's bucket, as the bare
-bytes of the file with a Content-Length, and the script exits 1 unless the
-checksum Zenodo returns is the MD5 of the local file. Skipped without the
-`requests` package, which the script needs."""
+bytes of the file with a Content-Length, named cooperace.zip whatever the
+local file is called, and the script exits 1 unless the checksum Zenodo
+returns is the MD5 of the local file and the draft holds that file only. A
+published record gets a draft of a new version only with --new-version, the
+files that draft inherits are deleted, and the draft is published only with
+--publish. Skipped without the `requests` package, which the script needs."""
+
 import hashlib
 import importlib.util
 import json
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -25,18 +31,48 @@ uz = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(uz)
 
 CONTENT = bytes(range(256)) * 1200  # 307200 bytes
+OLD = b"the archive of the published version"
+
+
+def md5(content):
+    return hashlib.md5(content).hexdigest()
+
+
+def dep(state, concept=0, files=None, submitted=None):
+    """A deposition of the stub: "done" is published, "unsubmitted" a draft,
+    "inprogress" with submitted=True a published version opened for editing.
+    `files` maps a file name to its content."""
+    return {
+        "state": state,
+        "submitted": state == "done" if submitted is None else submitted,
+        "concept": concept,
+        "files": {name: md5(content) for name, content in (files or {}).items()},
+    }
 
 
 class StubZenodo:
-    """Serves one draft deposition (id 1). `checksum_in_reply` is what the
-    reply to the PUT reports: "md5:<hex>" of the body received if "right",
-    a wrong digest if "wrong", nothing if "none" (the file list then has the
-    right digest). `puts` collects (path, headers, body) of every PUT."""
+    """Serves depositions as the current Zenodo does (checked on
+    sandbox.zenodo.org): links.latest_draft of a published deposition names
+    the deposition itself, newversion replies with the new draft, which holds
+    copies of the files of the latest published version of the concept, and
+    for a concept that has a draft it returns that draft (refusing if the
+    draft holds files) instead of making a second one. The records API's
+    versions/latest of a version redirects to the latest published version.
 
-    def __init__(self, checksum_in_reply="right"):
+    `depositions` maps an ID to a dep(...); by default deposition 1 is an
+    empty draft. `checksum_in_reply` is what the reply to a file PUT reports:
+    "md5:<hex>" of the body received if "right", a wrong digest if "wrong",
+    nothing if "none" (the file list then has the right digest). With
+    `ignore_deletes`, a DELETE of a file answers 204 and keeps the file.
+    `puts` collects (path, headers, body) of every PUT, `calls` (method, path)
+    of every request."""
+
+    def __init__(self, checksum_in_reply="right", depositions=None, ignore_deletes=False):
         self.checksum_in_reply = checksum_in_reply
+        self.deps = depositions or {1: dep("unsubmitted")}
+        self.ignore_deletes = ignore_deletes
         self.puts = []
-        self.digest = None
+        self.calls = []
         stub = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -45,35 +81,38 @@ class StubZenodo:
             def log_message(self, *args):
                 pass
 
-            def reply(self, status, body):
-                data = json.dumps(body).encode()
+            def reply(self, status, body=None, location=None):
+                data = b"" if body is None else json.dumps(body).encode()
                 self.send_response(status)
+                if location:
+                    self.send_header("Location", location)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
 
+            def body(self):
+                return self.rfile.read(int(self.headers.get("Content-Length") or 0))
+
+            def handle_one(self, method):
+                stub.calls.append((method, self.path))
+                with stub.lock:
+                    status, *rest = stub.route(method, urlsplit(self.path), self.headers, self.body())
+                self.reply(status, *rest)
+
             def do_GET(self):
-                if self.path == "/api/deposit/depositions/1":
-                    self.reply(200, {"id": 1, "state": "draft", "files": [],
-                                     "links": {"bucket": f"{stub.url}/bucket/b1"}})
-                elif self.path == "/api/deposit/depositions/1/files":
-                    self.reply(200, [{"filename": name, "checksum": stub.digest} for name in ["cooperace.zip"]])
-                else:
-                    self.reply(404, {})
+                self.handle_one("GET")
 
             def do_PUT(self):
-                length = int(self.headers["Content-Length"])
-                body = self.rfile.read(length)
-                stub.puts.append((self.path, dict(self.headers), body))
-                stub.digest = hashlib.md5(body).hexdigest()
-                reply = {"key": self.path.rsplit("/", 1)[1], "size": length}
-                if stub.checksum_in_reply == "right":
-                    reply["checksum"] = "md5:" + stub.digest
-                elif stub.checksum_in_reply == "wrong":
-                    reply["checksum"] = "md5:" + "0" * 32
-                self.reply(201, reply)
+                self.handle_one("PUT")
 
+            def do_POST(self):
+                self.handle_one("POST")
+
+            def do_DELETE(self):
+                self.handle_one("DELETE")
+
+        self.lock = threading.Lock()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -87,13 +126,118 @@ class StubZenodo:
         self.server.server_close()
         self.thread.join(timeout=10)
 
+    @staticmethod
+    def file_id(name, digest):
+        # Zenodo keeps the file's ID when newversion copies it.
+        return f"{name}-{digest[:8]}"
 
-def run_upload(monkeypatch, tmp_path, stub):
-    archive = tmp_path / "cooperace.zip"
-    archive.write_bytes(CONTENT)
+    def files_json(self, dep_id):
+        return [
+            {"id": self.file_id(name, digest), "filename": name, "filesize": 1.0, "checksum": digest}
+            for name, digest in self.deps[dep_id]["files"].items()
+        ]
+
+    def deposition_json(self, dep_id):
+        d = self.deps[dep_id]
+        published = d["state"] == "done"
+        body = {
+            "id": dep_id,
+            "state": d["state"],
+            "submitted": d["submitted"],
+            "conceptrecid": str(d["concept"]),
+            "metadata": {"prereserve_doi": {"doi": f"10.5281/zenodo.{dep_id}", "recid": dep_id}},
+            "files": self.files_json(dep_id),
+            "links": {
+                "bucket": f"{self.url}/bucket/b{dep_id}",
+                "html": f"{self.url}/records/{dep_id}" if published else f"{self.url}/deposit/{dep_id}",
+                "latest_draft": f"{self.url}/api/deposit/depositions/{dep_id}",
+            },
+        }
+        if published:
+            body["doi"] = f"10.5072/zenodo.{dep_id}"
+        return body
+
+    def latest_published(self, concept):
+        ids = [i for i, d in self.deps.items() if d["concept"] == concept and d["state"] == "done"]
+        return max(ids) if ids else None
+
+    def new_drafts(self, concept):
+        return [i for i, d in self.deps.items() if d["concept"] == concept and not d["submitted"]]
+
+    def route(self, method, url, headers, body):
+        path = url.path
+        if method == "PUT" and (m := re.fullmatch(r"/bucket/b(\d+)/(.+)", path)):
+            self.puts.append((path, dict(headers), body))
+            self.deps[int(m[1])]["files"][m[2]] = md5(body)
+            reply = {"key": m[2], "size": len(body)}
+            if self.checksum_in_reply == "right":
+                reply["checksum"] = "md5:" + md5(body)
+            elif self.checksum_in_reply == "wrong":
+                reply["checksum"] = "md5:" + "0" * 32
+            return 201, reply
+        if path == "/api/deposit/depositions" and method == "GET":
+            [query] = parse_qs(url.query)["q"]
+            concept = int(query.removeprefix("conceptrecid:"))
+            return 200, [self.deposition_json(i) for i, d in self.deps.items() if d["concept"] == concept]
+        if m := re.fullmatch(r"/api/records/(\d+)/versions/latest", path):
+            latest = self.latest_published(self.deps[int(m[1])]["concept"])
+            return 301, None, f"/api/records/{latest}"
+        if m := re.fullmatch(r"/api/records/(\d+)", path):
+            n = int(m[1])
+            if n not in self.deps or self.deps[n]["state"] != "done":
+                return 404, {"status": 404, "message": "The persistent identifier is not registered."}
+            files = [
+                {"id": self.file_id(name, digest), "key": name, "checksum": "md5:" + digest}
+                for name, digest in self.deps[n]["files"].items()
+            ]
+            return 200, {"id": n, "conceptrecid": str(self.deps[n]["concept"]), "files": files}
+        m = re.fullmatch(r"/api/deposit/depositions/(\d+)(/.*)?", path)
+        if not m or int(m[1]) not in self.deps:
+            return 404, {}
+        dep_id, rest, d = int(m[1]), m[2] or "", self.deps[int(m[1])]
+        if method == "GET" and rest == "":
+            return 200, self.deposition_json(dep_id)
+        if method == "GET" and rest == "/files":
+            return 200, self.files_json(dep_id)
+        if method == "PUT" and rest == "":
+            self.puts.append((path, dict(headers), body))
+            return 200, self.deposition_json(dep_id)
+        if method == "DELETE" and (f := re.fullmatch(r"/files/(.+)", rest)):
+            names = [n for n, digest in d["files"].items() if self.file_id(n, digest) == f[1]]
+            if not names:
+                return 404, {}
+            if not self.ignore_deletes:
+                del d["files"][names[0]]
+            return 204, None
+        if method == "POST" and rest == "/actions/newversion":
+            concept = d["concept"]
+            latest = self.latest_published(concept)
+            files = dict(self.deps[latest]["files"])
+            drafts = self.new_drafts(concept)
+            if drafts:
+                if self.deps[drafts[0]]["files"]:
+                    return 400, {"status": 400, "errors": [{"field": "files.enabled"}]}
+                self.deps[drafts[0]]["files"] = files
+                return 201, self.deposition_json(drafts[0])
+            new_id = max(self.deps) + 1
+            self.deps[new_id] = {"state": "unsubmitted", "submitted": False, "concept": concept, "files": files}
+            return 201, self.deposition_json(new_id)
+        if method == "POST" and rest == "/actions/publish":
+            d["state"], d["submitted"] = "done", True
+            return 202, self.deposition_json(dep_id)
+        return 404, {}
+
+
+def run_main(monkeypatch, stub, *argv):
     monkeypatch.setattr(uz, "PRODUCTION_API", stub.url + "/api")
-    monkeypatch.setattr(sys, "argv", ["upload-zenodo.py", "--record-id", "1", "--token", "t", "--file", str(archive), "--no-metadata"])
+    monkeypatch.setattr(sys, "argv", ["upload-zenodo.py", "--token", "t", *argv])
     uz.main()
+
+
+def run_upload(monkeypatch, tmp_path, stub, *extra, record_id="1", local_name="cooperace.zip"):
+    archive = tmp_path / local_name
+    archive.write_bytes(CONTENT)
+    run_main(monkeypatch, stub, "--record-id", record_id, "--file", str(archive), "--no-metadata", *extra)
 
 
 def test_upload_is_one_streamed_put_of_the_bare_file(tmp_path, monkeypatch, capsys):
@@ -114,7 +258,7 @@ def test_checksum_mismatch_exits_1(tmp_path, monkeypatch, capsys):
         run_upload(monkeypatch, tmp_path, stub)
     assert stop.value.code == 1
     err = capsys.readouterr().err
-    assert "checksum mismatch" in err and hashlib.md5(CONTENT).hexdigest() in err
+    assert "checksum mismatch" in err and md5(CONTENT) in err
 
 
 def test_checksum_from_the_file_list_when_the_reply_has_none(tmp_path, monkeypatch, capsys):
@@ -143,14 +287,7 @@ def test_normalize_checksum():
 
 def test_metadata_only_puts_the_metadata_and_needs_no_archive(tmp_path, monkeypatch, capsys):
     with StubZenodo() as stub:
-        monkeypatch.setattr(uz, "PRODUCTION_API", stub.url + "/api")
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            ["upload-zenodo.py", "--record-id", "1", "--token", "t",
-             "--file", str(tmp_path / "missing.zip"), "--metadata-only"],
-        )
-        uz.main()
+        run_main(monkeypatch, stub, "--record-id", "1", "--file", str(tmp_path / "missing.zip"), "--metadata-only")
     [(path, headers, body)] = stub.puts
     assert path == "/api/deposit/depositions/1"
     assert json.loads(body)["metadata"]["version"] == "svcomp27"
@@ -168,12 +305,161 @@ def test_version_is_the_archives_version_file_unless_given(tmp_path, monkeypatch
 
     for extra, want in [([], "svcomp27 745cd85"), (["--version", "x1"], "x1")]:
         with StubZenodo() as stub:
-            monkeypatch.setattr(uz, "PRODUCTION_API", stub.url + "/api")
-            monkeypatch.setattr(
-                sys,
-                "argv",
-                ["upload-zenodo.py", "--record-id", "1", "--token", "t", "--file", str(archive), "--metadata-only", *extra],
-            )
-            uz.main()
+            run_main(monkeypatch, stub, "--record-id", "1", "--file", str(archive), "--metadata-only", *extra)
         [(path, headers, body)] = stub.puts
         assert json.loads(body)["metadata"]["version"] == want
+
+
+def published_record():
+    """Record 10 of concept 9, published with OLD as cooperace.zip."""
+    return {10: dep("done", 9, {"cooperace.zip": OLD})}
+
+
+def calls(stub, method, suffix):
+    return [path for m, path in stub.calls if m == method and path.endswith(suffix)]
+
+
+def test_new_version_creates_a_draft_and_deletes_the_inherited_file(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record()) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert calls(stub, "POST", "/actions/newversion") == ["/api/deposit/depositions/10/actions/newversion"]
+    assert sorted(stub.deps) == [10, 11]
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
+    assert stub.deps[10]["files"] == {"cooperace.zip": md5(OLD)}
+    assert [path for path, _, _ in stub.puts] == ["/bucket/b11/cooperace.zip"]
+    assert not calls(stub, "POST", "/actions/publish")
+    out = capsys.readouterr().out
+    assert "Created the draft 11 of a new version of record 10." in out
+    assert f"Draft: record 11, reserved DOI 10.5281/zenodo.11, {stub.url}/deposit/11" in out
+    assert f"Deleted 'cooperace.zip' (md5 {md5(OLD)}" in out and "inherited from the published version 10" in out
+    assert "Upload complete!" in out and "Not published." in out
+
+
+def test_an_inherited_file_of_another_name_is_deleted_too(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions={10: dep("done", 9, {"E8-default.zip": OLD})}) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
+    assert "Deleted 'E8-default.zip'" in capsys.readouterr().out
+
+
+def test_the_archive_is_uploaded_as_cooperace_zip_whatever_its_local_name(tmp_path, monkeypatch, capsys):
+    local_name = "E8-svcomp27-default-42d6c9a.zip"
+    with StubZenodo(depositions=published_record()) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10", local_name=local_name)
+        # A second run finds the archive already there under that name.
+        run_upload(monkeypatch, tmp_path, stub, "--publish", record_id="10", local_name=local_name)
+    assert [path for path, _, _ in stub.puts] == ["/bucket/b11/cooperace.zip"]
+    assert stub.deps[11] == {"state": "done", "submitted": True, "concept": 9, "files": {"cooperace.zip": md5(CONTENT)}}
+    out = capsys.readouterr().out
+    assert "as cooperace.zip to record 11" in out and local_name in out
+    assert "inherited from the published version 10" in out and "Already uploaded." in out
+
+
+def test_upload_name_overrides_the_name_on_zenodo(tmp_path, monkeypatch, capsys):
+    with StubZenodo() as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--upload-name", "other.zip", local_name="E8.zip")
+    assert stub.deps[1]["files"] == {"other.zip": md5(CONTENT)}
+
+
+def test_a_published_record_without_a_draft_needs_new_version(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record()) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub, record_id="10")
+    assert stop.value.code == 1
+    assert "--new-version" in capsys.readouterr().err
+    assert not calls(stub, "POST", "/actions/newversion") and not stub.puts
+    assert sorted(stub.deps) == [10]
+
+
+def test_an_existing_draft_is_reused_and_a_second_run_uploads_nothing(tmp_path, monkeypatch, capsys):
+    # Draft 11 was made in the UI without the previous version's files; the
+    # published record's links.latest_draft does not name it.
+    with StubZenodo(depositions=published_record() | {11: dep("unsubmitted", 9)}) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+        out = capsys.readouterr().out
+        assert "Using the existing draft 11 of a new version of record 10." in out
+        assert "Upload complete!" in out
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+        out = capsys.readouterr().out
+    assert not calls(stub, "POST", "/actions/newversion")
+    assert sorted(stub.deps) == [10, 11]
+    assert [path for path, _, _ in stub.puts] == ["/bucket/b11/cooperace.zip"]
+    assert "Using the existing draft 11" in out
+    assert "it is not uploaded again" in out and "Already uploaded." in out
+
+
+def test_a_new_version_draft_is_created_once(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record()) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert len(calls(stub, "POST", "/actions/newversion")) == 1
+    assert sorted(stub.deps) == [10, 11]
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
+
+
+def test_an_earlier_upload_of_the_same_name_is_replaced(tmp_path, monkeypatch, capsys):
+    deps = published_record() | {11: dep("unsubmitted", 9, {"cooperace.zip": b"an earlier build"})}
+    with StubZenodo(depositions=deps) as stub:
+        run_upload(monkeypatch, tmp_path, stub, record_id="11")
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
+    assert "an earlier upload to this draft" in capsys.readouterr().out
+
+
+def test_a_foreign_file_stops_the_script_before_any_change(tmp_path, monkeypatch, capsys):
+    files = {"cooperace.zip": OLD, "notes.txt": b"notes"}
+    with StubZenodo(depositions=published_record() | {11: dep("unsubmitted", 9, files)}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            archive = tmp_path / "cooperace.zip"
+            archive.write_bytes(CONTENT)
+            run_main(monkeypatch, stub, "--record-id", "10", "--file", str(archive), "--publish")
+    assert stop.value.code == 1
+    err = capsys.readouterr().err
+    assert "'notes.txt'" in err and "nothing was uploaded" in err
+    assert f"md5 {md5(OLD)}" not in err
+    assert not stub.puts and not calls(stub, "DELETE", "") and not calls(stub, "POST", "")
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(OLD), "notes.txt": md5(b"notes")}
+
+
+def test_the_draft_must_end_with_one_file(tmp_path, monkeypatch, capsys):
+    # The DELETE of the inherited file of another name does not take effect.
+    with StubZenodo(depositions={10: dep("done", 9, {"old.zip": OLD})}, ignore_deletes=True) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+    assert stop.value.code == 1
+    err = capsys.readouterr().err
+    assert "the draft holds 2 files" in err and "'old.zip'" in err and "not published" in err
+    assert not calls(stub, "POST", "/actions/publish")
+    assert stub.deps[11]["state"] == "unsubmitted"
+    assert uz.single_file_problem([], "cooperace.zip", md5(CONTENT)).startswith("the draft holds 0 files")
+
+
+def test_publish_after_the_checks_prints_the_doi(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record()) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+    assert calls(stub, "POST", "/actions/publish") == ["/api/deposit/depositions/11/actions/publish"]
+    assert stub.deps[11]["state"] == "done"
+    out = capsys.readouterr().out
+    assert f"Published record 11: DOI 10.5072/zenodo.11, {stub.url}/records/11" in out
+    assert "Not published." not in out
+
+
+def test_no_publish_after_a_checksum_mismatch(tmp_path, monkeypatch, capsys):
+    with StubZenodo("wrong", depositions=published_record()) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+    assert stop.value.code == 1
+    assert not calls(stub, "POST", "/actions/publish")
+
+
+def test_publish_is_refused_with_metadata_only(tmp_path, monkeypatch, capsys):
+    with StubZenodo() as stub, pytest.raises(SystemExit) as stop:
+        run_main(monkeypatch, stub, "--record-id", "1", "--metadata-only", "--publish")
+    assert stop.value.code == 2
+    assert not stub.calls
+
+
+def test_a_published_version_opened_for_editing_is_refused(tmp_path, monkeypatch, capsys):
+    deps = {10: dep("inprogress", 9, {"cooperace.zip": OLD}, submitted=True)}
+    with StubZenodo(depositions=deps) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert stop.value.code == 1
+    assert "opened for editing" in capsys.readouterr().err
+    assert not stub.puts and not calls(stub, "DELETE", "") and not calls(stub, "POST", "")
