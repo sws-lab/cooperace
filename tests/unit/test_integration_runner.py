@@ -474,6 +474,29 @@ def test_check_8_reports_phase_1_ending_early_or_answering():
         "the verdict is not from a component of phase 2 only (answered by sv-sanitizers)"]
 
 
+# As svcomp27's no-data-race: Goblint runs on into phase 2, Dartagnan starts in phase 3.
+THREE_PHASES = {"properties": {"no-data-race": {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 40}, ["Goblint"], ["Dartagnan"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
+    "answers": [["Goblint:true"], ["sv-sanitizers:false"], ["Dartagnan:false"]],
+    "witnesses": ["sv-sanitizers", "Dartagnan"]}}}
+
+
+def test_check_8_takes_the_hand_over_to_the_last_phase_of_three():
+    lines = hand_over_output(block("SV-sanitizers", "TIMEOUT", "unknown") + [measured_cpu("SV-sanitizers", 30.8)])
+    assert run.hand_over_problems({"config": THREE_PHASES}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  lines) == []
+    stopped = hand_over_output(["CoOpeRace: the wall-time limit of phase 1, 40 s, has passed: stopping sv-sanitizers"]
+                               + block("SV-sanitizers", "stopped by CoOpeRace"))
+    assert run.hand_over_problems({"config": THREE_PHASES}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  stopped) == []
+    goblint = hand_over_output(block("SV-sanitizers", "TIMEOUT", "unknown") + [measured_cpu("SV-sanitizers", 30.8)],
+                               goblint="true")
+    assert run.hand_over_problems({"config": THREE_PHASES}, dict(verdict=False, status="false"), HAND_OVER_TASK,
+                                  goblint) == ["phases 1 to 2 answered: Goblint true",
+                                               "Goblint, in phases 1 to 2 only, ended with true"]
+
+
 # --- check 9: a component of two consecutive phases is started once -------------
 
 def test_check_9_reports_a_component_of_two_phases_started_twice():

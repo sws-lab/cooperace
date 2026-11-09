@@ -1232,51 +1232,58 @@ def wall_time_problems(run, lines, property_name=DEFAULT_PROPERTY):
 
 def hand_over_problems(run, r, t, lines):
     """What departs, in the run `r` of task `t` with the configuration of the
-    run definition `run`, from a hand-over from phase 1 to phase 2 (check 8):
-    no component of phase 1 gives an answer with an entry in `answers`; a
-    component that is in phase 1 only ends without a verdict, and at least
-    one of them reaches a limit: its status is TIMEOUT, with a CPU-time limit
-    in `cpuTimeLimits` that its `Measured:` line shows used, or the phase's
-    wall-time limit stops it; the verdict comes from a component that is in
-    phase 2 only (`CoOpeRace result from: X`) and is the expected one."""
+    run definition `run`, from a hand-over from the phases before the last to
+    the last phase (check 8; phase 1 to phase 2 in a strategy of two phases):
+    no component of an earlier phase gives an answer with an entry in
+    `answers`; a component that is not in the last phase ends without a
+    verdict, and at least one of them reaches a limit: its status is TIMEOUT,
+    with a CPU-time limit in `cpuTimeLimits` that its `Measured:` line shows
+    used, or the wall-time limit of an earlier phase stops it; the verdict
+    comes from a component that is in the last phase only (`CoOpeRace result
+    from: X`) and is the expected one."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
     strategy = (run.get("config") or {}).get("properties", {}).get(t["property"], {})
     phases = [phase_tools(p) for p in strategy.get("phases", [])]
     if len(phases) < 2:
         return [f"the strategy for {t['property']} has {len(phases)} phase(s), no hand-over"]
-    first_only = {n.lower(): n for n in phases[0] if n not in phases[1]}
-    second_only = {n.lower() for n in phases[1] if n not in phases[0]}
+    count = len(phases)
+    before = "phase 1" if count == 2 else f"phases 1 to {count - 1}"
+    earlier = list(dict.fromkeys(n for phase in phases[:-1] for n in phase))
+    early_only = {n.lower(): n for n in earlier if n not in phases[-1]}
+    last_only = {n.lower() for n in phases[-1] if n not in earlier}
     limits = {n.lower(): float(v) for n, v in strategy.get("cpuTimeLimits", {}).items()}
     blocks = {b["name"].lower(): b for b in component_blocks(lines)[0]}
     cpu = {m.group(1).lower(): float(m.group(2).rstrip("s")) for line in lines
            if (m := MEASURED_LINE.fullmatch(line))}
     stopped = {name.lower() for line in lines if (m := WALL_TIME_LINE.fullmatch(line))
-               and line.startswith("CoOpeRace: the wall-time limit of phase 1,")
+               and (k := re.match(r"CoOpeRace: the wall-time limit of phase (\d+),", line))
+               and int(k.group(1)) < count
                for name in m.group(1).split(", ")}
     problems = []
     for line in lines:
         m = ANSWER_LINE.fullmatch(line)
-        if m and m.group(1) in phases[0]:
-            problems.append(f"phase 1 answered: {m.group(1)} {m.group(2)}")
+        if m and m.group(1) in earlier:
+            problems.append(f"{before} answered: {m.group(1)} {m.group(2)}")
     limited = []
-    for key, name in first_only.items():
+    for key, name in early_only.items():
         b = blocks.get(key)
         if b is None:
             continue
         if b["result"] in ("true", "false"):
-            problems.append(f"{name}, in phase 1 only, ended with {b['result']}")
+            problems.append(f"{name}, in {before} only, ended with {b['result']}")
         if key in stopped:
-            limited.append(f"{name} stopped at the wall-time limit of phase 1")
+            limited.append(f"{name} stopped at a wall-time limit of {before}")
         elif b["status"] == "TIMEOUT" and key in limits and cpu.get(key, 0) >= 0.9 * limits[key]:
             limited.append(f"{name} TIMEOUT at {cpu[key]:.1f} s of its {limits[key]:g} s CPU-time limit")
     if not limited:
-        problems.append("no component of phase 1 only reached its CPU-time limit or the phase's wall-time "
-                        "limit: " + ", ".join(f"{name} {blocks[k]['status'] if k in blocks else 'not started'}"
-                                              for k, name in first_only.items()))
+        problems.append(f"no component of {before} only reached its CPU-time limit or "
+                        f"{'the phase' if count == 2 else 'a phase'}'s wall-time limit: "
+                        + ", ".join(f"{name} {blocks[k]['status'] if k in blocks else 'not started'}"
+                                    for k, name in early_only.items()))
     answered = answering_name(lines)
-    if (answered or "").lower() not in second_only:
-        problems.append(f"the verdict is not from a component of phase 2 only (answered by {answered})")
+    if (answered or "").lower() not in last_only:
+        problems.append(f"the verdict is not from a component of phase {count} only (answered by {answered})")
     if r["verdict"] != t["expected"]:
         problems.append(f"{r['status']}, expected {str(t['expected']).lower()}")
     return problems
@@ -1701,7 +1708,8 @@ def report(checks, results, runs, tasks, skipped, out, meta=None, timings=None):
              5: "production and suite configurations give the expected verdict",
              6: "every CoOpeRace output follows the protocol",
              7: "CoOpeRace prints the configured component limits and keeps the phases' wall-time limits",
-             8: "on a hand-over task, phase 1 reaches a limit without an answer and phase 2 answers",
+             8: "on a hand-over task, the phases before the last reach a limit without an answer and the "
+                "last phase answers",
              9: "the verdict follows from the answers, no component is stopped early or started twice"}
     lines = [table(results, runs, tasks, skipped), "",
              "cells: verdict, [validation of the witness of a false, or of a true where one can count, "
