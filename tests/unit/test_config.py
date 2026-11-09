@@ -497,6 +497,20 @@ def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known)
             assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
 
 
+def test_the_svcomp27_conf_keeps_the_task_limits_of_every_phase_to_4096(known):
+    """In every phase of conf/svcomp27.json the task limits of its tools
+    (ComponentSpec.task_limit) add up to at most 4096: within a run limited
+    to 5000 tasks, as README.md runs CoOpeRace under runexec, CoOpeRace
+    keeps 900 of its own even when every tool of a phase reaches its limit,
+    as sv-sanitizers does on a program that creates threads without bound."""
+    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    for name, strategy in strategies.items():
+        for phase in strategy.phases:
+            limits = {tool: REGISTRY[tool].task_limit for tool in phase.tools}
+            assert all(isinstance(limit, int) and limit > 0 for limit in limits.values()), (name, limits)
+            assert sum(limits.values()) <= 4096, (name, limits)
+
+
 # --- ignoreIfCalls ---------------------------------------------------------------
 
 GUARDED = {**VALID_MEMSAFETY,

@@ -406,6 +406,9 @@ class FakeExecution(types.SimpleNamespace):
     def container_dir_modes(self, *args):
         return {}
 
+    def task_limit_supported(self):
+        return True
+
     def execute_run(self, cmdline, cwd, environments, group, *, output_dir, **kwargs):
         for name, text in self.files.items():
             Path(output_dir, name).write_text(text)

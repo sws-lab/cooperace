@@ -5,8 +5,8 @@
 """Running a component under BenchExec's benchexec.runexecutor.RunExecutor
 in its container (execute_run), which is how CoOpeRace runs every component:
 stop() kills the container with every process in it, the component's
-directory is an overlay (container_dir_modes), and the memory and CPU-time
-limits are limits of the run's cgroup, for all its processes together.
+directory is an overlay (container_dir_modes), and the memory, CPU-time and
+task limits are limits of the run's cgroup, for all its processes together.
 
 The container needs user namespaces and the limits cgroups v2, which a
 process has inside the container of runexec or benchexec, as in the
@@ -25,6 +25,7 @@ import time
 from collections.abc import Mapping, Sequence
 
 from benchexec import runexecutor
+from benchexec.cgroups import Cgroups
 from benchexec.container import DIR_FULL_ACCESS, DIR_HIDDEN, DIR_OVERLAY, DIR_READ_ONLY
 
 from .processes import ComponentGroup
@@ -40,6 +41,25 @@ POLL_SECONDS = 0.1
 # component given up is a step without a verdict, and the run goes on.
 START_TIMEOUT_SECONDS = 60.0
 STOP_GRACE_SECONDS = 30.0
+
+# The cgroup controller whose file pids.max limits the number of tasks
+# (processes and threads) of a run.
+PIDS = "pids"
+
+
+def task_limit_supported() -> bool:
+    """Whether a RunExecutor can limit the tasks of a run here: whether the
+    cgroup in which BenchExec makes the runs' cgroups has the pids
+    controller with its file pids.max. RunExecutor finds that cgroup with
+    Cgroups.initialize, which finds it once and returns it again later, and
+    refuses a run whose cgroup values need a controller it lacks, so
+    execute_run limits the tasks only where this is true. False where the
+    cgroups cannot be read."""
+    try:
+        cgroups = Cgroups.initialize()
+        return PIDS in cgroups and cgroups.has_value(PIDS, "max")
+    except Exception:  # noqa: BLE001 - no limit rather than no run
+        return False
 
 
 def container_dir_modes(tool_directory: str, writable_dirs: Sequence[str] = (),
@@ -157,15 +177,20 @@ class ExecutorRun:
 
 def execute_run(command: list[str], cwd: str, environments: Mapping, group: ComponentGroup, log_file: str,
                 dir_modes: Mapping[str, str], memory: int | None = None, cpu_time: int | None = None,
-                output_dir: str | None = None, result_files_patterns: Sequence[str] = ()) -> FinishedRun:
+                output_dir: str | None = None, result_files_patterns: Sequence[str] = (),
+                tasks: int | None = None) -> FinishedRun:
     """Runs `command` in `cwd` under a RunExecutor in its container, in the
     ComponentGroup `group`, and returns its FinishedRun, not started if
     `group` was stopped first.
 
     The run's environment is what `environments` (a tool-info module's
     environment()) makes of CoOpeRace's, with HOME and TMPDIR of its own;
-    its directory modes are `dir_modes`, its limits `memory` bytes and
-    `cpu_time` seconds (None: none). Its output goes to `log_file`, and the
+    its directory modes are `dir_modes`, its limits `memory` bytes,
+    `cpu_time` seconds and `tasks` tasks, the pids.max of its cgroup, which
+    counts every thread of every process of the run (None: none; `tasks` is
+    ignored where task_limit_supported is false). A process of the run that
+    would exceed `tasks` cannot fork or start a thread (EAGAIN); nothing is
+    killed. Its output goes to `log_file`, and the
     files matching `result_files_patterns` under `cwd` are moved to
     `output_dir`.
 
@@ -182,7 +207,11 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     it."""
     if group.stopped:
         return FinishedRun(command, None, "")
-    executor = runexecutor.RunExecutor(use_namespaces=True, dir_modes=dict(dir_modes))
+    cgroup_values = {}
+    if tasks is not None and task_limit_supported():
+        cgroup_values[(PIDS, "max")] = str(tasks)
+    executor = runexecutor.RunExecutor(use_namespaces=True, dir_modes=dict(dir_modes),
+                                       additional_cgroup_subsystems=[PIDS] if cgroup_values else [])
     run = ExecutorRun(executor)
     if not group.add(run):
         return FinishedRun(command, None, "")
@@ -194,7 +223,8 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
             outcome["result"] = executor.execute_run(
                 list(command), log_file, write_header=False, workingDir=cwd,
                 environments=dict(environments), memlimit=memory, hardtimelimit=cpu_time,
-                output_dir=output_dir, result_files_patterns=list(result_files_patterns))
+                output_dir=output_dir, result_files_patterns=list(result_files_patterns),
+                cgroupValues=cgroup_values)
         except SystemExit as error:
             outcome["error"] = RunExecutorError(f"BenchExec refused to run {command[0]}: {error}")
         except BaseException as error:  # noqa: B036 - re-raised in the waiting thread

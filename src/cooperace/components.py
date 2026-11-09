@@ -16,7 +16,8 @@ each component run, "---<name> logs---", its output, "---end of <name>
 logs---", "Tool name: <name> Status: <status> Exit code: <code>", unless CoOpeRace
 stopped it "Tool name: <name> Result: <verdict>", and for a component that
 started "Tool name: <name> Measured: ..."; "Memory limit of <name>: ..." and
-"CPU-time limit of <name>: ..." before a component with a limit starts.
+"CPU-time limit of <name>: ..." before a component with a limit starts, and
+"Task limit of <name>: ..." before every component starts.
 strategy.run_strategy adds a line "CoOpeRace answer: ..." for each verdict
 and lines "CoOpeRace: ..." about wall-time limits, overridden answers and a
 missing witness, strategy.execute "CoOpeRace result from: <name>" and
@@ -32,7 +33,8 @@ an error on stderr and no verdict line.
 
 What a component is run with comes from two places. REGISTRY, here, holds
 what is CoOpeRace's own: the component's name in the conf, its tool-info
-module, its fm-tools name (its directory under tools/) and its WitnessSpec.
+module, its fm-tools name (its directory under tools/), its WitnessSpec and
+its task limit.
 tools-options.json in TOOL_DIR holds what comes from the component's fm-tools
 entry: the DOI it is installed from and the `benchexec_toolinfo_options` of
 that version, which scripts/download-tools.py writes when it installs the
@@ -94,20 +96,40 @@ DEFAULT_WITNESS = WitnessSpec("component")
 _ULTIMATE_WITNESS = WitnessSpec("run", ("--witness-dir", "{dir}"), ("witness.yml",))
 
 
+# The task limit of a component (ComponentSpec.task_limit): the most tasks,
+# processes and threads together, that its run may have at once, the pids.max
+# of its cgroup. Measured on goblint at 1 and 2 cores (pids.peak of each
+# component's cgroup, E8 reproduction): GemCutter at most 48 tasks, Dartagnan
+# 12, Deagle 8, Goblint 7, IKOS-ConC 5; a JVM's own threads grow with the
+# cores it sees, to a few hundred on a large machine. sv-sanitizers runs the
+# task's program, whose threads count as its tasks: some programs create
+# threads without bound (pthread-lp64-twins/sssc12-2-lp64 reached 13,540
+# tasks in one run of E7), pthread-lit/sssc12 reached 402, and
+# goblint-regression/28-race_reach_84, which creates 30,000 short-lived
+# threads, 165. The limits of the components that run at the same time add up
+# to at most 4096 tasks in every phase of conf/svcomp27.json, so that within a
+# run limited to 5000 tasks (README.md, "Running CoOpeRace by hand")
+# CoOpeRace itself keeps 900 even when every component reaches its limit.
+TASK_LIMIT = 1024
+PROGRAM_TASK_LIMIT = 2048
+
+
 @dataclass(frozen=True)
 class ComponentSpec:
     """A component CoOpeRace can run. `name` is its name in the conf, `module`
     the name of its BenchExec tool-info module, imported when the component is
     first run, `directory` its name in fm-tools, which is its directory under
     tools/ (where download-tools.py unpacks it) and its key in
-    tools-options.json, and `witness` the WitnessSpec of its witness files.
-    The options it is run with are those of its ComponentVersion, before
-    those of `witness`."""
+    tools-options.json, `witness` the WitnessSpec of its witness files, and
+    `task_limit` the most tasks its run may have at once (TASK_LIMIT), or
+    None for no limit. The options it is run with are those of its
+    ComponentVersion, before those of `witness`."""
 
     name: str
     module: str
     directory: str
     witness: WitnessSpec = DEFAULT_WITNESS
+    task_limit: int | None = TASK_LIMIT
 
     def tool(self) -> BaseTool2:
         """A new object of the tool-info module's class Tool. The module is
@@ -155,9 +177,10 @@ REGISTRY = {spec.name: spec for spec in (
                   witness=_ULTIMATE_WITNESS),
     ComponentSpec("nacpa", "benchexec.tools.nacpa", "nacpa"),
     ComponentSpec("CPAchecker", "benchexec.tools.cpachecker", "cpachecker"),
-    #sv-sanitizers.py writes witness.yml into its working directory, its own directory
+    #sv-sanitizers.py writes witness.yml into its working directory, its own directory.
+    #It runs the task's program, whose threads count as its tasks (TASK_LIMIT).
     ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers",
-                  witness=WitnessSpec("component", (), ("witness.yml",))),
+                  witness=WitnessSpec("component", (), ("witness.yml",)), task_limit=PROGRAM_TASK_LIMIT),
     #Version 2.0 writes only error-witness.graphml, which never counts (witnesses.py)
     ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ())),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
@@ -519,7 +542,7 @@ class ComponentRunner:
         not matter. The block is printed under `actor.name()`.
 
         It runs as `command` says, with execution.execute_run and the limits
-        of announce_limits, with its output in `witness_dir`.log beside
+        of announce_limits and announce_task_limit, with its output in `witness_dir`.log beside
         `witness_dir`, the directory made for this run. Its witness files end
         up in `witness_dir`: a component whose WitnessSpec writes there gets
         it with full access; one that writes under its own directory writes
@@ -532,6 +555,7 @@ class ComponentRunner:
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
         command = self.command(actor, spec, witness_dir)
         memory, cpu = announce_limits(step)
+        tasks = announce_task_limit(step.component, spec.task_limit, execution.task_limit_supported)
         tool_result = execution.execute_run(
             command.cmdline, command.cwd, command.environments, group,
             log_file=witness_dir + ".log",
@@ -539,7 +563,7 @@ class ComponentRunner:
                                                     [] if spec.witness.directory == "component" else [witness_dir],
                                                     [self.file, self.property_file]),
             memory=memory, cpu_time=cpu, output_dir=witness_dir,
-            result_files_patterns=result_files_patterns(spec.witness))
+            result_files_patterns=result_files_patterns(spec.witness), tasks=tasks)
         witness_files = witness_files_in(spec.witness, witness_dir)
 
         if group.stopped:
@@ -646,6 +670,25 @@ def announce_limits(step: Step) -> tuple[int | None, int | None]:
         with PRINT_LOCK:
             print("\n".join(lines), flush=True)
     return memory, cpu
+
+
+def announce_task_limit(component: str, limit: int | None, supported) -> int | None:
+    """The task limit `limit` of `component` (ComponentSpec.task_limit) if
+    the function `supported` (execution.task_limit_supported) says that
+    runs' tasks can be limited, else None. Prints the limit as "Task limit
+    of <component>: <n> tasks", and a limit that cannot be applied as "Task
+    limit of <component>: none (no pids cgroup controller found for <n>
+    tasks)"; prints nothing for a component without a limit."""
+    if limit is None:
+        return None
+    applied = limit if supported() else None
+    with PRINT_LOCK:
+        if applied is None:
+            print(f"Task limit of {component}: none (no pids cgroup controller found for {limit} tasks)",
+                  flush=True)
+        else:
+            print(f"Task limit of {component}: {limit} tasks", flush=True)
+    return applied
 
 
 def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subprocess.CompletedProcess,

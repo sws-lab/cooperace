@@ -6,6 +6,7 @@
 container_works with a fake RunExecutor (the stopping and the result), and
 cli.run end to end with stub components in BenchExec's container (the
 fixture `container`)."""
+import dataclasses
 import os
 import shlex
 import shutil
@@ -45,10 +46,11 @@ class FakeExecutor:
 
     instances = []
 
-    def __init__(self, use_namespaces=True, dir_modes=None, output="out\n", result=None, block=False,
-                 start_delay=0.0):
+    def __init__(self, use_namespaces=True, dir_modes=None, additional_cgroup_subsystems=(), output="out\n",
+                 result=None, block=False, start_delay=0.0):
         self.use_namespaces = use_namespaces
         self.dir_modes = dir_modes
+        self.additional_cgroup_subsystems = list(additional_cgroup_subsystems)
         self.output = output
         self.result = result if result is not None else {
             "exitcode": butil.ProcessExitCode.create(value=0), "cputime": 1.5, "walltime": 2.0, "memory": 1000}
@@ -97,9 +99,10 @@ def fake_executor(monkeypatch):
         settings.update(kwargs)
 
     def make(**kwargs):
-        return FakeExecutor(**kwargs, **settings)
+        return FakeExecutor(**kwargs, **{key: value for key, value in settings.items() if key != "pids"})
 
     monkeypatch.setattr(execution.runexecutor, "RunExecutor", make)
+    monkeypatch.setattr(execution, "task_limit_supported", lambda: settings.get("pids", True))
     return configure
 
 
@@ -124,6 +127,31 @@ def test_execute_run_returns_the_output_and_the_measurements(fake_executor, tmp_
     assert (FakeExecutor.instances[0].use_namespaces, FakeExecutor.instances[0].dir_modes) == (
         True, {"/": DIR_READ_ONLY})
     assert group.processes == set()
+
+
+def test_execute_run_sets_no_task_limit_without_one(fake_executor, tmp_path):
+    run_fake(tmp_path, ComponentGroup())
+
+    assert FakeExecutor.instances[0].additional_cgroup_subsystems == []
+    assert FakeExecutor.instances[0].kwargs["cgroupValues"] == {}
+
+
+def test_execute_run_limits_the_tasks_with_pids_max(fake_executor, tmp_path):
+    run_fake(tmp_path, ComponentGroup(), tasks=1024)
+
+    assert FakeExecutor.instances[0].additional_cgroup_subsystems == ["pids"]
+    assert FakeExecutor.instances[0].kwargs["cgroupValues"] == {("pids", "max"): "1024"}
+
+
+def test_execute_run_ignores_the_task_limit_without_the_pids_controller(fake_executor, tmp_path):
+    # RunExecutor would refuse a run whose cgroup values need a controller it lacks.
+    fake_executor(pids=False)
+
+    result = run_fake(tmp_path, ComponentGroup(), tasks=1024)
+
+    assert result.returncode == 0
+    assert FakeExecutor.instances[0].additional_cgroup_subsystems == []
+    assert FakeExecutor.instances[0].kwargs["cgroupValues"] == {}
 
 
 def test_execute_run_gives_a_signal_as_a_negative_returncode(fake_executor, tmp_path):
@@ -309,6 +337,40 @@ def test_a_memory_limit_gives_out_of_memory(tmp_path, run_dir, capsys):
     assert verdict == "true"
     assert f"Memory limit of Stub A: {limit} bytes" in lines
     assert "Tool name: Stub A Status: OUT OF MEMORY Exit code: signal 9" in lines
+
+
+# Starts threads until one cannot start, at most 1000, and prints how many started.
+THREAD_BOMB_STUB = (f"exec {shlex.quote(sys.executable)} -c '"
+                    "import os, threading\n"
+                    "event, started = threading.Event(), 0\n"
+                    "try:\n"
+                    "    for _ in range(1000):\n"
+                    "        threading.Thread(target=event.wait, daemon=True).start()\n"
+                    "        started += 1\n"
+                    "except RuntimeError:\n"
+                    "    pass\n"
+                    "print(\"threads started:\", started, flush=True)\n"
+                    "os._exit(0)'\n")
+
+
+def test_a_task_limit_keeps_a_thread_bomb_to_its_component(tmp_path, run_dir, capsys):
+    if not execution.task_limit_supported():
+        pytest.skip("needs the pids cgroup controller")
+    runner = ComponentRunner("/dev/null", "/dev/null", "ILP32")
+    register_stub(runner, "Stub Bomb", make_script(tmp_path / "stubs" / "bomb", THREAD_BOMB_STUB))
+    register_stub(runner, "Stub B", make_script(tmp_path / "stubs" / "b", 'sleep 1\necho "STUB-STATUS: true"\n'))
+    runner.registry["Stub Bomb"] = dataclasses.replace(runner.registry["Stub Bomb"], task_limit=40)
+    run = Run(runner, data_race_conf(side_by_side("Stub Bomb", "Stub B")))
+
+    verdict = run.execute()
+    lines = capsys.readouterr().out.splitlines()
+
+    assert verdict == "true"
+    assert "Task limit of Stub Bomb: 40 tasks" in lines
+    started = [int(line.split()[-1]) for line in lines if line.startswith("threads started: ")]
+    # The process's main thread and the container's init process are tasks of the run too.
+    assert len(started) == 1 and 20 <= started[0] < 40, lines
+    assert "Tool name: Stub B Status: true Exit code: 0" in lines
 
 
 def test_a_parallel_loser_is_stopped_with_a_process_in_a_session_of_its_own(tmp_path, run_dir, capsys):

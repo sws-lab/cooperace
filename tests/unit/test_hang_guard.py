@@ -45,7 +45,7 @@ NEVER = threading.Event()
 class FakeExecutor:
     """Stands in for benchexec.runexecutor.RunExecutor (see the module)."""
 
-    def __init__(self, use_namespaces=True, dir_modes=None):
+    def __init__(self, use_namespaces=True, dir_modes=None, additional_cgroup_subsystems=()):
         self.SUB_PROCESS_PIDS_LOCK = threading.Lock()
         self.SUB_PROCESS_PIDS = set()
         self.process = None
@@ -57,7 +57,8 @@ class FakeExecutor:
                 self.process.kill()
 
     def execute_run(self, args, output_filename, write_header=False, workingDir=None, environments=None,
-                    memlimit=None, hardtimelimit=None, output_dir=None, result_files_patterns=()):
+                    memlimit=None, hardtimelimit=None, output_dir=None, result_files_patterns=(),
+                    cgroupValues=None):
         with open(args[0]) as script:
             mode = script.read().splitlines()[1]
         if mode == "# hang-start":
@@ -87,6 +88,7 @@ def fake(monkeypatch, tmp_path):
     """FakeExecutor in place of RunExecutor, guard times of half a second,
     and the working directory of the run, where witnesses are delivered."""
     monkeypatch.setattr(execution.runexecutor, "RunExecutor", FakeExecutor)
+    monkeypatch.setattr(execution, "task_limit_supported", lambda: True)
     monkeypatch.setattr(execution, "START_TIMEOUT_SECONDS", 0.5)
     monkeypatch.setattr(execution, "STOP_GRACE_SECONDS", 0.5)
     monkeypatch.setattr(strategy, "JOIN_SECONDS", 5.0)

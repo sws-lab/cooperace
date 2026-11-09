@@ -19,7 +19,9 @@ from src.cooperace import config
 from src.cooperace.components import (
     DEFAULT_WITNESS,
     OPTIONS_FILE,
+    PROGRAM_TASK_LIMIT,
     REGISTRY,
+    TASK_LIMIT,
     ComponentSpec,
     ComponentVersion,
     OptionsFileError,
@@ -59,6 +61,13 @@ def test_the_registry_has_every_component_under_its_own_name():
 
 def test_every_component_has_its_directory():
     assert {name: spec.directory for name, spec in REGISTRY.items()} == DIRECTORIES
+
+
+def test_every_component_has_a_task_limit_and_sv_sanitizers_that_of_a_program():
+    # sv-sanitizers runs the task's program, whose threads count as its tasks.
+    assert {name: spec.task_limit for name, spec in REGISTRY.items()} == {
+        name: PROGRAM_TASK_LIMIT if name == "sv-sanitizers" else TASK_LIMIT for name in REGISTRY}
+    assert (TASK_LIMIT, PROGRAM_TASK_LIMIT) == (1024, 2048)
 
 
 def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():

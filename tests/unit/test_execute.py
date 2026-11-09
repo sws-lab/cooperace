@@ -128,19 +128,21 @@ def test_sequence_prints_the_protocol_lines_and_returns_the_first_verdict(
 
     assert verdict == "true"
     start = lines.index("---Stub A logs---")
-    assert lines[start:start + 10] == [
+    assert lines[start - 1] == "Task limit of Stub A: 1024 tasks"
+    assert lines[start:start + 11] == [
         "---Stub A logs---",
         "log of A",
         "STUB-STATUS: unknown",
         "---end of Stub A logs---",
         "Tool name: Stub A Status: unknown Exit code: 0",
         "Tool name: Stub A Result: unknown",
+        "Task limit of Stub B: 1024 tasks",
         "---Stub B logs---",
         "log of B",
         "STUB-STATUS: true",
         "---end of Stub B logs---",
     ]
-    assert lines[start + 10:] == [
+    assert lines[start + 11:] == [
         "Tool name: Stub B Status: true Exit code: 0",
         "Tool name: Stub B Result: true",
         "CoOpeRace answer: Stub B true, bracket 2",

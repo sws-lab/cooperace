@@ -22,6 +22,27 @@ def goblint(memory=None, cpu=None):
     return Step("Goblint", "all", memory_limit=memory, cpu_time_limit=cpu)
 
 
+# --- announce_task_limit ------------------------------------------------------
+
+def test_a_task_limit_is_returned_and_printed(capsys):
+    assert components.announce_task_limit("Goblint", 1024, lambda: True) == 1024
+    assert capsys.readouterr().out.splitlines() == ["Task limit of Goblint: 1024 tasks"]
+
+
+def test_a_task_limit_without_the_pids_controller_is_none(capsys):
+    assert components.announce_task_limit("Goblint", 1024, lambda: False) is None
+    assert capsys.readouterr().out.splitlines() == [
+        "Task limit of Goblint: none (no pids cgroup controller found for 1024 tasks)"]
+
+
+def test_no_task_limit_prints_nothing(capsys):
+    def never():
+        raise AssertionError("asked for the controller without a limit")
+
+    assert components.announce_task_limit("Goblint", None, never) is None
+    assert capsys.readouterr().out == ""
+
+
 # --- announce_limits ----------------------------------------------------------
 
 def test_no_limits_print_nothing(capsys):
