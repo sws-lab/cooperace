@@ -432,3 +432,26 @@ def test_the_threaded_run_prints_what_running_every_tool_to_the_end_prints(seed,
         assert len(runner.started) == len(set(runner.started))
         capsys.readouterr()
 
+
+
+def test_a_component_whose_thread_cannot_start_gives_no_verdict_and_the_run_goes_on(capsys, monkeypatch):
+    """A machine out of tasks (a program that sv-sanitizers runs may create threads
+    until the limit) makes threading.Thread.start raise RuntimeError. The component
+    then gives no verdict and the others decide; CoOpeRace still prints a result."""
+    real = threading.Thread
+
+    class Thread(real):
+        def start(self):
+            if self.name == "CoOpeRace run of Dartagnan":
+                raise RuntimeError("can't start new thread")
+            super().start()
+
+    monkeypatch.setattr(strategy.threading, "Thread", Thread)
+    result, runner = run(DATA_RACE, "no-data-race",
+                         sv_sanitizers=Script(0.05), Goblint=Script(0.1), Dartagnan=Script(0.05, TRUE))
+    lines = printed(capsys)
+
+    assert result == "unknown"
+    assert runner.started == ["sv-sanitizers", "Goblint"]
+    assert "CoOpeRace: cannot start Dartagnan (can't start new thread): it gives no verdict" in lines
+    assert runner.calls == ["prepare", ("deliver", []), "cleanup"]

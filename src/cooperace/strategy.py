@@ -189,8 +189,16 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
             groups[tool] = ComponentGroup(group)
             thread = threading.Thread(target=run, args=(tool, groups[tool]), name=f"CoOpeRace run of {tool}",
                                       daemon=True)
+            try:
+                thread.start()
+            except RuntimeError as error:
+                #"can't start new thread": the machine is out of tasks (a program that sv-sanitizers
+                #runs can create threads until the limit). The component ends without a verdict,
+                #rather than CoOpeRace ending without a verdict line.
+                say(f"CoOpeRace: cannot start {tool} ({error}): it gives no verdict")
+                events.put((tool, NO_OUTCOME, None))
+                continue
             threads.append(thread)
-            thread.start()
 
     budget = root.run_cpu_time_budget
 

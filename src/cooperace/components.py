@@ -449,8 +449,13 @@ class ComponentRunner:
                     outcome["error"] = error
 
             thread = threading.Thread(target=probe, name=f"version probe of {name}", daemon=True)
-            thread.start()
-            thread.join(VERSION_PROBE_SECONDS)
+            try:
+                thread.start()
+            except RuntimeError as error:
+                #The machine is out of tasks: go on without the version, as after a failed probe
+                outcome["error"] = error
+            else:
+                thread.join(VERSION_PROBE_SECONDS)
             if outcome.get("version"):
                 continue
             reason = (f"{type(outcome['error']).__name__}: {outcome['error']}" if "error" in outcome

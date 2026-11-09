@@ -129,3 +129,22 @@ def test_components_that_are_not_ultimate_are_not_probed(runner, capsys):
     runner.probe_versions(["Plain"])
 
     assert capsys.readouterr().err == ""
+
+
+class Unstartable(threading.Thread):
+    """A thread that cannot start, as on a machine out of tasks."""
+
+    def start(self):
+        raise RuntimeError("can't start new thread")
+
+
+def test_a_probe_thread_that_cannot_start_gives_the_default_command_line(runner, monkeypatch, capsys):
+    monkeypatch.setattr(components.threading, "Thread", Unstartable)
+
+    runner.probe_versions(["Ok"])
+
+    executable, line = cmdline(runner, "Ok")
+    assert runner.tool_of("Ok").version(executable) == components.UNKNOWN_VERSION
+    assert line == [executable, "--spec", "unreach-call.prp", "--file", "task.c", "--architecture", "32bit"]
+    assert ("CoOpeRace: the version of Ok could not be determined (RuntimeError: can't start new thread): "
+            "going on without it" in capsys.readouterr().err.splitlines())
