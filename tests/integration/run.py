@@ -119,7 +119,7 @@ TOOL_DIRS = {
     "ULTIMATE Automizer": "uautomizer", "ULTIMATE GemCutter": "ugemcutter",
     "ULTIMATE Taipan": "utaipan", "nacpa": "nacpa",
     "CPAchecker": "cpachecker", "sv-sanitizers": "sv-sanitizers",
-    "RacerF": "racerf", "iekke": "iekke",
+    "RacerF": "racerf", "iekke": "iekke", "IKOS-ConC": "ikos-conc",
 }
 
 # Witness formats.  A format names the file a verifier writes (collected from

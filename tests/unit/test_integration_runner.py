@@ -580,3 +580,12 @@ def test_a_stage_with_jobs_runs_its_lanes_at_once_on_disjoint_cores(tmp_path, mo
     by_name = {cmd[cmd.index("--name") + 1]: (cmd[cmd.index("--allowedCores") + 1], cmd[cmd.index("-N") + 1])
                for cmd in started}
     assert by_name == {"b": ("0,1,2,3,4,5", "3"), "a": ("6,7", "1"), "c": ("6,7", "1")}
+
+
+def test_the_tool_directories_of_the_suite_are_those_of_the_registry():
+    """run.py finds a conf's components under tools/ by TOOL_DIRS; a component
+    of components.REGISTRY that TOOL_DIRS lacks counts as not installed, and
+    every conf naming it (conf/svcomp27.json names IKOS-ConC) is not run."""
+    from src.cooperace.components import REGISTRY
+
+    assert {name: spec.directory for name, spec in REGISTRY.items()} == run.TOOL_DIRS
