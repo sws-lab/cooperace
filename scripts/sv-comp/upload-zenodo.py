@@ -9,14 +9,18 @@ optionally publish it.
 
 The archive goes into an unpublished draft as the file cooperace.zip, whatever
 the local file is called (--upload-name changes that name).  --record-id names
-that draft or a
-published version of the record.  For a published version the script uses the
-draft of the record's next version if there is one (made in the Zenodo UI with
-"New version", or by an earlier run); if there is none, --new-version creates
-it with the deposit API's newversion action, and without --new-version the
-script stops.  It never creates a second draft.  A published version opened
-for editing is refused: the script changes files only in a draft that has
-never been published.
+that draft or a published version of the record.  For a published version the
+script uses the draft of the record's next version if there is one (made in
+the Zenodo UI with "New version", or by an earlier run); if there is none,
+--new-version creates it with the deposit API's newversion action, and without
+--new-version the script stops.  It never creates a second draft.  A published
+version opened for editing is refused: the script changes files only in a
+draft that has never been published.
+
+An archive that the latest published version already holds (the upload's name
+with the local MD5) is refused before a draft is created or changed, so that
+running again after a publish whose reply was lost does not publish the same
+archive a second time.
 
 fm-tools accepts a Zenodo record with exactly one file, and Zenodo's
 newversion action copies the files of the latest published version into the
@@ -37,25 +41,29 @@ hold exactly one file, the archive under the upload's name; otherwise the
 script prints what it found and exits 1.
 
 The script prints the draft's record ID, the DOI Zenodo reserved for it and
-its web page, so that the draft can be inspected before it is published.
---publish publishes the draft once both checks have passed and prints the DOI
-and the page of the record.  A published version cannot be withdrawn, so the
-script publishes only when asked to; run again with --publish after checking
-the draft, it finds the archive already there and does not send it again.
+its web page, so that the draft can be inspected before it is published, and
+the command that publishes it.  --publish publishes the draft once both checks
+have passed, then checks that the published record holds exactly that one
+file and prints its DOI and page.  A published version cannot be withdrawn,
+so the script publishes only when asked to.  If the publish request fails
+without a clear refusal from Zenodo, whether the draft was published is
+unknown: check the record's page before running again.
 
-Usage examples:
-    # a draft of the next version of the published record 123456, holding
-    # dist/E8-default-42d6c9a.zip as cooperace.zip
-    python scripts/sv-comp/upload-zenodo.py --record-id 123456 --new-version \
-        --file dist/E8-default-42d6c9a.zip
-    # after checking that draft on Zenodo, publish it
-    python scripts/sv-comp/upload-zenodo.py --record-id 123456 --publish \
-        --file dist/E8-default-42d6c9a.zip
+The usual upload takes two runs.  The first makes the draft of the next
+version of the published record 123456 and uploads the archive to it as
+cooperace.zip; the second, after the draft has been checked on Zenodo,
+publishes that draft, named by the ID the first run printed:
+    python scripts/sv-comp/upload-zenodo.py --record-id 123456 --new-version --file dist/E8-default-42d6c9a.zip
+    python scripts/sv-comp/upload-zenodo.py --record-id <draft ID> --publish --file dist/E8-default-42d6c9a.zip
+The second run finds the archive in the draft, sends nothing and leaves the
+draft's metadata as it is.
 
 The draft's metadata (title, creators, version, license, ...) is replaced by the
 contents of --metadata before the file is uploaded; the default is
 zenodo-metadata.json next to this script.  Pass --no-metadata to leave the
-draft's metadata as it is.
+draft's metadata as it is.  When the draft already holds the archive and
+nothing is uploaded, the metadata is not touched either (--metadata-only sets
+it).
 
 Configuration defaults to environment variables for the token so you can export
 ZENODO_TOKEN once and run the script without flags. The record ID must be
@@ -77,6 +85,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import sys
 import time
 import zipfile
@@ -196,12 +205,29 @@ def fetch_json(session: requests.Session, url: str, params: dict[str, Any] | Non
 def is_new_draft(deposition: dict[str, Any]) -> bool:
     """Whether the deposition is an unpublished draft: a new record or a new
     version of one, not a published version opened for editing."""
-    return deposition.get("state") in EDITABLE_STATES and not deposition.get("submitted")
+    return deposition.get("state") in EDITABLE_STATES and deposition.get("submitted") is False
+
+
+def check_draft_of(draft: dict[str, Any], published: dict[str, Any], source: str) -> dict[str, Any]:
+    """The draft, if it is an unpublished draft of a version of the same record
+    as the published deposition; else ZenodoError, naming where it came from."""
+    if not is_new_draft(draft):
+        raise ZenodoError(
+            f"{source} names deposition {draft.get('id')}, which is not an unpublished draft "
+            f"(state {draft.get('state')}, submitted {draft.get('submitted')})."
+        )
+    if str(draft.get("conceptrecid")) != str(published.get("conceptrecid")):
+        raise ZenodoError(
+            f"{source} names deposition {draft.get('id')} of the concept {draft.get('conceptrecid')}, "
+            f"not of record {published.get('id')}'s concept {published.get('conceptrecid')}."
+        )
+    return draft
 
 
 def concept_depositions(session: requests.Session, base_url: str, concept: Any) -> list[dict[str, Any]]:
     """The depositions of every version of the record whose concept is
-    `concept`, drafts included, as the deposit API's search finds them."""
+    `concept`, drafts included, as the deposit API's search finds them.  The
+    search index can lag behind: the state and files it shows can be old."""
     found = fetch_json(
         session,
         f"{base_url}/deposit/depositions",
@@ -216,42 +242,63 @@ def existing_draft(session: requests.Session, base_url: str, published: dict[str
     links.latest_draft of a published version named that draft on the old
     Zenodo; on the current one it names the published version itself, so the
     depositions of the record's concept are searched as well.  The search
-    index can lag behind, so the draft it finds is fetched again by its ID."""
+    index can lag behind, so the draft it finds is fetched again by its ID and
+    checked again."""
     latest_draft = published.get("links", {}).get("latest_draft")
     if latest_draft:
         candidate = fetch_json(session, latest_draft)
-        if is_new_draft(candidate):
-            return candidate
+        if candidate.get("id") != published.get("id") and is_new_draft(candidate):
+            return check_draft_of(candidate, published, f"links.latest_draft of record {published.get('id')}")
     concept = published.get("conceptrecid")
     if not concept:
         return None
-    drafts = [d for d in concept_depositions(session, base_url, concept) if is_new_draft(d)]
+    # A deposition just published can still show as a draft in the search.
+    drafts = [
+        d for d in concept_depositions(session, base_url, concept) if is_new_draft(d) and d.get("id") != published["id"]
+    ]
     if len(drafts) > 1:
         ids = ", ".join(str(d.get("id")) for d in drafts)
         raise ZenodoError(f"The record {published.get('id')} has several drafts of a new version ({ids}).")
     if not drafts:
         return None
-    return fetch_json(session, f"{base_url}/deposit/depositions/{drafts[0]['id']}")
+    fresh = fetch_json(session, f"{base_url}/deposit/depositions/{drafts[0]['id']}")
+    try:
+        return check_draft_of(fresh, published, "The deposit search")
+    except ZenodoError as err:
+        raise ZenodoError(
+            f"{err} The search index is stale. Run again in a minute, or pass the draft's ID with --record-id."
+        ) from None
 
 
-def ensure_draft(session: requests.Session, base_url: str, record_id: int, new_version: bool = False) -> dict[str, Any]:
+def ensure_draft(
+    session: requests.Session,
+    base_url: str,
+    record_id: int,
+    new_version: bool = False,
+    archive: tuple[str, str] | None = None,
+) -> dict[str, Any]:
     """The draft to upload to: the deposition record_id if it is a draft, else
     the draft of a new version of that published record, which is created
-    with the newversion action if there is none and new_version is set."""
+    with the newversion action if there is none and new_version is set.
+    `archive`, the upload's name and the local MD5, is refused before a draft
+    is created if the latest published version already holds it."""
     deposition = fetch_json(session, f"{base_url}/deposit/depositions/{record_id}")
     if is_new_draft(deposition):
         return deposition
     if deposition.get("state") in EDITABLE_STATES:
         raise ZenodoError(
-            f"Record {record_id} is a published version opened for editing (state {deposition.get('state')}); "
-            "the script changes files only in a draft that has never been published. Discard or publish that "
-            "edit in the Zenodo UI, then upload to a new version (--new-version)."
+            f"Record {record_id} is in state {deposition.get('state')} with submitted "
+            f"{deposition.get('submitted')}: a published version opened for editing, or a deposition the script "
+            "cannot tell from one. The script changes files only in a draft that has never been published. "
+            "Discard or publish that edit in the Zenodo UI, then upload to a new version (--new-version)."
         )
 
     draft = existing_draft(session, base_url, deposition)
     if draft:
         print(f"Using the existing draft {draft['id']} of a new version of record {record_id}.")
         return draft
+    if archive:
+        refuse_if_published(latest_published(session, base_url, deposition), *archive)
     if not new_version:
         raise ZenodoError(
             f"Record {record_id} is published and has no draft of a new version. Pass --new-version to "
@@ -269,9 +316,7 @@ def ensure_draft(session: requests.Session, base_url: str, record_id: int, new_v
     latest_draft = response.json().get("links", {}).get("latest_draft")
     if not latest_draft:
         raise ZenodoError(f"POST {url} returned no links.latest_draft.")
-    draft = fetch_json(session, latest_draft)
-    if not is_new_draft(draft):
-        raise ZenodoError(f"links.latest_draft of the new version is not a draft. State: {draft.get('state')}")
+    draft = check_draft_of(fetch_json(session, latest_draft), deposition, "The newversion action's latest_draft")
     print(f"Created the draft {draft['id']} of a new version of record {record_id}.")
     return draft
 
@@ -326,19 +371,41 @@ def draft_files(session: requests.Session, base_url: str, draft_id: int) -> list
     return fetch_json(session, f"{base_url}/deposit/depositions/{draft_id}/files")
 
 
-def latest_published(session: requests.Session, base_url: str, draft: dict[str, Any]) -> dict[str, Any] | None:
-    """The latest published version of the draft's record, from the records
-    API, or None if no version is published; it is the version newversion
-    copies files from.  The records API's versions/latest of any published
-    version redirects to it.  (The concept's own record ID does not always:
-    on zenodo.org it can answer 410.)"""
-    concept = draft.get("conceptrecid")
+def latest_published(session: requests.Session, base_url: str, deposition: dict[str, Any]) -> dict[str, Any] | None:
+    """The latest published version of the deposition's record, or None if no
+    version is published; it is the version newversion copies files from.
+
+    The records API's versions/latest of any published version redirects to
+    it.  (The concept's own record ID does not always: on zenodo.org it can
+    answer 410.)  If the records API fails, the files of the newest published
+    version the deposit API knows are taken instead."""
+    concept = deposition.get("conceptrecid")
     if not concept:
         return None
-    published = [d["id"] for d in concept_depositions(session, base_url, concept) if d.get("state") == "done"]
+    published = {d["id"] for d in concept_depositions(session, base_url, concept) if d.get("state") == "done"}
+    if deposition.get("state") == "done":
+        published.add(deposition["id"])
     if not published:
         return None
-    return fetch_json(session, f"{base_url}/records/{max(published)}/versions/latest")
+    newest = max(published)
+    try:
+        return fetch_json(session, f"{base_url}/records/{newest}/versions/latest")
+    except (ZenodoError, requests.RequestException) as err:
+        print(
+            f"The records API gave no latest version ({str(err)[:200]}); "
+            f"taking the files of version {newest} from the deposit API instead."
+        )
+        return {"id": newest, "files": draft_files(session, base_url, newest)}
+
+
+def refuse_if_published(published: dict[str, Any] | None, filename: str, local_md5: str) -> None:
+    """ZenodoError if the published version holds the file `filename` with the local MD5."""
+    for entry in (published or {}).get("files") or []:
+        if file_name(entry) == filename and normalize_checksum(entry.get("checksum")) == local_md5:
+            raise ZenodoError(
+                f"This archive is already published as version {published.get('id')} of the record "
+                f"('{filename}', md5 {local_md5}); nothing was created, changed or uploaded."
+            )
 
 
 def sort_files(
@@ -348,8 +415,9 @@ def sort_files(
     local_md5: str,
 ) -> tuple[dict[str, Any] | None, list[tuple[dict[str, Any], str]], list[dict[str, Any]]]:
     """Sort the draft's files into (kept, deleted, foreign): the file `filename`
-    (the upload's name) with the local MD5, which need not be uploaded again; the files to delete
-    with the reason; and the files the script does not know, which stop it."""
+    (the upload's name) with the local MD5, which need not be uploaded again;
+    the files to delete with the reason; and the files the script does not
+    know, which stop it."""
     inherited = {
         (file_name(entry), normalize_checksum(entry.get("checksum"))) for entry in (published or {}).get("files") or []
     }
@@ -372,7 +440,10 @@ def sort_files(
 def delete_file(session: requests.Session, base_url: str, draft_id: int, entry: dict[str, Any], reason: str) -> None:
     delete_url = f"{base_url}/deposit/depositions/{draft_id}/files/{entry.get('id')}"
     response = session.delete(delete_url, timeout=60)
-    if response.status_code not in {204, 404}:
+    if response.status_code == 404:
+        print(f"{describe_file(entry)} ({reason}) was already gone from the draft.")
+        return
+    if response.status_code != 204:
         raise ZenodoError(f"DELETE {delete_url} failed with {response.status_code}: {response.text}")
     print(f"Deleted {describe_file(entry)} from the draft: {reason}.")
 
@@ -501,9 +572,9 @@ def reported_checksum(uploaded: dict[str, Any], files: list[dict[str, Any]], fil
     return ""
 
 
-def single_file_problem(files: list[dict[str, Any]], filename: str, local_md5: str) -> str | None:
-    """None if the draft's files are exactly one file `filename` with the
-    local MD5, else what they are instead."""
+def single_file_problem(files: list[dict[str, Any]], filename: str, local_md5: str, holder: str) -> str | None:
+    """None if `files`, those of `holder`, are exactly one file `filename`
+    with the local MD5, else what they are instead."""
     if (
         len(files) == 1
         and file_name(files[0]) == filename
@@ -512,19 +583,45 @@ def single_file_problem(files: list[dict[str, Any]], filename: str, local_md5: s
         return None
     listed = "; ".join(describe_file(entry) for entry in files) or "none"
     return (
-        f"the draft holds {len(files)} files ({listed}), but fm-tools accepts a record with exactly one, "
+        f"{holder} holds {len(files)} files ({listed}), but fm-tools accepts a record with exactly one, "
         f"here '{filename}' with md5 {local_md5}"
     )
 
 
+class PublishOutcomeUnknown(ZenodoError):
+    """The publish request failed in a way that does not tell whether Zenodo
+    published the draft."""
+
+
 def publish(session: requests.Session, base_url: str, draft_id: int) -> dict[str, Any]:
     """Publish the draft with the deposit API's publish action; Zenodo's reply
-    is the published record."""
+    is the published record.  A refusal (4xx) raises ZenodoError; a server
+    error or a lost connection, after which the draft may have been published,
+    PublishOutcomeUnknown."""
     url = f"{base_url}/deposit/depositions/{draft_id}/actions/publish"
-    response = session.post(url, timeout=300)
-    if response.status_code >= 400:
+    try:
+        response = session.post(url, timeout=300)
+        record = response.json() if response.status_code < 400 else None
+    except requests.RequestException as err:
+        raise PublishOutcomeUnknown(f"POST {url} failed: {err}") from None
+    if response.status_code >= 500:
+        raise PublishOutcomeUnknown(f"POST {url} failed with {response.status_code}: {response.text}")
+    if record is None:
         raise ZenodoError(f"POST {url} failed with {response.status_code}: {response.text}")
-    return response.json()
+    return record
+
+
+def published_files(session: requests.Session, base_url: str, record_id: int) -> list[dict[str, Any]]:
+    """The files of the published record as the records API shows them,
+    asked up to three times."""
+    for attempt in range(3):
+        try:
+            return fetch_json(session, f"{base_url}/records/{record_id}").get("files") or []
+        except (ZenodoError, requests.RequestException):
+            if attempt == 2:
+                raise
+            time.sleep(2)
+    return []  # pragma: no cover - not reached
 
 
 def archive_version(archive_path: Path) -> str | None:
@@ -535,6 +632,16 @@ def archive_version(archive_path: Path) -> str | None:
             return archive.read("cooperace/VERSION").decode().strip() or None
     except (OSError, KeyError, zipfile.BadZipFile):
         return None
+
+
+def publish_command(draft_id: int, args: argparse.Namespace) -> str:
+    """The command that publishes the draft, as the second of the two runs."""
+    command = ["python", sys.argv[0], "--record-id", str(draft_id), "--publish", "--file", str(args.file)]
+    if args.upload_name != UPLOAD_NAME:
+        command += ["--upload-name", args.upload_name]
+    if args.sandbox:
+        command.append("--sandbox")
+    return shlex.join(command)
 
 
 def main() -> None:
@@ -558,33 +665,37 @@ def main() -> None:
 
     version = args.version or archive_version(archive_path)
     local_md5 = "" if args.metadata_only else md5_of(archive_path)
+    archive = None if args.metadata_only else (upload_name, local_md5)
     base_url = SANDBOX_API if args.sandbox else PRODUCTION_API
     session = zenodo_session(args.token)
 
     try:
-        draft = ensure_draft(session, base_url, int(args.record_id), args.new_version)
+        draft = ensure_draft(session, base_url, int(args.record_id), args.new_version, archive)
         print(describe_draft(draft), flush=True)
-        if not args.metadata_only:
-            files = draft_files(session, base_url, draft["id"])
-            published = latest_published(session, base_url, draft) if files else None
-            kept, deleted, foreign = sort_files(files, published, upload_name, local_md5)
-            if foreign:
-                raise ZenodoError(
-                    f"The draft {draft['id']} holds files that are not from the published version and not named "
-                    f"'{upload_name}': {'; '.join(describe_file(entry) for entry in foreign)}. "
-                    "The draft is left as it was and nothing was uploaded; delete them from the draft and run again."
-                )
-        if not args.no_metadata:
-            update_metadata(session, base_url, draft, args.metadata, version)
         if args.metadata_only:
+            if not args.no_metadata:
+                update_metadata(session, base_url, draft, args.metadata, version)
             return
+        published = latest_published(session, base_url, draft)
+        refuse_if_published(published, upload_name, local_md5)
+        files = draft_files(session, base_url, draft["id"])
+        kept, deleted, foreign = sort_files(files, published, upload_name, local_md5)
+        if foreign:
+            raise ZenodoError(
+                f"The draft {draft['id']} holds files that are not from the published version and not named "
+                f"'{upload_name}': {'; '.join(describe_file(entry) for entry in foreign)}. "
+                "The draft is left as it was and nothing was uploaded; delete them from the draft and run again."
+            )
+        if kept:
+            print(
+                f"The draft already holds {describe_file(kept)}, the local file; it is not uploaded again "
+                "and the draft's metadata is left as it is."
+            )
+        elif not args.no_metadata:
+            update_metadata(session, base_url, draft, args.metadata, version)
         for entry, reason in deleted:
             delete_file(session, base_url, draft["id"], entry, reason)
-        if kept:
-            print(f"The draft already holds {describe_file(kept)}, the local file; it is not uploaded again.")
-            uploaded: dict[str, Any] = {}
-        else:
-            uploaded = upload_file(session, draft, archive_path, upload_name)
+        uploaded = {} if kept else upload_file(session, draft, archive_path, upload_name)
         files = draft_files(session, base_url, draft["id"])
     except (ZenodoError, requests.RequestException) as err:
         print(f"Error: {err}", file=sys.stderr)
@@ -599,7 +710,7 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    problem = single_file_problem(files, upload_name, local_md5)
+    problem = single_file_problem(files, upload_name, local_md5, "the draft")
     if problem:
         print(f"Error: {problem}. The draft is not published.", file=sys.stderr)
         sys.exit(1)
@@ -614,17 +725,38 @@ def main() -> None:
         f"checksum=md5:{remote_md5} (matches the local file; the only file of the draft)",
     )
     if not args.publish:
-        print(
-            f"Not published. Check the draft at {web_page(draft)}, then publish it there or run again with --publish."
-        )
+        print(f"Not published. Check the draft at {web_page(draft)}, then publish it with:")
+        print(f"    {publish_command(draft['id'], args)}")
         return
 
     try:
         record = publish(session, base_url, draft["id"])
-    except (ZenodoError, requests.RequestException) as err:
-        print(f"Error: {err}", file=sys.stderr)
+    except PublishOutcomeUnknown as err:
+        print(
+            f"Error: {err}\nWhether Zenodo published the draft is unknown. Check {web_page(draft)} and the "
+            "record's versions on Zenodo before running again (the script refuses an archive that is already "
+            "published).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except ZenodoError as err:
+        print(f"Error: {err}\nZenodo did not publish the draft.", file=sys.stderr)
         sys.exit(1)
     print(f"Published record {record.get('id')}: DOI {record.get('doi')}, {web_page(record)}")
+
+    try:
+        files = published_files(session, base_url, record.get("id") or draft["id"])
+    except (ZenodoError, requests.RequestException) as err:
+        print(f"Error: the published record's files could not be checked: {err}", file=sys.stderr)
+        sys.exit(1)
+    problem = single_file_problem(files, upload_name, local_md5, f"the published record {record.get('id')}")
+    if problem:
+        print(f"Error: {problem}.", file=sys.stderr)
+        sys.exit(1)
+    print(
+        f"Checked: the published record {record.get('id')} holds one file, {upload_name}, md5 {local_md5} "
+        f"(the local file). DOI {record.get('doi')}."
+    )
 
 
 if __name__ == "__main__":

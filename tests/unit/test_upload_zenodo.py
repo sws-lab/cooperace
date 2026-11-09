@@ -62,15 +62,27 @@ class StubZenodo:
     `depositions` maps an ID to a dep(...); by default deposition 1 is an
     empty draft. `checksum_in_reply` is what the reply to a file PUT reports:
     "md5:<hex>" of the body received if "right", a wrong digest if "wrong",
-    nothing if "none" (the file list then has the right digest). With
-    `ignore_deletes`, a DELETE of a file answers 204 and keeps the file.
+    nothing if "none" (the file list then has the right digest). `index` maps
+    an ID to the state that a stale search index shows for it. `latest_draft`
+    maps the ID of a published deposition to the deposition its
+    links.latest_draft names, as on the old Zenodo. `quirks`:
+      ignore_deletes: a DELETE of a file answers 204 and keeps the file;
+      gone_on_delete: a DELETE of a file deletes it and answers 404;
+      records_api_down: the records API answers 500;
+      newversion_fails: newversion answers 500;
+      newversion_other_concept: newversion makes a draft of concept 99;
+      publish_500: publish publishes the draft, then answers 500;
+      publish_400: publish answers 400 and publishes nothing;
+      publish_adds_file: publish adds extra.txt to the record.
     `puts` collects (path, headers, body) of every PUT, `calls` (method, path)
     of every request."""
 
-    def __init__(self, checksum_in_reply="right", depositions=None, ignore_deletes=False):
+    def __init__(self, checksum_in_reply="right", depositions=None, index=None, latest_draft=None, quirks=()):
         self.checksum_in_reply = checksum_in_reply
         self.deps = depositions or {1: dep("unsubmitted")}
-        self.ignore_deletes = ignore_deletes
+        self.index = index or {}
+        self.latest_draft = latest_draft or {}
+        self.quirks = set(quirks)
         self.puts = []
         self.calls = []
         stub = self
@@ -150,7 +162,7 @@ class StubZenodo:
             "links": {
                 "bucket": f"{self.url}/bucket/b{dep_id}",
                 "html": f"{self.url}/records/{dep_id}" if published else f"{self.url}/deposit/{dep_id}",
-                "latest_draft": f"{self.url}/api/deposit/depositions/{dep_id}",
+                "latest_draft": f"{self.url}/api/deposit/depositions/{self.latest_draft.get(dep_id, dep_id)}",
             },
         }
         if published:
@@ -178,7 +190,14 @@ class StubZenodo:
         if path == "/api/deposit/depositions" and method == "GET":
             [query] = parse_qs(url.query)["q"]
             concept = int(query.removeprefix("conceptrecid:"))
-            return 200, [self.deposition_json(i) for i, d in self.deps.items() if d["concept"] == concept]
+            found = [self.deposition_json(i) for i, d in self.deps.items() if d["concept"] == concept]
+            for entry in found:
+                if entry["id"] in self.index:
+                    entry["state"] = self.index[entry["id"]]
+                    entry["submitted"] = entry["state"] == "done"
+            return 200, found
+        if path.startswith("/api/records/") and "records_api_down" in self.quirks:
+            return 500, {"status": 500, "message": "Internal server error"}
         if m := re.fullmatch(r"/api/records/(\d+)/versions/latest", path):
             latest = self.latest_published(self.deps[int(m[1])]["concept"])
             return 301, None, f"/api/records/{latest}"
@@ -206,10 +225,12 @@ class StubZenodo:
             names = [n for n, digest in d["files"].items() if self.file_id(n, digest) == f[1]]
             if not names:
                 return 404, {}
-            if not self.ignore_deletes:
+            if "ignore_deletes" not in self.quirks:
                 del d["files"][names[0]]
-            return 204, None
+            return (404, {}) if "gone_on_delete" in self.quirks else (204, None)
         if method == "POST" and rest == "/actions/newversion":
+            if "newversion_fails" in self.quirks:
+                return 500, {"status": 500, "message": "Internal server error"}
             concept = d["concept"]
             latest = self.latest_published(concept)
             files = dict(self.deps[latest]["files"])
@@ -220,10 +241,18 @@ class StubZenodo:
                 self.deps[drafts[0]]["files"] = files
                 return 201, self.deposition_json(drafts[0])
             new_id = max(self.deps) + 1
+            if "newversion_other_concept" in self.quirks:
+                concept = 99
             self.deps[new_id] = {"state": "unsubmitted", "submitted": False, "concept": concept, "files": files}
             return 201, self.deposition_json(new_id)
         if method == "POST" and rest == "/actions/publish":
+            if "publish_400" in self.quirks:
+                return 400, {"status": 400, "message": "A validation error occurred."}
             d["state"], d["submitted"] = "done", True
+            if "publish_adds_file" in self.quirks:
+                d["files"]["extra.txt"] = md5(b"extra")
+            if "publish_500" in self.quirks:
+                return 500, {"status": 500, "message": "Internal server error"}
             return 202, self.deposition_json(dep_id)
         return 404, {}
 
@@ -333,6 +362,8 @@ def test_new_version_creates_a_draft_and_deletes_the_inherited_file(tmp_path, mo
     assert f"Draft: record 11, reserved DOI 10.5281/zenodo.11, {stub.url}/deposit/11" in out
     assert f"Deleted 'cooperace.zip' (md5 {md5(OLD)}" in out and "inherited from the published version 10" in out
     assert "Upload complete!" in out and "Not published." in out
+    # The next step names the draft.
+    assert f"upload-zenodo.py --record-id 11 --publish --file {tmp_path / 'cooperace.zip'}" in out
 
 
 def test_an_inherited_file_of_another_name_is_deleted_too(tmp_path, monkeypatch, capsys):
@@ -421,7 +452,7 @@ def test_a_foreign_file_stops_the_script_before_any_change(tmp_path, monkeypatch
 
 def test_the_draft_must_end_with_one_file(tmp_path, monkeypatch, capsys):
     # The DELETE of the inherited file of another name does not take effect.
-    with StubZenodo(depositions={10: dep("done", 9, {"old.zip": OLD})}, ignore_deletes=True) as stub:
+    with StubZenodo(depositions={10: dep("done", 9, {"old.zip": OLD})}, quirks={"ignore_deletes"}) as stub:
         with pytest.raises(SystemExit) as stop:
             run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
     assert stop.value.code == 1
@@ -429,7 +460,7 @@ def test_the_draft_must_end_with_one_file(tmp_path, monkeypatch, capsys):
     assert "the draft holds 2 files" in err and "'old.zip'" in err and "not published" in err
     assert not calls(stub, "POST", "/actions/publish")
     assert stub.deps[11]["state"] == "unsubmitted"
-    assert uz.single_file_problem([], "cooperace.zip", md5(CONTENT)).startswith("the draft holds 0 files")
+    assert uz.single_file_problem([], "cooperace.zip", md5(CONTENT), "the draft").startswith("the draft holds 0 files")
 
 
 def test_publish_after_the_checks_prints_the_doi(tmp_path, monkeypatch, capsys):
@@ -439,7 +470,157 @@ def test_publish_after_the_checks_prints_the_doi(tmp_path, monkeypatch, capsys):
     assert stub.deps[11]["state"] == "done"
     out = capsys.readouterr().out
     assert f"Published record 11: DOI 10.5072/zenodo.11, {stub.url}/records/11" in out
+    assert f"Checked: the published record 11 holds one file, cooperace.zip, md5 {md5(CONTENT)}" in out
     assert "Not published." not in out
+
+
+def test_the_published_record_is_checked_for_one_file(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"publish_adds_file"}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+    assert stop.value.code == 1
+    assert "the published record 11 holds 2 files" in capsys.readouterr().err
+
+
+def test_the_second_run_names_the_draft_and_leaves_its_metadata(tmp_path, monkeypatch, capsys):
+    archive = tmp_path / "E8.zip"
+    archive.write_bytes(CONTENT)
+    with StubZenodo(depositions=published_record()) as stub:
+        run_main(monkeypatch, stub, "--record-id", "10", "--new-version", "--file", str(archive))
+        assert [path for path, _, _ in stub.puts] == ["/api/deposit/depositions/11", "/bucket/b11/cooperace.zip"]
+        run_main(monkeypatch, stub, "--record-id", "11", "--publish", "--file", str(archive))
+        # The metadata is not put again, nor the file, and no search is needed
+        # to find the draft.
+        assert len(stub.puts) == 2
+        assert stub.deps[11]["state"] == "done"
+        out = capsys.readouterr().out
+        assert "metadata is left as it is" in out and "Using the existing draft" not in out
+    with StubZenodo(depositions=published_record() | {11: dep("unsubmitted", 9, {"cooperace.zip": CONTENT})}) as stub:
+        run_main(monkeypatch, stub, "--record-id", "11", "--file", str(archive), "--metadata-only")
+    assert [path for path, _, _ in stub.puts] == ["/api/deposit/depositions/11"]
+
+
+def test_an_archive_already_published_is_refused(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions={10: dep("done", 9, {"cooperace.zip": CONTENT})}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+    assert stop.value.code == 1
+    assert "already published as version 10" in capsys.readouterr().err
+    assert sorted(stub.deps) == [10] and not calls(stub, "POST", "") and not stub.puts
+    # A draft made in the UI holds a copy of the published file: left alone.
+    deps = {10: dep("done", 9, {"cooperace.zip": CONTENT}), 11: dep("unsubmitted", 9, {"cooperace.zip": CONTENT})}
+    with StubZenodo(depositions=deps) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub, "--publish", record_id="11")
+    assert "already published as version 10" in capsys.readouterr().err
+    assert not calls(stub, "POST", "") and not calls(stub, "DELETE", "") and not stub.puts
+
+
+def test_a_publish_whose_outcome_is_unknown_is_not_repeated(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"publish_500"}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+        assert stop.value.code == 1
+        err = capsys.readouterr().err
+        assert "Whether Zenodo published the draft is unknown" in err and f"{stub.url}/deposit/11" in err
+        assert stub.deps[11]["state"] == "done"
+        for record_id, extra in [("11", ()), ("10", ("--new-version",))]:
+            with pytest.raises(SystemExit) as stop:
+                run_upload(monkeypatch, tmp_path, stub, "--publish", *extra, record_id=record_id)
+            assert stop.value.code == 1
+            assert "already published as version 11" in capsys.readouterr().err
+    assert sorted(stub.deps) == [10, 11]
+    assert len(calls(stub, "POST", "/actions/publish")) == 1
+
+
+def test_a_refused_publish_says_so(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"publish_400"}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+    assert stop.value.code == 1
+    assert "Zenodo did not publish the draft." in capsys.readouterr().err
+    assert stub.deps[11]["state"] == "unsubmitted"
+
+
+def test_a_stale_search_index_is_caught(tmp_path, monkeypatch, capsys):
+    # Version 11 was just published, but the search still shows it as a draft.
+    deps = published_record() | {11: dep("done", 9, {"cooperace.zip": b"v2"})}
+    with StubZenodo(depositions=deps, index={11: "unsubmitted"}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", "--publish", record_id="10")
+        assert stop.value.code == 1
+        err = capsys.readouterr().err
+        assert "deposition 11, which is not an unpublished draft" in err and "search index is stale" in err
+        assert not stub.puts and not calls(stub, "DELETE", "") and not calls(stub, "POST", "")
+        # The record named by --record-id is not taken for its own draft.
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="11")
+    assert "Created the draft 12 of a new version of record 11." in capsys.readouterr().out
+    assert stub.deps[12]["files"] == {"cooperace.zip": md5(CONTENT)}
+
+
+def test_a_draft_named_by_latest_draft_is_used_if_it_belongs_to_the_record(tmp_path, monkeypatch, capsys):
+    deps = published_record() | {11: dep("unsubmitted", 9), 20: dep("unsubmitted", 8)}
+    with StubZenodo(depositions=deps, latest_draft={10: 11}) as stub:
+        run_upload(monkeypatch, tmp_path, stub, record_id="10")
+    assert "Using the existing draft 11" in capsys.readouterr().out
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
+    with StubZenodo(depositions=deps, latest_draft={10: 20}) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub, record_id="10")
+    assert stop.value.code == 1
+    assert "names deposition 20 of the concept 8" in capsys.readouterr().err
+    assert not stub.puts
+
+
+def test_a_newversion_draft_of_another_concept_is_refused(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"newversion_other_concept"}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert stop.value.code == 1
+    assert "names deposition 11 of the concept 99" in capsys.readouterr().err
+    assert not stub.puts
+
+
+def test_a_failed_newversion_is_reported(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"newversion_fails"}) as stub:
+        with pytest.raises(SystemExit) as stop:
+            run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert stop.value.code == 1
+    assert "newversion failed with 500" in capsys.readouterr().err
+    assert sorted(stub.deps) == [10]
+
+
+def test_several_drafts_are_refused(tmp_path, monkeypatch, capsys):
+    deps = published_record() | {11: dep("unsubmitted", 9), 12: dep("unsubmitted", 9)}
+    with StubZenodo(depositions=deps) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    assert stop.value.code == 1
+    assert "several drafts of a new version (11, 12)" in capsys.readouterr().err
+    assert not stub.puts
+
+
+def test_a_deposition_without_submitted_false_is_not_a_draft(tmp_path, monkeypatch, capsys):
+    deps = {1: {"state": "unsubmitted", "submitted": None, "concept": 0, "files": {}}}
+    with StubZenodo(depositions=deps) as stub, pytest.raises(SystemExit) as stop:
+        run_upload(monkeypatch, tmp_path, stub)
+    assert stop.value.code == 1
+    assert "submitted None" in capsys.readouterr().err
+    assert not stub.puts
+
+
+def test_a_file_already_gone_is_not_reported_deleted(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"gone_on_delete"}) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    out = capsys.readouterr().out
+    assert "was already gone from the draft" in out and "Deleted" not in out
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
+
+
+def test_the_deposit_api_stands_in_for_the_records_api(tmp_path, monkeypatch, capsys):
+    with StubZenodo(depositions=published_record(), quirks={"records_api_down"}) as stub:
+        run_upload(monkeypatch, tmp_path, stub, "--new-version", record_id="10")
+    out = capsys.readouterr().out
+    assert "taking the files of version 10 from the deposit API" in out
+    assert "inherited from the published version 10" in out
+    assert stub.deps[11]["files"] == {"cooperace.zip": md5(CONTENT)}
 
 
 def test_no_publish_after_a_checksum_mismatch(tmp_path, monkeypatch, capsys):
