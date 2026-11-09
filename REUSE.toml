@@ -26,6 +26,7 @@ path = [
     "tools.txt",
     "tools-pool.txt",
     "tools-options.json",
+    "scripts/sv-comp/zenodo-metadata.json",
     "src/tool_combinations/README.md",
     "svcomp2025_results/README.md",
     "tests/Race.set",
