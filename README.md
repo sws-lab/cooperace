@@ -173,27 +173,49 @@ If you want to force a completely fresh run (no cached layers), clear BuildKit c
 
 ## Uploading the SV-COMP archive to Zenodo
 
-Use the helper script in `scripts/sv-comp/upload-zenodo.py` to attach the freshly
-packaged archive to a private Zenodo record. It requires the Python `requests`
-package (`pip install requests`).
+`scripts/sv-comp/upload-zenodo.py` uploads the archive as a new version of CoOpeRace's Zenodo record
+and, when asked, publishes it. It requires the Python `requests` package (`pip install requests`, or
+`uv run --no-project --with requests python scripts/sv-comp/upload-zenodo.py ...`). The upload takes
+two runs: the first makes the draft and uploads the archive, the second publishes the draft once you
+have checked it.
 
-1. Ensure the archive exists (`make svcomp` produces `dist/cooperace.zip`).
-2. Export your Zenodo API token:
+1. Build the archive (`make svcomp` produces `dist/cooperace.zip`). On Zenodo it is always the file
+   `cooperace.zip`, whatever the local file is called (`--upload-name` changes that), and the record
+   holds no other file: fm-tools accepts a record with exactly one.
+2. Export a Zenodo API token with the scopes `deposit:write` and `deposit:actions` (the second
+   creates new versions and publishes):
    ```bash
    export ZENODO_TOKEN="<your-token>"
    ```
-   The token needs the `deposit:write` scope. The record should either be a
-   draft or have a "latest draft" available (Zenodo's "New version" action).
-3. Upload the archive (replace `<draft-or-record-id>` with your Zenodo record
-   identifier):
+3. Make the draft of the next version and upload the archive to it; `<record-id>` is a published
+   version of the record:
    ```bash
-   python scripts/sv-comp/upload-zenodo.py --record-id <draft-or-record-id>
+   python scripts/sv-comp/upload-zenodo.py --record-id <record-id> --new-version --file dist/cooperace.zip
    ```
-   The draft's metadata is first replaced by `scripts/sv-comp/zenodo-metadata.json`
-   (`--metadata FILE` to use another, `--no-metadata` to leave it, `--metadata-only` to set
-   it and upload nothing). Pass `--sandbox` if you want to test against `https://sandbox.zenodo.org` or
-   override the archive path with `--file`. The helper sends the archive with one `PUT` to the
-   draft's `links.bucket` URL, streamed from disk, and prints the bytes sent so you can keep an eye
-   on Zenodo's slow ingestion. Afterwards it compares the MD5 of the local file with the checksum
-   Zenodo reports and exits 1 on a mismatch, in which case the file in the draft is not the one
-   you built and must be uploaded again before the record is published.
+   `--new-version` creates the draft (Zenodo's "New version") if the record has none. A draft made in
+   the Zenodo UI or by an earlier run is used instead, and a second one is never made. Zenodo copies
+   the previous version's files into the new draft; the script deletes them, and if the draft holds
+   any other file it lists it and stops before changing anything. An archive that the latest
+   published version already holds is refused. The draft's metadata is replaced by
+   `scripts/sv-comp/zenodo-metadata.json`, with its `version` set from the archive's
+   `cooperace/VERSION` (`--metadata FILE` to use another file, `--no-metadata` to leave it,
+   `--metadata-only` to set it and upload nothing). The archive is sent with one `PUT` to the
+   draft's `links.bucket` URL, streamed from disk, and the bytes sent are printed so you can keep an
+   eye on Zenodo's slow ingestion. Afterwards the MD5 Zenodo reports must be that of the local file
+   and the draft must hold that one file; otherwise the script exits 1, and the file in the draft
+   must be uploaded again before the record is published. The script prints the draft's record ID,
+   the DOI reserved for it, its page on Zenodo and the command of the next step.
+4. Check the draft on its page, then publish it with the command the first run printed, which names
+   the draft:
+   ```bash
+   python scripts/sv-comp/upload-zenodo.py --record-id <draft-id> --publish --file dist/cooperace.zip
+   ```
+   This run finds the archive in the draft, sends nothing, leaves the draft's metadata as it is (so
+   changes made while checking it are kept), publishes the draft, checks that the published record
+   holds the one file and prints its DOI, `10.5281/zenodo.<draft-id>`. A published version cannot
+   be withdrawn, so the script publishes only with `--publish`. If the publish request fails without
+   a clear refusal from Zenodo, whether the draft was published is unknown: check its page before
+   running again, which refuses the archive if it was published.
+
+Pass `--sandbox` to do the same against `https://sandbox.zenodo.org`, with a token of the sandbox;
+its DOIs start with `10.5072`.
