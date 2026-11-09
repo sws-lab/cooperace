@@ -14,17 +14,21 @@ competition; on Ubuntu 24.04, AppArmor refuses user namespaces to python3
 from a shell. container_works says whether the container can be made, and
 cli.run starts no component where it cannot. BenchExec logs to stderr
 through `logging`. components.py imports this module only when a component
-runs, since benchexec.runexecutor needs Linux."""
+runs, since benchexec.runexecutor needs Linux. container_works and
+execute_run first call guard_clone, which keeps the start of a container from
+deadlocking CoOpeRace's process."""
 from __future__ import annotations
 
+import gc
 import os
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 from collections.abc import Mapping, Sequence
 
-from benchexec import runexecutor
+from benchexec import container, runexecutor
 from benchexec.cgroups import Cgroups
 from benchexec.container import DIR_FULL_ACCESS, DIR_HIDDEN, DIR_OVERLAY, DIR_READ_ONLY
 
@@ -45,6 +49,65 @@ STOP_GRACE_SECONDS = 30.0
 # The cgroup controller whose file pids.max limits the number of tasks
 # (processes and threads) of a run.
 PIDS = "pids"
+
+# The switch interval in seconds that guard_clone gives CoOpeRace's process:
+# a thread asks the thread that holds the GIL to give it up only after it has
+# waited this long. BenchExec's own benchexec sets the same while its runs
+# start containers in parallel threads without its native clone callback
+# (benchexec.localexecution, BenchExec issue 435).
+SWITCH_INTERVAL_SECONDS = 1000.0
+
+# Held by the execute_in_namespace of guard_clone while it makes a container.
+_CLONE_LOCK = threading.Lock()
+
+
+def guard_clone() -> None:
+    """Keeps the start of a BenchExec container from deadlocking CoOpeRace's
+    process, as it did in two test runs of E7 in the competition image
+    (Python 3.14), which then ended by the wall-time limit without a verdict
+    and without one more line of output.
+
+    RunExecutor makes the container with clone(), which
+    benchexec.container.execute_in_namespace calls through ctypes between
+    PyOS_BeforeFork() and PyOS_AfterFork_Parent(), with Python code in
+    between (clone's errcheck). Since Python 3.13, PyOS_BeforeFork takes the
+    lock of the interpreter's list of threads until PyOS_AfterFork_Parent
+    releases it (Python 3.12 and earlier do not), and a thread that makes,
+    starts or ends a threading.Thread, or frees a finished one, waits for
+    that lock holding the GIL. So the process deadlocks if, in between, the
+    thread that clones gives the GIL to such a thread, because a thread has
+    waited for the GIL longer than the switch interval (5 ms by default;
+    more likely where the OS preempts the cloning thread, as on a busy
+    core), or if a garbage collection frees a finished Thread there, in the
+    thread that holds the lock. No thread of the process runs again, so
+    neither execute_run's hang guard nor a phase's wall-time limit ends
+    anything.
+
+    This sets the process's switch interval to SWITCH_INTERVAL_SECONDS, for
+    good, and replaces execute_in_namespace with one that makes one container
+    at a time, with automatic garbage collection off. A thread that waits for
+    the GIL with the old interval can still ask for it once, so container_works
+    calls this first, in the main thread, before CoOpeRace starts any other
+    thread; later calls change nothing. CoOpeRace's threads, and
+    RunExecutor's, mostly wait, which gives the GIL up, so the long interval
+    delays them only while another thread runs Python code without waiting."""
+    sys.setswitchinterval(max(sys.getswitchinterval(), SWITCH_INTERVAL_SECONDS))
+    unguarded = container.execute_in_namespace
+    if getattr(unguarded, "guarded", False):
+        return
+
+    def execute_in_namespace(func, use_network_ns=True):
+        with _CLONE_LOCK:
+            collecting = gc.isenabled()
+            gc.disable()
+            try:
+                return unguarded(func, use_network_ns=use_network_ns)
+            finally:
+                if collecting:
+                    gc.enable()
+
+    execute_in_namespace.guarded = True
+    container.execute_in_namespace = execute_in_namespace
 
 
 def task_limit_supported() -> bool:
@@ -91,7 +154,8 @@ def container_dir_modes(tool_directory: str, writable_dirs: Sequence[str] = (),
 def container_works(tools_dir: str) -> bool:
     """Whether RunExecutor runs `true` in its container with `tools_dir` (its
     parent if it does not exist) as overlay and working directory. Where it
-    cannot, BenchExec says why on stderr."""
+    cannot, BenchExec says why on stderr. Calls guard_clone first."""
+    guard_clone()
     overlay = tools_dir if os.path.isdir(tools_dir) else os.path.dirname(tools_dir)
     descriptor, log_file = tempfile.mkstemp(prefix="cooperace-container-check-")
     os.close(descriptor)
@@ -204,7 +268,9 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     killed. An exception in this thread while it waits (strategy.StopSignal)
     stops the run, waits for it at most STOP_GRACE_SECONDS and is re-raised.
     Raises RunExecutorError if BenchExec could not start the run or refused
-    it."""
+    it. Calls guard_clone first: the hang guard cannot end a deadlock of the
+    whole process."""
+    guard_clone()
     if group.stopped:
         return FinishedRun(command, None, "")
     cgroup_values = {}
