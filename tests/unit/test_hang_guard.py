@@ -7,14 +7,19 @@ strategy.run_strategy, with BenchExec's RunExecutor replaced by FakeExecutor:
 a run whose RunExecutor never starts the component's process is given up
 after execution.START_TIMEOUT_SECONDS ("ERROR (start timed out)"), a run
 still alive execution.STOP_GRACE_SECONDS after its stop is given up ("ERROR
-(did not stop)"), the run goes on and delivers what was decided, and a run
-that starts in time is not affected however long it then takes.
+(did not stop)"), a run whose RunExecutor has not returned
+execution.END_GRACE_SECONDS after its process ended is given up ("ERROR (did
+not return after its process ended)"), the run goes on and delivers what was
+decided, and a run that starts in time is not affected however long it then
+takes.
 
 FakeExecutor runs the stub's script on the host in its directory and moves
 the result files as RunExecutor would. The first line of a stub's script
 after "#!/bin/sh" may say how the RunExecutor behaves: "# hang-start" (it
-never starts the process and never returns) or "# hang-stop" (it starts the
-process, ignores stop() and never returns)."""
+never starts the process and never returns), "# hang-stop" (it starts the
+process, ignores stop() and never returns), "# hang-end" (it waits for the
+process to end and never returns, still recording it) or "# hang-cleanup"
+(the same, after it no longer records the process)."""
 import glob
 import os
 import shutil
@@ -73,8 +78,12 @@ class FakeExecutor:
         if mode == "# hang-stop":
             NEVER.wait()
         returncode = process.wait()
+        if mode == "# hang-end":
+            NEVER.wait()
         with self.SUB_PROCESS_PIDS_LOCK:
             self.SUB_PROCESS_PIDS.discard(process.pid)
+        if mode == "# hang-cleanup":
+            NEVER.wait()
         for pattern in result_files_patterns:
             for path in glob.glob(os.path.join(workingDir, pattern), recursive=True):
                 shutil.move(path, os.path.join(output_dir, os.path.basename(path)))
@@ -91,6 +100,7 @@ def fake(monkeypatch, tmp_path):
     monkeypatch.setattr(execution, "task_limit_supported", lambda: True)
     monkeypatch.setattr(execution, "START_TIMEOUT_SECONDS", 0.5)
     monkeypatch.setattr(execution, "STOP_GRACE_SECONDS", 0.5)
+    monkeypatch.setattr(execution, "END_GRACE_SECONDS", 0.5)
     monkeypatch.setattr(strategy, "JOIN_SECONDS", 5.0)
     directory = tmp_path / "cwd"
     directory.mkdir()
@@ -158,6 +168,25 @@ def test_a_stopped_component_that_does_not_stop_is_given_up(tmp_path, fake, caps
     assert verdict == "true"
     assert "Tool name: Stub B Status: ERROR (did not stop) Exit code: none, not started" in lines
     assert lines[-1] == "CoOpeRace result from: Stub A"
+    assert seconds < 5
+
+
+@pytest.mark.parametrize("mode", ["# hang-end", "# hang-cleanup"])
+def test_a_component_whose_runexecutor_does_not_return_after_its_process_ended_is_given_up(
+        tmp_path, fake, capsys, mode):
+    # As a RunExecutor stuck in its cleanup in phase 2 of no-data-race, which nothing else would stop. The
+    # process runs for longer than POLL_SECONDS, so that execute_run sees it once RunExecutor no longer records it.
+    conf, runner = stub_run(tmp_path, one_after_another,
+                            Stub_A=f"{mode}\nsleep 0.3\necho 'STUB-STATUS: true'\n",
+                            Stub_B="echo 'STUB-STATUS: true'\n")
+
+    verdict, lines, seconds = run_lines(conf, runner, capsys)
+
+    assert ("Tool name: Stub A Status: ERROR (did not return after its process ended) Exit code: none, "
+            "not started") in lines
+    assert "Tool name: Stub B Status: true Exit code: 0" in lines
+    assert lines[-1] == "CoOpeRace result from: Stub B"
+    assert verdict == "true"
     assert seconds < 5
 
 

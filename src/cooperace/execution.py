@@ -41,12 +41,17 @@ POLL_SECONDS = 0.1
 
 # Wall-time seconds after which execute_run gives a run up (ComponentHang):
 # a run whose RunExecutor has not started the component's process this long
-# after execute_run began, and a run that is still alive this long after a
-# stop was requested. BenchExec's RunExecutor can hang while it sets up or
-# takes down its container, with no process of the component to kill; a
-# component given up is a step without a verdict, and the run goes on.
+# after execute_run began, a run that is still alive this long after a stop
+# was requested, and a run whose RunExecutor has not returned this long after
+# the component's process ended. BenchExec's RunExecutor can hang while it
+# sets up or takes down its container, with no process of the component to
+# kill; a component given up is a step without a verdict, and the run goes
+# on. After the process has ended, RunExecutor collects the result files and
+# cleans up, and may join each of its three cancelled limit threads for up to
+# 10 s, hence the longer END_GRACE_SECONDS.
 START_TIMEOUT_SECONDS = 60.0
 STOP_GRACE_SECONDS = 30.0
+END_GRACE_SECONDS = 60.0
 
 # The cgroup controller whose file pids.max limits the number of tasks
 # (processes and threads) of a run.
@@ -187,9 +192,11 @@ class RunExecutorError(Exception):
 
 class ComponentHang(RunExecutorError):
     """execute_run gave a run up: its RunExecutor did not start the
-    component's process within START_TIMEOUT_SECONDS ("start timed out"), or
+    component's process within START_TIMEOUT_SECONDS ("start timed out"),
     the run did not end within STOP_GRACE_SECONDS after a stop ("did not
-    stop"). `status` is the component's status, "ERROR (<reason>)"."""
+    stop"), or RunExecutor did not return within END_GRACE_SECONDS after the
+    process ended ("did not return after its process ended"). `status` is
+    the component's status, "ERROR (<reason>)"."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -230,6 +237,21 @@ class ExecutorRun:
             if self.executor.SUB_PROCESS_PIDS:
                 self.has_started = True
         return self.has_started
+
+    def ended(self) -> bool:
+        """Whether the component's process has ended: the executor has
+        started it (started, now or at an earlier call), and no process it
+        records is alive. RunExecutor records the process until it has
+        collected the run's result and cleaned up, so a process it records
+        counts as ended once it is gone. A process that RunExecutor records
+        for less than POLL_SECONDS may never be seen started; execute_run
+        then gives a run that does not return up after
+        START_TIMEOUT_SECONDS ("start timed out")."""
+        with self.executor.SUB_PROCESS_PIDS_LOCK:
+            pids = set(self.executor.SUB_PROCESS_PIDS)
+        if pids:
+            self.has_started = True
+        return self.has_started and not any(map(_alive, pids))
 
     def stop(self) -> None:
         self.stop_requested.set()
@@ -279,11 +301,14 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     for, calling ExecutorRun.kill every POLL_SECONDS once a stop is
     requested. It gives the run up, raising ComponentHang, if the executor has
     not started the component's process START_TIMEOUT_SECONDS after this call
-    began, or if the run is still alive STOP_GRACE_SECONDS after the stop was
-    first seen; a daemon thread then goes on calling ExecutorRun.kill until
-    the run's thread ends, so that a process that starts late is still
-    killed. An exception in this thread while it waits (strategy.StopSignal)
-    stops the run, waits for it at most STOP_GRACE_SECONDS and is re-raised.
+    began, if the run is still alive STOP_GRACE_SECONDS after the stop was
+    first seen, or, without a stop, if the executor has not returned
+    END_GRACE_SECONDS after the process was first seen to have ended
+    (ExecutorRun.ended); a daemon thread then goes on calling
+    ExecutorRun.kill until the run's thread ends, so that a process that
+    starts late is still killed. An exception in this thread while it waits
+    (strategy.StopSignal) stops the run, waits for it at most
+    STOP_GRACE_SECONDS and is re-raised.
     Raises RunExecutorError if BenchExec could not start the run or refused
     it (also when RunExecutor is made). Calls guard_clone first: the hang
     guard cannot end a deadlock of the whole process."""
@@ -340,7 +365,7 @@ def _execute_once(command: list[str], cwd: str, environments: Mapping, group: Co
 
     worker = threading.Thread(target=execute, name=f"RunExecutor run of {command[0]}", daemon=True)
     began = time.monotonic()
-    stop_seen = None
+    stop_seen = end_seen = None
     try:
         worker.start()
         while True:
@@ -354,9 +379,16 @@ def _execute_once(command: list[str], cwd: str, environments: Mapping, group: Co
                     stop_seen = now
                 elif now - stop_seen >= STOP_GRACE_SECONDS:
                     raise ComponentHang("did not stop")
-            elif not run.started() and now - began >= START_TIMEOUT_SECONDS:
-                run.stop()
-                raise ComponentHang("start timed out")
+            elif not run.started():
+                if now - began >= START_TIMEOUT_SECONDS:
+                    run.stop()
+                    raise ComponentHang("start timed out")
+            elif run.ended():
+                if end_seen is None:
+                    end_seen = now
+                elif now - end_seen >= END_GRACE_SECONDS:
+                    run.stop()
+                    raise ComponentHang("did not return after its process ended")
     except ComponentHang:
         _keep_killing(run, worker)
         raise
@@ -386,6 +418,17 @@ def _execute_once(command: list[str], cwd: str, environments: Mapping, group: Co
                        termination_reason=result.get("terminationreason"),
                        wall_time=None if result.get("walltime") is None else float(result["walltime"]),
                        memory=result.get("memory"))
+
+
+def _alive(pid: int) -> bool:
+    """Whether the process `pid` exists (or is a zombie)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def _keep_killing(run: ExecutorRun, worker: threading.Thread) -> None:
