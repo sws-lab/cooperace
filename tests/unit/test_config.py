@@ -39,7 +39,7 @@ VALID_MEMSAFETY = {
 # conf/README.md shows: IKOS-ConC in no-data-race, Deagle alone in phase 2 of valid-memsafety.
 DEFAULT_NO_DATA_RACE = {
     "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
-               ["Goblint", "IKOS-ConC", "Dartagnan"]],
+               ["Goblint", "IKOS-ConC"], ["Dartagnan"]],
     "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
     "memoryLimits": {"sv-sanitizers": "30%", "Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
     "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
@@ -478,6 +478,23 @@ def test_the_svcomp27_conf_limits_the_memory_of_every_phase_1_tool(known):
         limits = {tool: strategy.memory_limits.get(tool) for tool in tools}
         assert all(isinstance(limit, str) and limit.endswith("%") for limit in limits.values()), (name, limits)
         assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
+
+
+def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known):
+    """In every phase of conf/svcomp27.json the memory limits of all its tools,
+    those with a CPU-time limit included, add up to at most 95% of the run's:
+    the tools of a phase run at the same time, and a run over its limit is
+    killed whole. On the pre-run's single core a tool with a CPU-time limit of
+    30 s runs a minute or more of wall time; in no-data-race Dartagnan (80%),
+    started beside Goblint (35%) and IKOS-ConC (30%), filled its 2.4 GB of
+    3 GB within 26 s of CPU time on ldv-linux-3.14-races/*cafe_ccic* while
+    Goblint still ran."""
+    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    for name, strategy in strategies.items():
+        for phase in strategy.phases:
+            limits = {tool: strategy.memory_limits.get(tool) for tool in phase.tools}
+            assert all(isinstance(limit, str) and limit.endswith("%") for limit in limits.values()), (name, limits)
+            assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
 
 
 # --- ignoreIfCalls ---------------------------------------------------------------

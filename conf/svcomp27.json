@@ -2,7 +2,7 @@
     "properties": {
         "no-data-race": {
             "phases":        [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
-                              ["Goblint", "IKOS-ConC", "Dartagnan"]],
+                              ["Goblint", "IKOS-ConC"], ["Dartagnan"]],
             "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
             "memoryLimits":  {"sv-sanitizers": "30%", "Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
             "runCpuTimeBudget": 870,
