@@ -220,19 +220,32 @@ def test_a_task_limit_that_benchexec_cannot_set_is_dropped_for_one_more_run(fake
         capsys.readouterr().err)
 
 
-def test_a_refusal_after_the_process_started_is_not_run_again(fake_executor, tmp_path, monkeypatch):
+@pytest.mark.parametrize("message", ["Invalid memory limit 0.", "Cannot execute run without any CPU core."])
+def test_a_refusal_that_is_not_about_the_task_limit_is_not_run_again(fake_executor, tmp_path, monkeypatch,
+                                                                      message):
+    # Run again, it would be refused all the same, or it might already have run: BenchExec drops the
+    # process from SUB_PROCESS_PIDS before its SystemExit reaches execute_run, so a start is not seen.
     def execute_run(self, args, output_filename, **kwargs):
-        with self.SUB_PROCESS_PIDS_LOCK:
-            self.SUB_PROCESS_PIDS.add(4711)
-        time.sleep(3 * execution.POLL_SECONDS)
-        sys.exit("refused late")
+        sys.exit(message)
 
     monkeypatch.setattr(FakeExecutor, "execute_run", execute_run)
 
-    with pytest.raises(execution.RunExecutorError, match="refused late") as error:
+    with pytest.raises(execution.RunExecutorError, match="BenchExec refused to run tool") as error:
         run_fake(tmp_path, ComponentGroup(), tasks=1024)
     assert not error.value.refused
     assert len(FakeExecutor.instances) == 1
+
+
+@pytest.mark.parametrize("message, refuses", [
+    ('Permission denied for setting cgroup option pids.max to "1024" (error code 13).', True),
+    ('Cannot set option "max" for subsystem "pids" that is not enabled. '
+     'Please specify "--require-cgroup-subsystem pids".', True),
+    ('Cannot set option "max" for subsystem "pids", it does not exist.', True),
+    ('Permission denied for setting cgroup option memory.max to "100" (error code 13).', False),
+    ("Working directory /x does not exist.", False),
+])
+def test_refuses_task_limit_takes_only_benchexecs_refusals_of_the_pids_controller(message, refuses):
+    assert execution.refuses_task_limit(SystemExit(message)) is refuses
 
 
 class FakeCgroups:

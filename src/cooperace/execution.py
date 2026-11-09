@@ -182,8 +182,9 @@ def container_works(tools_dir: str) -> bool:
 class RunExecutorError(Exception):
     """BenchExec could not start a run (its result has no exit code), or
     refused it. `refused` is true where BenchExec refused the run before the
-    component's process started: a SystemExit of RunExecutor, when it is
-    made or when it sets the run up, as for a cgroup value it cannot set."""
+    component's process started, for its cgroups: a SystemExit of
+    RunExecutor when it is made, or one while it sets the run up whose
+    message is about the pids controller (refuses_task_limit)."""
 
     def __init__(self, message: str, refused: bool = False):
         super().__init__(message)
@@ -288,8 +289,9 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     ignored where task_limit_supported is false). A process of the run that
     would exceed `tasks` cannot fork or start a thread (EAGAIN); nothing is
     killed. If BenchExec refuses the run with the task limit before the
-    component's process starts (RunExecutorError.refused: a pids controller
-    it cannot use, or a pids.max it cannot write), the component runs once
+    component's process starts (RunExecutorError.refused: when RunExecutor
+    is made, as for a pids controller it cannot use, or for a pids.max it
+    cannot set, refuses_task_limit), the component runs once
     more without the limit, after a line "CoOpeRace: ..." on stderr that
     says why, as where the limit is not supported: one component without a
     limit rather than every component without a verdict. Its output goes to
@@ -329,14 +331,27 @@ def execute_run(command: list[str], cwd: str, environments: Mapping, group: Comp
     return attempt({})
 
 
+def refuses_task_limit(error: SystemExit) -> bool:
+    """Whether the SystemExit with which RunExecutor.execute_run refused a
+    run is about the run's pids controller: BenchExec 3.35 exits so before
+    it starts the process, when it cannot set pids.max ('... for setting
+    cgroup option pids.max to "1024" ...') or lacks the controller ('Cannot
+    set option "max" for subsystem "pids" ...'). Any other refusal, which a
+    run without the limit would get as well, is not, and neither is one
+    whose message BenchExec words otherwise: then the component gives no
+    verdict rather than run twice."""
+    message = str(error)
+    return "cgroup option pids." in message or 'subsystem "pids"' in message
+
+
 def _execute_once(command: list[str], cwd: str, environments: Mapping, group: ComponentGroup, log_file: str,
                   dir_modes: Mapping[str, str], memory: int | None, cpu_time: int | None, output_dir: str | None,
                   result_files_patterns: Sequence[str], cgroup_values: Mapping) -> FinishedRun:
     """execute_run's run of `command` with the cgroup values `cgroup_values`
     (a task limit or none), not started if `group` is stopped. A SystemExit
-    of RunExecutor, when it is made or while it sets the run up, raises
-    RunExecutorError with `refused` true, unless the component's process had
-    started."""
+    of RunExecutor raises RunExecutorError, with `refused` true when it comes
+    from making RunExecutor, which starts nothing, or is about the pids
+    controller of a run with a task limit (refuses_task_limit)."""
     if group.stopped:
         return FinishedRun(command, None, "")
     try:
@@ -359,7 +374,7 @@ def _execute_once(command: list[str], cwd: str, environments: Mapping, group: Co
                 cgroupValues=dict(cgroup_values))
         except SystemExit as error:
             outcome["error"] = RunExecutorError(f"BenchExec refused to run {command[0]}: {error}",
-                                                refused=not run.started())
+                                                refused=bool(cgroup_values) and refuses_task_limit(error))
         except BaseException as error:  # noqa: B036 - re-raised in the waiting thread
             outcome["error"] = error
 
