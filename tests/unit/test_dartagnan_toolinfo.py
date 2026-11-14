@@ -2,14 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""How CoOpeRace reads Dartagnan's result (src/cooperace/toolinfo/dartagnan.py):
-as BenchExec fbd04593 does, which the SV-COMP 2027 bench-defs pin, except that
+"""How CoOpeRace starts Dartagnan and reads its result
+(src/cooperace/toolinfo/dartagnan.py): as BenchExec e7b7d4a4 does, which ran
+Dartagnan 10.5281/zenodo.24134559 in the SV-COMP 2027 pre-run, except that
 a plain "false" is "ERROR". The outputs are the closing lines of Dartagnan
 svcomp27 (10.5281/zenodo.23897433, Dat3M 05d5bdf; 23263361, 6b3b464, prints
-the same) on sv-benchmarks tasks, run on goblint on 8 November 2026."""
+the same) on sv-benchmarks tasks, run on goblint on 8 November 2026; the
+result rules are the same in e7b7d4a4 as in fbd04593."""
 import subprocess
 
 import pytest
+from support import STUB_DOI
 
 from src.cooperace import components
 from src.cooperace.components import REGISTRY
@@ -68,6 +71,26 @@ def status(lines, returncode=0):
 def test_dartagnan_s_tool_info_module_is_cooperace_s_copy():
     assert REGISTRY["Dartagnan"].module == "src.cooperace.toolinfo.dartagnan"
     assert REGISTRY["Dartagnan"].tool().name() == "Dartagnan"
+
+
+@pytest.mark.parametrize("data_model", ["ILP32", "LP64"])
+def test_dartagnan_is_given_the_data_model_of_the_task(tmp_path, make_runner, data_model):
+    """Dartagnan 24134559 compiles with -m32 for --data-model=ILP32 and with
+    -m64 for LP64, which is also what it does without the option; BenchExec
+    e7b7d4a4 passes the task's data model so, after the input file."""
+    executable = tmp_path / "dartagnan" / "Dartagnan-SVCOMP.sh"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n")
+    executable.chmod(0o755)
+    runner = make_runner(data_model)
+    spec = components.ComponentSpec("Dartagnan", REGISTRY["Dartagnan"].module, str(tmp_path / "dartagnan"),
+                                    witness=REGISTRY["Dartagnan"].witness)
+    runner.versions[spec.directory] = components.ComponentVersion(STUB_DOI, "svcomp27", ())
+
+    cmdline = runner.command(spec.tool(), spec, "/w").cmdline
+
+    assert cmdline[0] == str(tmp_path / "dartagnan" / "Dartagnan-SVCOMP.sh")
+    assert cmdline[1:] == [runner.property_file, "/dev/null", f"--data-model={data_model}"]
 
 
 def test_a_race_reported_as_flag_data_race_is_false_no_data_race():

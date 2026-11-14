@@ -165,8 +165,9 @@ REGISTRY = {spec.name: spec for spec in (
     #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
     #which must be Dartagnan's directory, and has no option for another one.
     #Version svcomp27 writes output/witness.yml; svcomp26 writes only output/witness.graphml
-    #Its tool-info module is BenchExec fbd04593's, which reads Dartagnan svcomp27's race report,
-    #and gives ERROR, never a plain "false", for a failure it does not recognize (toolinfo/dartagnan.py)
+    #Its tool-info module is BenchExec e7b7d4a4's, which reads Dartagnan svcomp27's race report and
+    #passes the task's data model (--data-model=ILP32 or LP64), and gives ERROR, never a plain
+    #"false", for a failure it does not recognize (toolinfo/dartagnan.py)
     ComponentSpec("Dartagnan", "src.cooperace.toolinfo.dartagnan", "dartagnan",
                   witness=WitnessSpec("component", (), ("output/witness.yml",))),
     ComponentSpec("ULTIMATE Automizer", "benchexec.tools.ultimateautomizer", "uautomizer",
