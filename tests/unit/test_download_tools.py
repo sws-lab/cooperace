@@ -9,6 +9,7 @@ tools-options.json. The network and fm_tools are replaced by stubs, and every
 file the script writes is redirected into tmp_path."""
 import importlib.util
 import json
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -103,7 +104,7 @@ class Setup:
     (`options`, a dict, or None for no file), a tools/ directory and a stub for
     the fm-tools lookup and for the installation."""
 
-    def __init__(self, tmp_path, monkeypatch, lock, pool="", options=None):
+    def __init__(self, tmp_path, monkeypatch, lock, pool="", options=None, unlisted=None, old_fm_tools=None):
         self.tools = tmp_path / "tools"
         self.lock = tmp_path / "tools.txt"
         self.lock.write_text(lock)
@@ -112,8 +113,15 @@ class Setup:
         self.options = tmp_path / "tools-options.json"
         if options is not None:
             self.options.write_text(json.dumps(options))
+        self.unlisted = tmp_path / "tools-unlisted.txt"
+        if unlisted is not None:
+            self.unlisted.write_text(unlisted)
+        #{(name, commit): data} of the entries at older fm-tools commits
+        self.old_fm_tools = old_fm_tools or {}
         self.loaded = []
         self.installed = []
+        monkeypatch.setattr(dt, "UNLISTED_FILE", self.unlisted)
+        monkeypatch.setattr(dt, "load_fm_tool_data_at", self.load_at)
         monkeypatch.setattr(dt, "DOI_FILE", self.lock)
         monkeypatch.setattr(dt, "POOL_FILE", self.pool)
         monkeypatch.setattr(dt, "OPTIONS_FILE", self.options)
@@ -124,6 +132,10 @@ class Setup:
     def load(self, name, fm_tools_dir):
         self.loaded.append(name)
         return FM_TOOLS[name]
+
+    def load_at(self, name, fm_tools_dir, revision):
+        self.loaded.append(f"{name}@{revision}")
+        return self.old_fm_tools[(name, revision)]
 
     def run(self, monkeypatch, *args):
         monkeypatch.setattr(sys, "argv", ["download-tools.py", *args])
@@ -276,3 +288,80 @@ def test_a_failed_download_leaves_no_record(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         dt.install("goblint", GOBLINT_DATA, "svcomp26", "10.5281/zenodo.1", tmp_path / "tools")
     assert dt.stale_tools({"goblint": "10.5281/zenodo.1"}, tmp_path / "tools") == {"goblint": None}
+
+
+# Deagle's entry at an older fm-tools commit, which still lists the DOI 10.5281/zenodo.40 that
+# FM_TOOLS (fm-tools main) no longer lists
+OLD_DEAGLE = {"versions": [{"version": "svcomp27", "doi": "10.5281/zenodo.40", "benchexec_toolinfo_options": ["--y"]}]}
+
+
+def test_read_unlisted_file(tmp_path):
+    path = tmp_path / "tools-unlisted.txt"
+    assert dt.read_unlisted_file(path) == {}
+    path.write_text("# why\ndeagle: 10.5281/zenodo.40 abc123\n\n")
+    assert dt.read_unlisted_file(path) == {"deagle": ("10.5281/zenodo.40", "abc123")}
+    for text in ["deagle: 10.5281/zenodo.40\n", "deagle 10.5281/zenodo.40 abc\n",
+                 "deagle: 1 a\ndeagle: 2 b\n"]:
+        path.write_text(text)
+        with pytest.raises(ValueError, match="tools-unlisted.txt"):
+            dt.read_unlisted_file(path)
+
+
+def test_a_doi_fm_tools_no_longer_lists_is_checked_against_the_commit_of_its_exception(tmp_path, monkeypatch, capsys):
+    setup = Setup(tmp_path, monkeypatch, "deagle: 10.5281/zenodo.40\n", unlisted="deagle: 10.5281/zenodo.40 abc123\n",
+                  old_fm_tools={("deagle", "abc123"): OLD_DEAGLE})
+    make_tool(setup.tools, "deagle", "10.5281/zenodo.40")
+    setup.options.write_text(dt.options_text({"deagle": ""}, {"deagle": dt.options_record(
+        "10.5281/zenodo.40", OLD_DEAGLE["versions"][0])}))
+    setup.run(monkeypatch, "--check", "--fm-tools-dir", str(tmp_path))
+    out = capsys.readouterr().out
+    assert "EXCEPTION deagle: fm-tools lists 10.5281/zenodo.4, not 10.5281/zenodo.40" in out
+    assert "1 of them by an exception of tools-unlisted.txt" in out
+    assert setup.loaded == ["deagle", "deagle@abc123"]
+
+    #The options are those of the old commit's entry
+    setup.options.write_text(dt.options_text({"deagle": ""}, {"deagle": dict(
+        dt.options_record("10.5281/zenodo.40", OLD_DEAGLE["versions"][0]), options=["--x"])}))
+    with pytest.raises(SystemExit, match="differ from those of the fm-tools entries"):
+        setup.run(monkeypatch, "--check", "--fm-tools-dir", str(tmp_path))
+
+
+def test_without_an_exception_a_doi_fm_tools_no_longer_lists_is_refused(tmp_path, monkeypatch):
+    setup = Setup(tmp_path, monkeypatch, "deagle: 10.5281/zenodo.40\n")
+    with pytest.raises(SystemExit, match="deagle: fm-tools lists 10.5281/zenodo.40 for no verifier version"):
+        setup.run(monkeypatch, "--dry-run")
+
+
+@pytest.mark.parametrize("lock, unlisted, message", [
+    ("deagle: 10.5281/zenodo.4\n", "deagle: 10.5281/zenodo.4 abc123\n", "fm-tools lists 10.5281/zenodo.4 again"),
+    ("deagle: 10.5281/zenodo.40\n", "deagle: 10.5281/zenodo.41 abc123\n",
+     "names 10.5281/zenodo.41, but the lock file 10.5281/zenodo.40"),
+    ("deagle: 10.5281/zenodo.42\n", "deagle: 10.5281/zenodo.42 abc123\n",
+     "at abc123 lists 10.5281/zenodo.42 for no verifier version either"),
+    ("goblint: 10.5281/zenodo.1\n", "deagle: 10.5281/zenodo.40 abc123\n", "names deagle, which no lock file names"),
+], ids=["listed-again", "other-doi", "not-at-the-commit", "no-lock-file"])
+def test_an_exception_that_does_not_hold_is_refused(tmp_path, monkeypatch, lock, unlisted, message):
+    setup = Setup(tmp_path, monkeypatch, lock, unlisted=unlisted, old_fm_tools={("deagle", "abc123"): OLD_DEAGLE})
+    with pytest.raises(SystemExit, match=message):
+        setup.run(monkeypatch, "--dry-run")
+    assert setup.installed == []
+
+
+def test_the_entry_at_a_commit_is_read_from_the_history_of_the_checkout(tmp_path):
+    def git(*args):
+        return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    git("init", "-q")
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "deagle.yml").write_text(json.dumps(OLD_DEAGLE))
+    git("add", "data")
+    git("commit", "-q", "-m", "old")
+    old = git("rev-parse", "HEAD")
+    (tmp_path / "data" / "deagle.yml").write_text(json.dumps(FM_TOOLS["deagle"]))
+    git("commit", "-q", "-am", "new")
+    assert dt.load_fm_tool_data_at("deagle", tmp_path, old) == OLD_DEAGLE
+    git("checkout", "-q", "--orphan", "other")
+    git("commit", "-q", "-m", "unrelated")
+    with pytest.raises(RuntimeError, match="not in the history of HEAD"):
+        dt.load_fm_tool_data_at("deagle", tmp_path, old)

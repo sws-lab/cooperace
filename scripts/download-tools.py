@@ -62,6 +62,19 @@ the merge request merged, passed as `--fm-tools-dir`:
     git fetch origin main refs/merge-requests/1181/head:refs/mr/1181
     git switch -c with-mrs origin/main && git merge refs/mr/1181
 
+A DOI that fm-tools no longer lists is refused, unless the tracked file
+tools-unlisted.txt names it as an exception, one "<name>: <doi> <commit>" line
+per component, where <commit> is a commit of fm-tools main whose entry still
+lists the DOI. CoOpeRace bundles the newest archive of a component that the
+organizers have run in a pre-run on the current task set (cooperace/D13); when
+fm-tools has since registered a newer archive that has not run yet, the
+bundled DOI is gone from fm-tools main. For such a component the script reads
+its version and options from the entry at <commit> (`git show` in
+`--fm-tools-dir`, which must have <commit> in the history of its HEAD, or
+gitlab.com at that commit), says so on one line beginning "EXCEPTION", and
+refuses the exception once fm-tools main lists the DOI again, or when it names
+another DOI than the lock file or a component of no lock file.
+
 The script can be run from any directory; the lock files, tools-options.json
 and tools/ are in the repository that contains it.
 """
@@ -77,6 +90,8 @@ FM_TOOLS_DATA_URL = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/mai
 ROOT = Path(__file__).resolve().parent.parent
 DOI_FILE = ROOT / "tools.txt"
 POOL_FILE = ROOT / "tools-pool.txt"
+UNLISTED_FILE = ROOT / "tools-unlisted.txt"
+FM_TOOLS_RAW_URL = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/{revision}/data/"
 OPTIONS_FILE = ROOT / "tools-options.json"
 TOOLS_ROOT = ROOT / "tools"
 RECORD_NAME = ".doi"
@@ -122,6 +137,30 @@ def read_lock_files(archive_file: Path, pool_file: Path) -> tuple[dict[str, str]
     if both:
         raise ValueError(f"{pool_file} names {', '.join(both)}, which {archive_file.name} names too")
     return archive, pool
+
+
+def read_unlisted_file(path: Path) -> dict[str, tuple[str, str]]:
+    """The exceptions of tools-unlisted.txt `path`, as {name: (doi, fm-tools
+    commit)}, in file order; empty if the file does not exist. Blank lines and
+    lines starting with '#' are skipped. A line without a name, a DOI and a
+    commit, or a name given twice, is a ValueError naming the file."""
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return {}
+    exceptions: dict[str, tuple[str, str]] = {}
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, separator, rest = (part.strip() for part in line.partition(":"))
+        fields = rest.split()
+        if not separator or not name or len(fields) != 2:
+            raise ValueError(f"{path}: line {number}: expected '<name>: <doi> <fm-tools commit>', got '{raw}'")
+        if name in exceptions:
+            raise ValueError(f"{path}: line {number}: {name} is listed twice")
+        exceptions[name] = (fields[0], fields[1])
+    return exceptions
 
 
 def installed_doi(tool_dir: Path) -> str | None:
@@ -226,12 +265,45 @@ def load_fm_tool_data(name: str, fm_tools_dir: Path | None) -> dict:
     return yaml.safe_load(text)
 
 
-def look_up(names: list[str], wanted: dict[str, str], fm_tools_dir: Path | None) -> dict[str, tuple[dict, dict]]:
+def load_fm_tool_data_at(name: str, fm_tools_dir: Path | None, revision: str) -> dict:
+    """The data of the fm-tools entry `name` at the fm-tools commit `revision`:
+    `git show` in the checkout `fm_tools_dir`, which must have `revision` in
+    the history of its HEAD, if given, else the file at that commit on
+    gitlab.com. Raises RuntimeError if the checkout does not have it."""
+    import subprocess
+
+    import yaml
+
+    if fm_tools_dir is not None:
+        def git(*args):
+            return subprocess.run(["git", "-C", str(fm_tools_dir), *args], capture_output=True, text=True)
+        if git("merge-base", "--is-ancestor", revision, "HEAD").returncode != 0:
+            raise RuntimeError(f"{revision} is not in the history of HEAD of {fm_tools_dir}")
+        shown = git("show", f"{revision}:data/{name}.yml")
+        if shown.returncode != 0:
+            raise RuntimeError(shown.stderr.strip())
+        text = shown.stdout
+    else:
+        url = FM_TOOLS_RAW_URL.format(revision=revision) + f"{name}.yml"
+        request = urllib.request.Request(url, headers={"Accept": "application/x-yaml"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            text = response.read().decode()
+    return yaml.safe_load(text)
+
+
+def look_up(names: list[str], wanted: dict[str, str], fm_tools_dir: Path | None,
+            unlisted: dict[str, tuple[str, str]] | None = None) -> dict[str, tuple[dict, dict]]:
     """The fm-tools data and the chosen version entry of each component of
     `names`, {name: (data, entry)}, for its DOI in `wanted`. Every component is
     looked up before the script changes anything, so that a wrong line in a
     lock file stops it first: a component whose entry cannot be read or does
-    not list its DOI ends the script with one message per such component."""
+    not list its DOI ends the script with one message per such component.
+
+    A component of `unlisted` ({name: (doi, commit)}, tools-unlisted.txt) is
+    looked up in its entry at that commit instead, and only if the entry of
+    fm-tools now does not list its DOI and the exception names the DOI of the
+    lock file; each is reported on a line beginning "EXCEPTION"."""
+    unlisted = unlisted or {}
     found: dict[str, tuple[dict, dict]] = {}
     errors: list[str] = []
     for name in names:
@@ -241,7 +313,28 @@ def look_up(names: list[str], wanted: dict[str, str], fm_tools_dir: Path | None)
             errors.append(f"{name}: cannot read the fm-tools entry: {error}")
             continue
         entry = version_entry_for(data, wanted[name])
-        if entry is None:
+        if name in unlisted:
+            doi, revision = unlisted[name]
+            if doi != wanted[name]:
+                errors.append(f"{name}: {UNLISTED_FILE.name} names {doi}, but the lock file {wanted[name]}")
+                continue
+            if entry is not None:
+                errors.append(f"{name}: fm-tools lists {doi} again (version {entry['version']}); "
+                              f"remove its exception from {UNLISTED_FILE.name}")
+                continue
+            try:
+                old = load_fm_tool_data_at(name, fm_tools_dir, revision)
+            except Exception as error:
+                errors.append(f"{name}: cannot read the fm-tools entry at {revision}: {error}")
+                continue
+            entry = version_entry_for(old, doi)
+            if entry is None:
+                errors.append(f"{name}: fm-tools at {revision} lists {doi} for no verifier version either")
+                continue
+            found[name] = (old, entry)
+            print(f"EXCEPTION {name}: fm-tools lists {', '.join(listed_references(data)) or 'no versions'}, "
+                  f"not {doi}; {UNLISTED_FILE.name} takes version {entry['version']} of fm-tools {revision}")
+        elif entry is None:
             errors.append(f"{name}: fm-tools lists {wanted[name]} for no verifier version; it lists "
                           + (", ".join(listed_references(data)) or "no versions"))
         else:
@@ -288,9 +381,13 @@ def main() -> None:
     try:
         archive, pool = read_lock_files(DOI_FILE, POOL_FILE)
         recorded = read_options_file(OPTIONS_FILE)
+        exceptions = read_unlisted_file(UNLISTED_FILE)
     except ValueError as error:
         sys.exit(f"Cannot read the lock files: {error}")
     every = {**archive, **pool}
+    strays = [name for name in exceptions if name not in every]
+    if strays:
+        sys.exit(f"{UNLISTED_FILE.name} names {', '.join(strays)}, which no lock file names")
     to_install = every if args.pool else archive
 
     stale = {} if args.options_only else stale_tools(to_install, TOOLS_ROOT)
@@ -315,7 +412,7 @@ def main() -> None:
         if outdated or unlisted:
             problems.append(f"{OPTIONS_FILE.name} does not match the lock files: " + ", ".join(outdated + unlisted))
         elif args.fm_tools_dir is not None:
-            found = look_up(list(every), every, args.fm_tools_dir)
+            found = look_up(list(every), every, args.fm_tools_dir, exceptions)
             expected = options_text(every, {name: options_record(every[name], entry)
                                             for name, (_data, entry) in found.items()})
             if OPTIONS_FILE.read_text() != expected:
@@ -324,13 +421,17 @@ def main() -> None:
         if problems:
             sys.exit("\n".join(problems))
         print(f"All components in {TOOLS_ROOT} and {OPTIONS_FILE.name} match the lock files.")
+        if exceptions and args.fm_tools_dir is not None:
+            print(f"{len(exceptions)} of them by an exception of {UNLISTED_FILE.name}, not listed in fm-tools: "
+                  + ", ".join(exceptions))
         return
 
     if not stale and not outdated and not unlisted:
         print(f"All components in {TOOLS_ROOT} and {OPTIONS_FILE.name} match the lock files.")
         return
 
-    entries = look_up([name for name in every if name in stale or name in outdated], every, args.fm_tools_dir)
+    entries = look_up([name for name in every if name in stale or name in outdated], every, args.fm_tools_dir,
+                      exceptions)
     if args.dry_run:
         return
 
