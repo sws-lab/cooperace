@@ -1,14 +1,15 @@
 # The components of CoOpeRace's registry that are not in the SV-COMP archive:
-# one "<fm-tools name>: <doi>" line each. ULTIMATE Automizer and iekke are in
-# their SV-COMP 2027 versions. The others are in the version each ran in the
-# Verification track of SV-COMP 2026: for nacpa (2.1.1) and RacerF (svcomp26)
-# that is also the version fm-tools registers for SV-COMP 2027, while
-# ULTIMATE Taipan (svcomp26) and CPAchecker (4.2.2) have a newer 2027 version
-# that this file does not name. scripts/download-tools.py --pool
+# one "<fm-tools name>: <doi>" line each. ULTIMATE Automizer, iekke and
+# CPAchecker are in their SV-COMP 2027 versions, each the newest archive that
+# has a pre-run on the current task set. The others are in the version each
+# ran in the Verification track of SV-COMP 2026: for nacpa (2.1.1) and RacerF
+# (svcomp26) that is also the version fm-tools registers for SV-COMP 2027,
+# while ULTIMATE Taipan (svcomp26) has a newer 2027 version that this file
+# does not name. scripts/download-tools.py --pool
 # installs them into tools/; scripts/svcomp-dist.sh packs only tools.txt.
-uautomizer: 10.5281/zenodo.24059988
-iekke: 10.5281/zenodo.24013886
+uautomizer: 10.5281/zenodo.24133222
+iekke: 10.5281/zenodo.24187653
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
-cpachecker: 10.5281/zenodo.17777566
+cpachecker: 10.5281/zenodo.24021993
 racerf: 10.5281/zenodo.17589798

@@ -30,9 +30,9 @@ https://github.com/2393591260/ikos-conc, commit 3d3b027d5a8669c45dc7b998f971aa5d
   Source: https://github.com/antoinemine/apron. The archive does not record which APRON revision
   was built; ask IKOS-ConC's author for it.
 
-## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.24040934)
+## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.24080342)
 
-Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit f793261a3.
+Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit 9febbae9c.
 
 - **APRON**, LGPL-2.1 with a linking exception: the shared objects `tools/goblint/lib/libapron.so`,
   `libboxD.so`, `liboctD.so`, `libpolkaMPQ.so`. Licence: `tools/goblint/lib/LICENSE.APRON`.
@@ -51,9 +51,10 @@ Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, c
   `cvc5 --show-config`), Z3 4.15.4 (MIT), Bitwuzla 0.9.1, Golem 0.9.1 (MIT), and MathSAT5, whose
   licence (`mathsat-LICENSE`) allows research and evaluation use only.
 
-## Dartagnan (`tools/dartagnan/`, Zenodo 10.5281/zenodo.23897433)
+## Dartagnan (`tools/dartagnan/`, Zenodo 10.5281/zenodo.24134559)
 
-Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon/Dat3M.
+Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon/Dat3M, commit
+38d5fe418 (version 4.5.0-alpha).
 
 - Its executable `dartagnan/target/dartagnan` is a native image built with Oracle GraalVM
   25.0.4+7.1. It contains the Java class library of JDK 25.0.4, GPL-2.0 with the Classpath
@@ -61,10 +62,11 @@ Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon
   https://github.com/openjdk/jdk25u/releases/tag/jdk-25.0.4%2B7. The licences of the other
   dependencies in the image are in `tools/dartagnan/LICENSES/`.
 
-## Deagle (`tools/deagle/`, Zenodo 10.5281/zenodo.23488039)
+## Deagle (`tools/deagle/`, Zenodo 10.5281/zenodo.24150501)
 
 Deagle's `LICENSE` is BSD-4-Clause, with the terms of CBMC and MiniSat. Its archive also holds the
-GPL-3.0 text (`tools/deagle/COPYING`). Source: https://github.com/thufv/deagle.
+GPL-3.0 text (`tools/deagle/COPYING`). Source: https://github.com/thufv/deagle (version 4.2.0;
+`BUILD-INFO.txt` gives the SHA-256 of the wrapper and of `deagle_exe`).
 
 ## sv-sanitizers (`tools/sv-sanitizers/`)
 

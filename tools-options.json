@@ -1,6 +1,6 @@
 {
   "goblint": {
-    "doi": "10.5281/zenodo.24040934",
+    "doi": "10.5281/zenodo.24080342",
     "version": "svcomp27",
     "options": [
       "--portfolio-conf",
@@ -8,7 +8,7 @@
     ]
   },
   "dartagnan": {
-    "doi": "10.5281/zenodo.23897433",
+    "doi": "10.5281/zenodo.24134559",
     "version": "svcomp27",
     "options": []
   },
@@ -18,7 +18,7 @@
     "options": []
   },
   "deagle": {
-    "doi": "10.5281/zenodo.23488039",
+    "doi": "10.5281/zenodo.24150501",
     "version": "svcomp27",
     "options": []
   },
@@ -35,14 +35,14 @@
     "options": []
   },
   "uautomizer": {
-    "doi": "10.5281/zenodo.24059988",
+    "doi": "10.5281/zenodo.24133222",
     "version": "svcomp27",
     "options": [
       "--full-output"
     ]
   },
   "iekke": {
-    "doi": "10.5281/zenodo.24013886",
+    "doi": "10.5281/zenodo.24187653",
     "version": "2.0",
     "options": []
   },
@@ -59,10 +59,10 @@
     "options": []
   },
   "cpachecker": {
-    "doi": "10.5281/zenodo.17777566",
-    "version": "4.2.2",
+    "doi": "10.5281/zenodo.24021993",
+    "version": "4.2.2-3728-g5c33b8d955",
     "options": [
-      "--svcomp26",
+      "--svcomp27",
       "--heap",
       "10000M",
       "--benchmark",

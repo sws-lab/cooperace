@@ -7,6 +7,7 @@ tools-options.json, the lazy import of the tool-info modules, and how a step
 reports a component that cannot be set up."""
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -71,22 +72,49 @@ def test_every_component_has_a_task_limit_and_sv_sanitizers_that_of_a_program():
 
 
 def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():
-    """The benchexec_toolinfo_options of version svcomp27 of ikos-conc.yml in fm-tools main 12979f1,
-    of dartagnan.yml and of version 2.0 of iekke.yml in fm-tools main 78fa3ed, of goblint.yml,
-    sv-sanitizers.yml, ugemcutter.yml and uautomizer.yml in fm-tools main 9b709d6d, and of version
-    svcomp27 of deagle.yml, as proposed in fm-tools merge request !1181 (head
-    d76ae28f)."""
+    """The benchexec_toolinfo_options of version svcomp27 of ikos-conc.yml, goblint.yml and
+    dartagnan.yml, of version 2.0 of iekke.yml and of version 4.2.2-3728-g5c33b8d955 of
+    cpachecker.yml in fm-tools main 006c632b (14 November 2026), and, for the archives that
+    fm-tools main no longer lists (tools-unlisted.txt), of version svcomp27 of sv-sanitizers.yml
+    in fm-tools d8d51aed, of deagle.yml in cb98189b, of ugemcutter.yml in 6452480b and of
+    uautomizer.yml in b7ccdb13: each the newest archive of its component with a pre-run on the
+    current task set."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24040934", "svcomp27",
+    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24080342", "svcomp27",
                                                    ("--portfolio-conf", "conf/svcomp27/seq.txt"))
-    assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.23897433", "svcomp27", ())
-    assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.24059988", "svcomp27", ("--full-output",))
+    assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.24134559", "svcomp27", ())
+    assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.24133222", "svcomp27", ("--full-output",))
     assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.24041366", "svcomp27", ())
-    assert versions["deagle"] == ComponentVersion("10.5281/zenodo.23488039", "svcomp27", ())
-    assert versions["iekke"] == ComponentVersion("10.5281/zenodo.24013886", "2.0", ())
+    assert versions["deagle"] == ComponentVersion("10.5281/zenodo.24150501", "svcomp27", ())
+    assert versions["iekke"] == ComponentVersion("10.5281/zenodo.24187653", "2.0", ())
     assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.24060016", "svcomp27", ("--full-output",))
     assert versions["ikos-conc"] == ComponentVersion("10.5281/zenodo.23736684", "svcomp27", ())
+    assert versions["cpachecker"] == ComponentVersion(
+        "10.5281/zenodo.24021993", "4.2.2-3728-g5c33b8d955",
+        ("--svcomp27", "--heap", "10000M", "--benchmark", "--timelimit", "900 s"))
+
+
+def test_every_exception_of_tools_unlisted_names_a_component_of_a_lock_file_with_its_doi():
+    archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
+    exceptions = download_tools.read_unlisted_file(ROOT / "tools-unlisted.txt")
+
+    assert set(exceptions) == {"sv-sanitizers", "deagle", "ugemcutter", "uautomizer"}
+    for name, (doi, _commit) in exceptions.items():
+        assert {**archive, **pool}[name] == doi
+
+
+def test_deagle_s_witness_file_is_the_one_its_wrapper_writes():
+    """The wrapper of the installed Deagle names the file of every --yaml-witness
+    it passes deagle_exe; CoOpeRace takes Deagle's witness from exactly these.
+    Deagle 4.1.0 (23488039) wrote error-witness.yml, 4.2.0 (24150501) witness.yml."""
+    wrapper = ROOT / "tools" / REGISTRY["Deagle"].directory / "deagle"
+    if not wrapper.is_file():
+        pytest.skip("Deagle is not installed under tools/")
+    written = set(re.findall(r"--yaml-witness (\S+)", wrapper.read_text()))
+
+    assert written
+    assert set(REGISTRY["Deagle"].witness.files) == written
 
 
 def test_every_component_has_options_and_the_options_file_matches_the_lock_files():

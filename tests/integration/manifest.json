@@ -653,7 +653,7 @@
    "validator": "uautomizer",
    "origin": "c/goblint-regression/04-mutex_46a-escape_nr.yml",
    "license": "MIT",
-   "purpose": "Deagle answers false(no-overflow) in 0.2 s with a YAML 2.2 violation witness, error-witness.yml, that ULTIMATE Automizer's validator confirms; Goblint ends in unknown after 0.7 s. ULTIMATE GemCutter and Dartagnan answer false too, which svcomp27 does not accept from them in no-overflow, so only Deagle gives the verdict.",
+   "purpose": "Deagle answers false(no-overflow) in 0.2 s with a YAML 2.2 violation witness (error-witness.yml in Deagle 4.1.0, witness.yml in 4.2.0) that ULTIMATE Automizer's validator confirms; Goblint ends in unknown after 0.7 s. ULTIMATE GemCutter and Dartagnan answer false too, which svcomp27 does not accept from them in no-overflow, so only Deagle gives the verdict.",
    "sv_comp_2026": {
     "goblint": {
      "answer": "none",

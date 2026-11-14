@@ -13,6 +13,11 @@ which `scripts/download-tools.py` writes into the tracked [`tools-options.json`]
 CoOpeRace reads the options from that file and refuses to run a component whose `tools/<name>/.doi` is not
 the DOI recorded there. `scripts/download-tools.py --check` says whether `tools/` and `tools-options.json`
 match the lock files.
+Each component is bundled in the newest archive that the organizers have run in a pre-run on the current
+task set. Where fm-tools has since registered a newer archive, fm-tools main no longer lists the bundled
+DOI, and the script refuses it unless [`tools-unlisted.txt`](tools-unlisted.txt) names it with the fm-tools
+commit whose entry still lists it; the script then reads the version and options at that commit and says
+so on a line beginning `EXCEPTION`.
 
 The goal of the CoOpeRace project is to identify the ultimate state-of-the-art in race freedom verification,
 attempt better ways of communicating intermediate results between tools, and 

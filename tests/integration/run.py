@@ -725,7 +725,7 @@ def verify(args, runs, cdir, out):
             continue
         tool_dir = cdir / "tools" / c
         definition = out / "defs" / f"{name}.xml"
-        # A component alone may name its witness otherwise (Deagle: error-witness.yml)
+        # A component alone may name its witness otherwise (Deagle 4.1.0: error-witness.yml)
         write_definition(definition, comp["module"], {name: option_pairs(runs[name]["options"])},
                          limits, {name: runs[name]["tasks"]}, result_files="**/*witness.*")
         stage.add(definition, tool_dir, tool_dir, vdir, name, len(runs[name]["tasks"]),
@@ -752,7 +752,7 @@ def collect_witnesses(results, runs, fmt, out, tasks):
     the one at the top of the result files, where CoOpeRace delivers it; a
     component run alone may write it into a directory of its own
     (Dartagnan's output/) and under a name that ends in the format's
-    (Deagle's error-witness.yml), so for such a run it is the first such file
+    (Deagle 4.1.0's error-witness.yml), so for such a run it is the first such file
     anywhere in the result files."""
     by_id = {t["id"]: t for t in tasks}
     for (rundef, task), r in results.items():

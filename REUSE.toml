@@ -25,6 +25,7 @@ path = [
     "conf/**",
     "tools.txt",
     "tools-pool.txt",
+    "tools-unlisted.txt",
     "tools-options.json",
     "scripts/sv-comp/zenodo-metadata.json",
     "src/tool_combinations/README.md",
