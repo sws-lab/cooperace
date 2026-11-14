@@ -38,12 +38,11 @@ VALID_MEMSAFETY = {
 # The same two strategies of the default conf, conf/svcomp27.json, which
 # conf/README.md shows: IKOS-ConC in no-data-race, Deagle alone in phase 2 of valid-memsafety.
 DEFAULT_NO_DATA_RACE = {
-    "phases": [{"tools": ["sv-sanitizers", "Goblint", "IKOS-ConC"], "wallTimeLimit": 45},
-               {"tools": ["Goblint", "IKOS-ConC"], "wallTimeLimit": 120}, ["Dartagnan"]],
-    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "IKOS-ConC": 60},
-    "memoryLimits": {"sv-sanitizers": "30%", "Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
-    "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false", "sv-sanitizers:false"], ["Dartagnan"]],
-    "witnesses": ["IKOS-ConC", "sv-sanitizers", "Dartagnan"],
+    "phases": [{"tools": ["Goblint", "IKOS-ConC"], "wallTimeLimit": 120}, ["Dartagnan"]],
+    "cpuTimeLimits": {"Goblint": 30, "IKOS-ConC": 60},
+    "memoryLimits": {"Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
+    "answers": [["Goblint:true", "IKOS-ConC:true"], ["IKOS-ConC:false"], ["Dartagnan"]],
+    "witnesses": ["IKOS-ConC", "Dartagnan"],
     "ignoreIfCalls": {"Dartagnan": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy"],
                       "Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
