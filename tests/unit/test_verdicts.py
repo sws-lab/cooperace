@@ -409,3 +409,67 @@ def test_stopping_early_prints_what_running_every_tool_to_the_end_prints(seed):
         got = (result.verdict, result.tool if result.witness else None,
                result.subproperty if result.verdict == FALSE else None)
         assert got == expected, (strategy, property_name, behaviours)
+
+
+# --- veto windows ----------------------------------------------------------------
+
+VETOED = {"phases": [["Goblint"], {"tools": ["Deagle", "GemCutter"], "wallTimeLimit": 150}, ["Deagle"]],
+          "cpuTimeLimits": {"GemCutter": 60},
+          "answers": [["Goblint:true"], ["Deagle:false", "GemCutter:false"], ["Deagle:true"]],
+          "witnesses": ["Deagle"], "vetoWindows": {"Deagle:true": ["GemCutter"]}}
+
+
+def test_a_held_true_waits_for_the_vetoing_component_and_a_false_of_it_wins():
+    verdicts = verdicts_of(VETOED, "valid-memsafety", Deagle=Answer(TRUE))
+
+    assert verdicts.keeps_running("GemCutter", {"GemCutter"})
+    assert verdicts.result().verdict == TRUE
+    verdicts.record("GemCutter", Answer(FALSE, "valid-deref"))
+    result = verdicts.result()
+    assert (result.verdict, result.tool, result.subproperty) == (FALSE, "GemCutter", "valid-deref")
+
+
+def test_a_held_true_is_unknown_only_when_the_budget_cut_the_vetoing_component():
+    verdicts = verdicts_of(VETOED, "valid-memsafety", Deagle=Answer(TRUE))
+    verdicts.cut.add("GemCutter")
+
+    result = verdicts.result()
+    assert (result.verdict, result.held_for) == (UNKNOWN, ("GemCutter",))
+    assert result.decision == Decision(2, TRUE)
+
+
+def test_a_cut_component_holds_no_answer_it_cannot_veto():
+    #A false is not held, and a component cut that vetoes nothing holds nothing
+    verdicts = verdicts_of(VETOED, "valid-memsafety", Deagle=Answer(FALSE, "valid-deref"))
+    verdicts.cut.add("GemCutter")
+    assert verdicts.result().verdict == FALSE
+    verdicts = verdicts_of(VETOED, "valid-memsafety", Deagle=Answer(TRUE))
+    verdicts.cut.add("Goblint")
+    assert verdicts.result().verdict == TRUE
+
+
+def test_exhaust_marks_the_running_components_cut():
+    schedule = Schedule(Verdicts(load(VETOED), "valid-memsafety"))
+    schedule.begin(0.0)
+    schedule.ended("Goblint", None, 1.0)
+    assert schedule.states["GemCutter"] == RUNNING
+    schedule.ended("Deagle", Answer(TRUE), 2.0)
+    assert schedule.states["GemCutter"] == RUNNING
+
+    schedule.exhaust()
+
+    assert schedule.verdicts.cut == {"GemCutter"}
+    assert schedule.verdicts.result().verdict == UNKNOWN
+
+
+def test_a_vetoing_component_stopped_by_its_phase_s_wall_time_limit_holds_nothing():
+    schedule = Schedule(Verdicts(load(VETOED), "valid-memsafety"))
+    schedule.begin(0.0)
+    schedule.ended("Goblint", None, 1.0)
+    schedule.ended("Deagle", Answer(TRUE), 2.0)
+
+    actions = schedule.time_passed(1.0 + 150)
+
+    assert actions.timed_out == ("GemCutter",)
+    assert schedule.over and schedule.verdicts.cut == set()
+    assert schedule.verdicts.result().verdict == TRUE

@@ -268,7 +268,11 @@ def outcome_of(verdicts: Verdicts, outcomes: dict[str, Outcome]) -> Outcome:
         names = ", ".join(f"{entry.tool} {entry.verdict}" for entry in result.disagreeing)
         return Outcome(CONTRADICTION, None, [], f"ERROR (contradiction: {names})")
     if result.verdict == UNKNOWN:
-        if decision is not None:
+        if result.held_for:
+            say(f"CoOpeRace: the verdict {decision.verdict} of bracket {decision.bracket + 1} waits for a veto of "
+                f"{', '.join(result.held_for)}, which the CPU-time budget stopped before it ended: "
+                "the result is unknown")
+        elif decision is not None:
             say(f"CoOpeRace: the verdict {decision.verdict} of bracket {decision.bracket + 1} needs a witness, "
                 f"and no component with an entry for {decision.verdict} wrote one that passes the check: "
                 "the result is unknown")

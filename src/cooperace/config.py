@@ -26,7 +26,12 @@ checked. A strategy is a JSON object with:
   and the run ends with the answers it has;
 - "ignoreIfCalls", optional: an entry of "answers" ("Name:true", "Name:false"
   or "Name") to a list of C function names; if the task's program calls one
-  of them, those entries are dropped before the strategy runs (guarded).
+  of them, those entries are dropped before the strategy runs (guarded);
+- "vetoWindows", optional: an entry "Name:verdict" of "answers" to a list of
+  components that can veto it. Each has an entry for the other verdict in a
+  more trusted bracket, so the answer waits for it by the bracket rules, and
+  a CPU-time limit, which bounds the wait. If the run's CPU-time budget stops
+  one of them before it ended, the answer is not delivered (verdicts.Result).
 
 load_strategies turns a conf into a map from property to Strategy, and load
 turns one strategy into a Strategy, refusing with ConfError whatever the
@@ -48,7 +53,7 @@ VERDICTS = ("true", "false")
 
 # The keys of a strategy, and the keys of a phase given as an object.
 STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits", "runCpuTimeBudget",
-                 "ignoreIfCalls")
+                 "ignoreIfCalls", "vetoWindows")
 REQUIRED_KEYS = ("phases", "answers", "witnesses")
 PHASE_KEYS = ("tools", "wallTimeLimit")
 
@@ -110,6 +115,8 @@ class Strategy:
     components of `phases`. `run_cpu_time_budget` is the conf's
     runCpuTimeBudget in seconds, None without one. `ignore_if_calls` maps an
     Entry of `answers` to the functions whose call drops it (guarded).
+    `veto_windows` maps an Entry of `answers` to the components that can veto
+    it (the conf's "vetoWindows").
 
     load guarantees that every component of `phases` has at least one Entry,
     that every Entry and every name in `witnesses` names a component of
@@ -122,6 +129,7 @@ class Strategy:
     memory_limits: Mapping[str, int | float | str]
     run_cpu_time_budget: int | float | None = None
     ignore_if_calls: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
+    veto_windows: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def tools(self) -> tuple[str, ...]:
@@ -305,7 +313,11 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     "memoryLimits", a percentage above 0 and at most 100); or has a
     runCpuTimeBudget that is not a positive number; or has an
     "ignoreIfCalls" that is not an object, a key there that is no entry of
-    answers, or a value that is not a non-empty list of C identifiers."""
+    answers, or a value that is not a non-empty list of C identifiers; or has
+    a "vetoWindows" that is not an object, a key there that is not one entry
+    "Name:true" or "Name:false" of answers, or a value that is not a
+    non-empty list of components each of which has an entry for the other
+    verdict in a bracket above that entry's and a CPU-time limit."""
     if not isinstance(strategy, dict):
         raise ConfError("the strategy must be a JSON object")
     _refuse_tree_format(strategy, "the strategy")
@@ -346,9 +358,45 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     budget = strategy.get("runCpuTimeBudget")
     if "runCpuTimeBudget" in strategy and not _is_positive_number(budget):
         raise ConfError(f"runCpuTimeBudget is {budget!r}, which is not a positive number of seconds")
+    cpu_time_limits = _limits(strategy, "cpuTimeLimits", tools)
     return Strategy(phases, answers, witnesses,
-                    _limits(strategy, "cpuTimeLimits", tools), _limits(strategy, "memoryLimits", tools),
-                    budget, _ignore_if_calls(strategy.get("ignoreIfCalls", {}), answers))
+                    cpu_time_limits, _limits(strategy, "memoryLimits", tools),
+                    budget, _ignore_if_calls(strategy.get("ignoreIfCalls", {}), answers),
+                    _veto_windows(strategy.get("vetoWindows", {}), answers, cpu_time_limits))
+
+
+def _veto_windows(value: object, answers: tuple[frozenset[Entry], ...],
+                  cpu_time_limits: Mapping[str, int | float]) -> dict[Entry, tuple[str, ...]]:
+    """The map "vetoWindows", given as `value`, from the Entry it names to the
+    components that can veto it, refusing a key that is not one entry of
+    answers, and a vetoing component without an entry for the other verdict
+    in a bracket above the key's, or without a CPU-time limit (the window
+    would be unbounded)."""
+    if not isinstance(value, dict):
+        raise ConfError(f"vetoWindows must be an object, not {value!r}")
+    windows: dict[Entry, tuple[str, ...]] = {}
+    for text, names in value.items():
+        named = _entries(text, 0) if isinstance(text, str) and ":" in text else []
+        if len(named) != 1:
+            raise ConfError(f"vetoWindows has the key {text!r}, expected 'Name:true' or 'Name:false'")
+        entry = named[0]
+        held = next((index for index, bracket in enumerate(answers) if entry in bracket), None)
+        if held is None:
+            raise ConfError(f"vetoWindows names {text}, which is in no bracket of answers")
+        vetoers = _names(names, f"the components that can veto {text}")
+        if not vetoers:
+            raise ConfError(f"vetoWindows gives {text} no component")
+        veto = "false" if entry.verdict == "true" else "true"
+        for name in vetoers:
+            above = [index for index, bracket in enumerate(answers) if Entry(name, veto) in bracket]
+            if not above or above[0] >= held:
+                raise ConfError(f"vetoWindows lets {name!r} veto {text}, but {name}:{veto} is in no bracket "
+                                f"above that of {text}, so {text} would not wait for it")
+            if name not in cpu_time_limits:
+                raise ConfError(f"vetoWindows lets {name!r} veto {text}, but {name!r} has no CPU-time limit, "
+                                "which bounds the window")
+        windows[entry] = vetoers
+    return windows
 
 
 def _ignore_if_calls(value: object, answers: tuple[frozenset[Entry], ...]) -> dict[Entry, tuple[str, ...]]:
@@ -415,7 +463,23 @@ def guarded(strategy: Strategy, called: set[str]) -> tuple[Strategy | None, dict
                    witnesses=tuple(name for name in strategy.witnesses if name in with_entry),
                    cpu_time_limits={k: v for k, v in strategy.cpu_time_limits.items() if k in with_entry},
                    memory_limits={k: v for k, v in strategy.memory_limits.items() if k in with_entry},
-                   ignore_if_calls={k: v for k, v in strategy.ignore_if_calls.items() if k not in dropped}), dropped
+                   ignore_if_calls={k: v for k, v in strategy.ignore_if_calls.items() if k not in dropped},
+                   veto_windows=_kept_veto_windows(strategy.veto_windows, answers)), dropped
+
+
+def _kept_veto_windows(windows: Mapping[Entry, tuple[str, ...]],
+                       answers: tuple[frozenset[Entry], ...]) -> dict[Entry, tuple[str, ...]]:
+    """`windows` for the brackets `answers` that guarded leaves: without a
+    held entry that is gone, and without a component whose vetoing entry is
+    gone; an entry left without a component is dropped."""
+    entries = {entry for bracket in answers for entry in bracket}
+    kept = {}
+    for entry, names in windows.items():
+        veto = "false" if entry.verdict == "true" else "true"
+        names = tuple(name for name in names if Entry(name, veto) in entries)
+        if entry in entries and names:
+            kept[entry] = names
+    return kept
 
 
 def load_strategies(conf: dict, known: Container[str]) -> dict[str, Strategy]:

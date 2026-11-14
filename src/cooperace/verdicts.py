@@ -77,7 +77,10 @@ class Result:
     CONTRADICTION. `witness` is whether `tool`'s witness is delivered, and
     `subproperty` the sub-property of `tool`'s answer. `disagreeing` holds,
     for CONTRADICTION, the entries of the deciding bracket that were
-    answered, those of true first, each sorted by component name."""
+    answered, those of true first, each sorted by component name.
+    `held_for` names, for an UNKNOWN whose Decision's answers wait for a veto
+    (Strategy.veto_windows), the vetoing components that the run's CPU-time
+    budget stopped before they ended."""
 
     verdict: str
     decision: Decision | None = None
@@ -85,6 +88,7 @@ class Result:
     witness: bool = False
     subproperty: str | None = None
     disagreeing: tuple[Entry, ...] = field(default=())
+    held_for: tuple[str, ...] = field(default=())
 
 
 class Verdicts:
@@ -97,6 +101,8 @@ class Verdicts:
         self.strategy = strategy
         self.property_name = property_name
         self.answers: dict[str, Answer] = {}
+        #The components that the run's CPU-time budget stopped before they ended (Schedule.exhaust)
+        self.cut: set[str] = set()
         #(bracket index, verdict) of each Entry, by component
         self.entries = {tool: {(index, entry.verdict) for index, bracket in enumerate(strategy.answers)
                                for entry in bracket if entry.tool == tool}
@@ -176,11 +182,23 @@ class Verdicts:
         the verdict (witness_counts) and some component supplies one; else,
         if the verdict needs a witness (witnesses.needs_witness), the result
         is UNKNOWN; else the verdict is taken from the component agreeing
-        returns, without a witness."""
+        returns, without a witness.
+
+        A Decision of TRUE or FALSE is UNKNOWN, with `held_for`, if every
+        answer of it in the deciding bracket waits for a veto
+        (Strategy.veto_windows) and, for each, a component that can veto it
+        was stopped by the run's CPU-time budget (`cut`) before it ended: its
+        window was not over, so the answer is not delivered. A veto that
+        ends by itself, by its own limits or by its phase's wall-time limit
+        without a verdict does not hold the answer."""
         decision = self.decision()
         if decision is None:
             return Result(UNKNOWN)
         index, verdict = decision
+        if verdict != CONTRADICTION:
+            held_for = self.held_for(verdict, index)
+            if held_for:
+                return Result(UNKNOWN, decision, held_for=held_for)
         if verdict == CONTRADICTION:
             answered = [Entry(tool, answer.verdict) for tool, answer in self.answers.items()
                         if Entry(tool, answer.verdict) in self.strategy.answers[index]]
@@ -193,6 +211,20 @@ class Verdicts:
             return Result(UNKNOWN, decision)
         tool = self.agreeing(verdict, index)
         return Result(verdict, decision, tool, False, self.answers[tool].subproperty)
+
+    def held_for(self, verdict: str, bracket: int) -> tuple[str, ...]:
+        """The vetoing components in `cut` that hold the answers `verdict` of
+        the bracket with index `bracket`, if every such answer has one; else
+        ()."""
+        answered = [tool for tool, answer in self.answers.items()
+                    if answer.verdict == verdict and Entry(tool, verdict) in self.strategy.answers[bracket]]
+        holders = set()
+        for tool in answered:
+            cut = [name for name in self.strategy.veto_windows.get(Entry(tool, verdict), ()) if name in self.cut]
+            if not cut:
+                return ()
+            holders.update(cut)
+        return tuple(sorted(holders))
 
     def keeps_running(self, tool: str, live: Collection[str]) -> bool:
         """Whether the component `tool`, which has not ended, keeps running,
@@ -319,6 +351,7 @@ class Schedule:
         stops every running component, skips every pending one and leaves
         the last phase. The answers recorded so far decide the result."""
         stop = [tool for tool, state in self.states.items() if state == RUNNING]
+        self.verdicts.cut.update(stop)
         for tool, state in self.states.items():
             if state == RUNNING:
                 self.states[tool] = ENDED

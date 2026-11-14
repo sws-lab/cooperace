@@ -47,10 +47,13 @@ DEFAULT_NO_DATA_RACE = {
                       "Dartagnan:true": ["pthread_mutexattr_settype"]},
 }
 DEFAULT_VALID_MEMSAFETY = {
-    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45}, ["Deagle"]],
-    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30},
-    "memoryLimits": {"sv-sanitizers": "45%", "Goblint": "45%", "Deagle": "60%"},
-    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"], ["Deagle:true"]],
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
+               {"tools": ["Deagle", "ULTIMATE GemCutter"], "wallTimeLimit": 150}, ["Deagle"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "ULTIMATE GemCutter": 60},
+    "memoryLimits": {"sv-sanitizers": "45%", "Goblint": "45%", "Deagle": "55%", "ULTIMATE GemCutter": "40%"},
+    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false", "ULTIMATE GemCutter:false"],
+                ["Deagle:true"]],
+    "vetoWindows": {"Deagle:true": ["ULTIMATE GemCutter"]},
     "witnesses": ["Deagle", "sv-sanitizers"],
     "ignoreIfCalls": {"Deagle": ["pthread_barrier_init", "pthread_barrier_wait", "pthread_barrier_destroy",
                                  "pthread_once", "pthread_mutexattr_settype"]},
@@ -613,3 +616,46 @@ def test_guarded_gives_none_when_every_entry_is_dropped(known):
 
     assert config.guarded(strategy, {"f"}) == (None, {Entry("Goblint", "true"): ("f",),
                                                       Entry("Goblint", "false"): ("f",)})
+
+
+# --- vetoWindows ---------------------------------------------------------------
+
+def test_veto_windows_load_as_the_entry_and_its_vetoing_components(known):
+    strategy = config.load(DEFAULT_VALID_MEMSAFETY, known)
+
+    assert strategy.veto_windows == {Entry("Deagle", "true"): ("ULTIMATE GemCutter",)}
+    assert config.load(GOBLINT, known).veto_windows == {}
+
+
+@pytest.mark.parametrize("value, message", [
+    ([], "vetoWindows must be an object"),
+    ({"Deagle": ["ULTIMATE GemCutter"]}, "expected 'Name:true' or 'Name:false'"),
+    ({"Goblint:false": ["ULTIMATE GemCutter"]}, "Goblint:false, which is in no bracket"),
+    ({"Deagle:true": []}, "gives Deagle:true no component"),
+    ({"Deagle:true": "ULTIMATE GemCutter"}, "must be a list of component names"),
+    ({"Deagle:true": ["Goblint"]}, "Goblint:false is in no bracket above that of Deagle:true"),
+    ({"Deagle:true": ["sv-sanitizers", "sv-sanitizers"]}, "more than once"),
+], ids=["not-an-object", "no-verdict", "no-entry", "empty", "not-a-list", "no-veto-entry", "twice"])
+def test_a_malformed_veto_window_is_refused(known, value, message):
+    refuses(with_changes(DEFAULT_VALID_MEMSAFETY, vetoWindows=value), known, message)
+
+
+def test_a_vetoing_component_without_a_cpu_time_limit_is_refused(known):
+    refuses(with_changes(DEFAULT_VALID_MEMSAFETY, cpuTimeLimits={"sv-sanitizers": 30, "Goblint": 30}), known,
+            "'ULTIMATE GemCutter' has no CPU-time limit")
+
+
+def test_a_veto_from_the_same_bracket_is_refused(known):
+    refuses(with_changes(DEFAULT_VALID_MEMSAFETY,
+                         answers=[["Goblint:true"], ["Deagle:false", "sv-sanitizers:false"],
+                                  ["Deagle:true", "ULTIMATE GemCutter:false"]]), known,
+            "ULTIMATE GemCutter:false is in no bracket above that of Deagle:true")
+
+
+def test_guarded_drops_a_veto_window_with_its_entry_or_its_vetoing_entry(known):
+    strategy = config.load(with_changes(DEFAULT_VALID_MEMSAFETY,
+                                        ignoreIfCalls={"Deagle:true": ["f"], "ULTIMATE GemCutter": ["g"]}), known)
+
+    assert config.guarded(strategy, {"f"})[0].veto_windows == {}
+    assert config.guarded(strategy, {"g"})[0].veto_windows == {}
+    assert config.guarded(strategy, {"h"})[0].veto_windows == {Entry("Deagle", "true"): ("ULTIMATE GemCutter",)}
