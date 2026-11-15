@@ -497,6 +497,29 @@ def test_check_8_takes_the_hand_over_to_the_last_phase_of_three():
                                                "Goblint, in phases 1 to 2 only, ended with true"]
 
 
+# As svcomp27's valid-memsafety with its veto window: Deagle starts in phase 2 beside GemCutter and runs on
+VETO = {"properties": {"valid-memsafety": {
+    "phases": [{"tools": ["sv-sanitizers", "Goblint"], "wallTimeLimit": 45},
+               {"tools": ["Deagle", "ULTIMATE GemCutter"], "wallTimeLimit": 150}, ["Deagle"]],
+    "cpuTimeLimits": {"sv-sanitizers": 30, "Goblint": 30, "ULTIMATE GemCutter": 60},
+    "answers": [["Goblint:true"], ["Deagle:false", "sv-sanitizers:false", "ULTIMATE GemCutter:false"],
+                ["Deagle:true"]],
+    "witnesses": ["Deagle", "sv-sanitizers"], "vetoWindows": {"Deagle:true": ["ULTIMATE GemCutter"]}}}}
+VETO_TASK = dict(property="valid-memsafety", expected=True, id="t")
+
+
+def test_check_8_takes_the_hand_over_to_the_phase_where_the_answering_component_starts():
+    lines = (block("Goblint", "unknown", "unknown") + block("SV-sanitizers", "TIMEOUT", "unknown")
+             + [measured_cpu("SV-sanitizers", 30.4)] + block("Deagle", "true", "true")
+             + ["CoOpeRace answer: Deagle true, bracket 3"] + block("ULTIMATE GemCutter", "TIMEOUT", "unknown")
+             + ["CoOpeRace result from: Deagle", "CoOpeRace verdict: true"])
+    assert run.hand_over_problems({"config": VETO}, dict(verdict=True, status="true"), VETO_TASK, lines) == []
+    quick = [line.replace("TIMEOUT", "unknown") if "SV-sanitizers Status" in line else line for line in lines]
+    assert run.hand_over_problems({"config": VETO}, dict(verdict=True, status="true"), VETO_TASK, quick) == [
+        "no component of phase 1 only reached its CPU-time limit or the phase's wall-time limit: "
+        "sv-sanitizers unknown, Goblint unknown"]
+
+
 # --- check 9: a component of two consecutive phases is started once -------------
 
 def test_check_9_reports_a_component_of_two_phases_started_twice():

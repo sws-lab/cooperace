@@ -103,7 +103,9 @@ The hand-over task of each property, and what happens on it in `svcomp27`. no-da
 | --- | --- | --- | --- |
 | unreach-call | `goblint-regression/13-privatized_66-mine-W-init_true` | sv-sanitizers `TIMEOUT` at 30 s; Goblint ends in `unknown` after 0.6 s | GemCutter answers `true` with a correctness witness; Dartagnan answers `true`, which has no entry |
 | no-overflow | `goblint-regression/04-mutex_05-lockfuns` | Goblint `TIMEOUT` at 30 s | GemCutter answers `true` with a correctness witness; Deagle answers `true`, which has no entry |
-| valid-memsafety | `pthread/bigshot_s` | sv-sanitizers `TIMEOUT` at 30 s; Goblint ends in `unknown` after 0.8 s | Deagle answers `true` |
+| valid-memsafety | `pthread/bigshot_s` | sv-sanitizers `TIMEOUT` at 30 s; Goblint ends in `unknown` after 0.8 s | Deagle answers `true`, delivered once ULTIMATE GemCutter, which starts beside it in phase 2 (the veto window), has ended without a `false` |
+
+Check 8 takes the hand-over to the phase in which the answering component starts: in valid-memsafety Deagle starts in phase 2 and runs on into phase 3, so phase 1 is the phase before the hand-over.
 
 `goblint-regression/04-mutex_19-call_by_ptr_rc` (no-data-race, expected `false`) is the hand-over task of `goblint-1s`: Goblint `TIMEOUT` at its 1 s, then Dartagnan answers `false` and ULTIMATE Automizer's validator confirms its witness. Goblint's own run needs 54 s to end in `unknown` there, too long for the other configurations.
 

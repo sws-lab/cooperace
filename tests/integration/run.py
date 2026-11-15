@@ -1232,14 +1232,17 @@ def wall_time_problems(run, lines, property_name=DEFAULT_PROPERTY):
 
 def hand_over_problems(run, r, t, lines):
     """What departs, in the run `r` of task `t` with the configuration of the
-    run definition `run`, from a hand-over from the phases before the last to
-    the last phase (check 8; phase 1 to phase 2 in a strategy of two phases):
-    no component of an earlier phase gives an answer with an entry in
-    `answers`; a component that is not in the last phase ends without a
-    verdict, and at least one of them reaches a limit: its status is TIMEOUT,
-    with a CPU-time limit in `cpuTimeLimits` that its `Measured:` line shows
-    used, or the wall-time limit of an earlier phase stops it; the verdict
-    comes from a component that is in the last phase only (`CoOpeRace result
+    run definition `run`, from a hand-over to the phase in which the
+    answering component starts (check 8; the last phase where it starts
+    there, as in a strategy of two phases; phase 2 of svcomp27's
+    valid-memsafety with its veto window, where Deagle and GemCutter start
+    in phase 2 and Deagle runs on into phase 3): no component of an earlier
+    phase gives an answer with an entry in `answers`; a component of the
+    earlier phases that is not in a later one ends without a verdict, and at
+    least one of them reaches a limit: its status is TIMEOUT, with a
+    CPU-time limit in `cpuTimeLimits` that its `Measured:` line shows used,
+    or the wall-time limit of an earlier phase stops it; the verdict comes
+    from a component that starts in that phase or later (`CoOpeRace result
     from: X`) and is the expected one."""
     if lines is None:
         return [f"cannot read the log {r['log']}"]
@@ -1247,18 +1250,23 @@ def hand_over_problems(run, r, t, lines):
     phases = [phase_tools(p) for p in strategy.get("phases", [])]
     if len(phases) < 2:
         return [f"the strategy for {t['property']} has {len(phases)} phase(s), no hand-over"]
-    count = len(phases)
-    before = "phase 1" if count == 2 else f"phases 1 to {count - 1}"
-    earlier = list(dict.fromkeys(n for phase in phases[:-1] for n in phase))
-    early_only = {n.lower(): n for n in earlier if n not in phases[-1]}
-    last_only = {n.lower() for n in phases[-1] if n not in earlier}
+    answered = answering_name(lines)
+    starts = [index for index, phase in enumerate(phases)
+              if (answered or "").lower() in {n.lower() for n in phase}]
+    # The phase the hand-over goes to: where the answering component starts, else the last
+    handed = starts[0] if starts and starts[0] > 0 else len(phases) - 1
+    before = "phase 1" if handed == 1 else f"phases 1 to {handed}"
+    earlier = list(dict.fromkeys(n for phase in phases[:handed] for n in phase))
+    later = {n for phase in phases[handed:] for n in phase}
+    early_only = {n.lower(): n for n in earlier if n not in later}
+    last_only = {n.lower() for n in later if n not in earlier}
     limits = {n.lower(): float(v) for n, v in strategy.get("cpuTimeLimits", {}).items()}
     blocks = {b["name"].lower(): b for b in component_blocks(lines)[0]}
     cpu = {m.group(1).lower(): float(m.group(2).rstrip("s")) for line in lines
            if (m := MEASURED_LINE.fullmatch(line))}
     stopped = {name.lower() for line in lines if (m := WALL_TIME_LINE.fullmatch(line))
                and (k := re.match(r"CoOpeRace: the wall-time limit of phase (\d+),", line))
-               and int(k.group(1)) < count
+               and int(k.group(1)) <= handed
                for name in m.group(1).split(", ")}
     problems = []
     for line in lines:
@@ -1278,12 +1286,11 @@ def hand_over_problems(run, r, t, lines):
             limited.append(f"{name} TIMEOUT at {cpu[key]:.1f} s of its {limits[key]:g} s CPU-time limit")
     if not limited:
         problems.append(f"no component of {before} only reached its CPU-time limit or "
-                        f"{'the phase' if count == 2 else 'a phase'}'s wall-time limit: "
+                        f"{'the phase' if handed == 1 else 'a phase'}'s wall-time limit: "
                         + ", ".join(f"{name} {blocks[k]['status'] if k in blocks else 'not started'}"
                                     for k, name in early_only.items()))
-    answered = answering_name(lines)
     if (answered or "").lower() not in last_only:
-        problems.append(f"the verdict is not from a component of phase {count} only (answered by {answered})")
+        problems.append(f"the verdict is not from a component of phase {handed + 1} only (answered by {answered})")
     if r["verdict"] != t["expected"]:
         problems.append(f"{r['status']}, expected {str(t['expected']).lower()}")
     return problems
