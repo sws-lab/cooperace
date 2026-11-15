@@ -213,9 +213,26 @@ def test_a_valid_memsafety_witness_names_the_sub_property_of_the_false():
     assert not witnesses.passes(deref, "valid-memsafety", "false", "valid-free")
     assert not witnesses.passes(deref, "valid-memsafety", "false", None)
     assert not witnesses.passes(deref, "valid-memsafety", "true", "valid-deref")
-    # The formulas of the whole property name no single sub-property.
+    # The formulas of the whole property pass for each sub-property, as WitnessLint 2.4 accepts them
     whole = " ".join(witnesses.FORMULAS["valid-memsafety"])
-    assert not witnesses.passes(violation(whole), "valid-memsafety", "false", "valid-deref")
+    for subproperty in ("valid-deref", "valid-free"):
+        assert witnesses.passes(violation(whole), "valid-memsafety", "false", subproperty)
+    assert not witnesses.passes(violation(whole), "valid-memsafety", "false", None)
+    assert not witnesses.passes(violation(whole), "unreach-call", "false")
+    assert not witnesses.passes(violation(DEREF + " " + witnesses.FORMULAS["unreach-call"][0]),
+                                "valid-memsafety", "false", "valid-deref")
+
+
+def test_gemcutter_s_valid_memsafety_violation_witness_passes():
+    """ULTIMATE GemCutter 24060016's violation witness on
+    pthread-array-bounds/stack-name-copy (false(valid-deref), goblint,
+    14 November 2026), which names all three formulas of valid-memsafety.
+    WitnessLint 2.4 accepts it (exit code 0), and the pre-run confirmed 22 of
+    GemCutter's 26 valid-memsafety false answers."""
+    text = (FIXTURES / "ugemcutter" / "stack-name-copy.valid-memsafety.yml").read_text()
+
+    assert witnesses.passes(text, "valid-memsafety", "false", "valid-deref")
+    assert not witnesses.passes(text, "no-data-race", "false")
 
 
 def test_a_valid_memtrack_witness_needs_format_2_3():

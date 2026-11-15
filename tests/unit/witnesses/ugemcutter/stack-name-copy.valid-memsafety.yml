@@ -1,0 +1,160 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.2'
+    uuid: 78cfdc0e-dc70-46dc-83f2-7af70256343e
+    creation_time: '2026-11-14T16:46:19Z'
+    producer:
+      name: GemCutter
+      version: 0.3.2-dev-991986cc09
+    task:
+      input_files:
+      - stack-name-copy.c
+      input_file_hashes:
+        stack-name-copy.c: 2e8c99a080f9328c70568cbcff82f9526c79c5bac7d6c05ab4ac9df950ce9227
+      specification: |+
+        CHECK( init(main()), LTL(G valid-free) )
+        CHECK( init(main()), LTL(G valid-deref) )
+        CHECK( init(main()), LTL(G valid-memtrack) )
+
+      data_model: ILP32
+      language: C
+  content:
+  - segment:
+    - waypoint:
+        type: function_enter
+        action: follow
+        location:
+          file_name: stack-name-copy.c
+          line: 33
+          column: 34
+          function: main
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 21
+          column: 3
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'false'
+        location:
+          file_name: stack-name-copy.c
+          line: 22
+          column: 5
+          function: worker
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: stack-name-copy.c
+          line: 25
+          function: worker
+        thread_id: 1

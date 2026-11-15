@@ -10,8 +10,9 @@ entries, of which those of the verdict's kind (WITNESS_ENTRY_TYPES: a
 "violation_sequence" for false; an "invariant_set", a
 "ghost_instrumentation" or both for true) each have a different entry_type,
 one metadata.format_version in the bounds of the WitnessFormat, and a
-metadata.task.specification that names the formulas of the property, or of
-the sub-property for valid-memsafety (properties.names_formulas). A GraphML
+metadata.task.specification that names the formulas of the property, or, for
+valid-memsafety, those of the sub-property or of the whole property
+(names_specification). A GraphML
 file never counts. passing_witness picks the file of a run that counts.
 
 The check reads the witness's kind, version and property and nothing else:
@@ -351,6 +352,21 @@ def passes(text: str, property_name: str, verdict: str, subproperty: str | None 
     return text_passes(text, format_, formulas)
 
 
+def names_specification(spec: str, formulas: tuple[str, ...]) -> bool:
+    """Whether the metadata.task.specification `spec` of a witness names the
+    formulas `formulas` of its verdict (properties.names_formulas), or, where
+    those are the formula of one sub-property of valid-memsafety, all three
+    formulas of valid-memsafety. ULTIMATE GemCutter 24060016 writes the whole
+    property into its valid-memsafety violation witnesses. WitnessLint 2.4
+    accepts them, and in its pre-run 22 of its 26 valid-memsafety false
+    answers were confirmed (ULTIMATE Automizer, ESBMC, ConcurrentWitness2Test,
+    Witch)."""
+    if names_formulas(spec, formulas):
+        return True
+    return (len(formulas) == 1 and formulas[0] in SUBPROPERTY_FORMULAS.values()
+            and names_formulas(spec, FORMULAS[VALID_MEMSAFETY]))
+
+
 def text_passes(text: str, format_: WitnessFormat, formulas: tuple[str, ...]) -> bool:
     """`passes` of `text` for the WitnessFormat `format_` and the formulas
     `formulas` of the verdict's specification."""
@@ -373,7 +389,7 @@ def text_passes(text: str, format_: WitnessFormat, formulas: tuple[str, ...]) ->
         versions.add(version_of(metadata.get("format_version")))
         task = metadata.get("task")
         spec = task.get("specification") if isinstance(task, dict) else None
-        if not (isinstance(spec, str) and names_formulas(spec, formulas)):
+        if not (isinstance(spec, str) and names_specification(spec, formulas)):
             return False
     if len(versions) != 1:
         return False
