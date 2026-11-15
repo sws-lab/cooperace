@@ -85,7 +85,7 @@ The components of each property's strategy and the tasks that make each of them 
 | no-data-race | Goblint `true` | `goblint-regression/28-race_reach_41-trylock_racefree`, `pthread-theta/unwind3-100`, `goblint-regression/28-race_reach_01-simple_racing` | none needed |
 | no-data-race | sv-sanitizers `false` | `goblint-regression/04-mutex_21-sound_base`, and in `svcomp27` `lp64/race-only-on-lp64` | ConcurrentWitness2Test |
 | no-data-race | Dartagnan `false` | `pthread-divine/ring_1w1r-1`, `goblint-regression/09-regions_01-list_rc`, `lp64/race-only-on-lp64` | Theta, ULTIMATE Automizer |
-| no-data-race | Dartagnan `true` | `pthread-divine/tls_basic`, `libvsync/bounded_mpmc_check_full` (hand-over), `lp64/race-only-on-ilp32` | none needed |
+| no-data-race | Dartagnan `true` | `pthread-divine/tls_basic`, `libvsync/bounded_mpmc_check_full`, `lp64/race-only-on-ilp32` | none needed |
 | unreach-call | Goblint `true` | `goblint-regression/13-privatized_57-singlethreaded-unlock_true` | ULTIMATE Automizer (correctness) |
 | unreach-call | ULTIMATE GemCutter `true` | `goblint-regression/13-privatized_66-mine-W-init_true` (hand-over) | ULTIMATE Automizer (correctness) |
 | unreach-call | Dartagnan `false` | `pthread/singleton`, `pthread-ext/28_buggy_simple_loop1_vf` | ULTIMATE Automizer |
@@ -97,11 +97,10 @@ The components of each property's strategy and the tasks that make each of them 
 | valid-memsafety | Deagle `false` | `goblint-regression/09-regions_11-arraylist_nr-deref` | ULTIMATE Automizer |
 | valid-memsafety | Deagle `true` | `pthread/bigshot_s` (hand-over) | none needed |
 
-The hand-over task of each property, and what happens on it in `svcomp27` (in no-data-race, "Phase 1" stands for phases 1 and 2, and "Phase 2" for phase 3, where Dartagnan runs):
+The hand-over task of each property, and what happens on it in `svcomp27`. no-data-race has none at the moment: since sv-sanitizers no longer runs there, Goblint and IKOS-ConC end by themselves on `libvsync/bounded_mpmc_check_full` (in `unknown` after 5 s and 0.4 s) and Dartagnan answers `true` at once, so no phase-1 component reaches a limit, which check 8 requires. A task on which Goblint reaches its 30 s or IKOS-ConC its 60 s without an answer is still to be picked:
 
 | Property | Task | Phase 1 | Phase 2 |
 | --- | --- | --- | --- |
-| no-data-race | `libvsync/bounded_mpmc_check_full` | sv-sanitizers `TIMEOUT` at 30 s of CPU time; IKOS-ConC ends in `unknown` after 0.3 s and Goblint after 5 s, so phase 2 ends at once | Dartagnan answers `true` |
 | unreach-call | `goblint-regression/13-privatized_66-mine-W-init_true` | sv-sanitizers `TIMEOUT` at 30 s; Goblint ends in `unknown` after 0.6 s | GemCutter answers `true` with a correctness witness; Dartagnan answers `true`, which has no entry |
 | no-overflow | `goblint-regression/04-mutex_05-lockfuns` | Goblint `TIMEOUT` at 30 s | GemCutter answers `true` with a correctness witness; Deagle answers `true`, which has no entry |
 | valid-memsafety | `pthread/bigshot_s` | sv-sanitizers `TIMEOUT` at 30 s; Goblint ends in `unknown` after 0.8 s | Deagle answers `true` |

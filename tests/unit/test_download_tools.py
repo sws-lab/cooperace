@@ -9,6 +9,7 @@ tools-options.json. The network and fm_tools are replaced by stubs, and every
 file the script writes is redirected into tmp_path."""
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import types
@@ -347,6 +348,7 @@ def test_an_exception_that_does_not_hold_is_refused(tmp_path, monkeypatch, lock,
     assert setup.installed == []
 
 
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs git, which the competition image does not have")
 def test_the_entry_at_a_commit_is_read_from_the_history_of_the_checkout(tmp_path):
     def git(*args):
         return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t", *args],
