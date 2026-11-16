@@ -95,6 +95,8 @@ def setup(tmp_path, monkeypatch):
                 str(tmp_path / "tools.txt"),
                 "--own",
                 str(tmp_path / "own.txt"),
+                "--unlisted",
+                str(tmp_path / "unlisted.txt"),
                 *args,
             ],
         )
@@ -152,6 +154,37 @@ def test_a_doi_no_version_has_names_the_component(setup, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "dartagnan: fm-tools lists 10.5281/zenodo.99 for no verifier version" in captured.err
+
+
+def test_an_unlisted_component_is_read_at_its_commit(setup, capsys, monkeypatch):
+    """A DOI fm-tools main no longer lists counts if tools-unlisted.txt names
+    it with a commit whose entry lists it, as scripts/download-tools.py does."""
+    (setup.dir / "tools.txt").write_text("goblint: 10.5281/zenodo.1\ndartagnan: 10.5281/zenodo.99\n")
+    (setup.dir / "unlisted.txt").write_text("dartagnan: 10.5281/zenodo.99 abc123\n")
+    old = {
+        "versions": [
+            {
+                "version": "old",
+                "doi": "10.5281/zenodo.99",
+                "required_ubuntu_packages": ["old-clang"],
+                "base_container_images": UBUNTU,
+            }
+        ]
+    }
+    asked = []
+
+    def at(name, fm_tools_dir, revision):
+        asked.append((name, revision))
+        return old
+
+    monkeypatch.setattr(rp.download_tools, "load_fm_tool_data_at", at)
+    assert setup() == 0
+    assert asked == [("dartagnan", "abc123")]
+    assert capsys.readouterr().out.splitlines() == ["cpp", "old-clang", "python3", "python3-yaml"]
+    # an exception for another DOI does not apply
+    (setup.dir / "unlisted.txt").write_text("dartagnan: 10.5281/zenodo.98 abc123\n")
+    assert setup() == 1
+    assert "dartagnan: fm-tools lists 10.5281/zenodo.99 for no verifier version" in capsys.readouterr().err
 
 
 def test_a_validator_only_doi_is_no_version(setup, capsys):

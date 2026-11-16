@@ -14,7 +14,10 @@ For every component of tools.txt, the components of the SV-COMP archive (not
 those of tools-pool.txt, which are not packed), the script reads its fm-tools
 entry, data/<name>.yml, from the checkout DIR or, without `--fm-tools-dir`,
 from fm-tools' main branch on gitlab.com, and takes the version whose `doi` is
-the DOI that tools.txt names. Of versions sharing a DOI it takes the verifier,
+the DOI that tools.txt names, or, for a component that tools-unlisted.txt
+names with that DOI and whose DOI fm-tools main no longer lists, the version
+of its entry at the commit named there. `--tools` takes another lock file,
+such as the tools.txt of an archive built with a CONF_VARIANT. Of versions sharing a DOI it takes the verifier,
 not the witness validator, as scripts/download-tools.py does (and with that
 script's functions). The version's `required_ubuntu_packages` (none if absent)
 and the packages of scripts/sv-comp/own-packages.txt, which the archive's own
@@ -79,11 +82,19 @@ def parse_own_packages(text: str) -> list[str]:
     return [line.split("#", 1)[0].split()[0] for line in text.splitlines() if line.split("#", 1)[0].strip()]
 
 
-def component_versions(wanted: dict[str, str], fm_tools_dir: Path | None) -> tuple[dict[str, dict], list[str]]:
+def component_versions(
+    wanted: dict[str, str], fm_tools_dir: Path | None, unlisted: dict[str, tuple[str, str]] | None = None
+) -> tuple[dict[str, dict], list[str]]:
     """The version of the fm-tools entry of every component of `wanted`
     ({name: doi}, as tools.txt gives it) that has its DOI, chosen by
     download_tools.version_entry_for, as {name: version}, and a message per
-    component whose entry cannot be read or lists no such version."""
+    component whose entry cannot be read or lists no such version.
+
+    A component of `unlisted` ({name: (doi, commit)}, tools-unlisted.txt)
+    whose entry no longer lists its DOI is read from its entry at that commit,
+    as scripts/download-tools.py does, if the exception names the DOI of
+    `wanted`."""
+    unlisted = unlisted or {}
     versions: dict[str, dict] = {}
     errors: list[str] = []
     for name, doi in wanted.items():
@@ -93,6 +104,15 @@ def component_versions(wanted: dict[str, str], fm_tools_dir: Path | None) -> tup
             errors.append(f"{name}: cannot read the fm-tools entry: {error}")
             continue
         version = download_tools.version_entry_for(data, doi)
+        if version is None and name in unlisted and unlisted[name][0] == doi:
+            revision = unlisted[name][1]
+            try:
+                version = download_tools.version_entry_for(
+                    download_tools.load_fm_tool_data_at(name, fm_tools_dir, revision), doi
+                )
+            except Exception as error:
+                errors.append(f"{name}: cannot read the fm-tools entry at {revision}: {error}")
+                continue
         if version is None:
             listed = ", ".join(download_tools.listed_references(data)) or "no versions"
             errors.append(f"{name}: fm-tools lists {doi} for no verifier version; it lists {listed}")
@@ -154,6 +174,12 @@ def main() -> int:
         help="read the components' entries from this checkout of fm-tools, not from gitlab.com",
     )
     parser.add_argument("--tools", type=Path, default=TOOLS_FILE, help="the lock file (default: %(default)s)")
+    parser.add_argument(
+        "--unlisted",
+        type=Path,
+        default=download_tools.UNLISTED_FILE,
+        help="the exceptions for DOIs fm-tools main no longer lists (default: %(default)s)",
+    )
     parser.add_argument("--own", type=Path, default=OWN_FILE, help="the archive's own packages (default: %(default)s)")
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--yaml", action="store_true", help="print the required_ubuntu_packages block")
@@ -171,10 +197,11 @@ def main() -> int:
     try:
         wanted = download_tools.parse_tools_file(args.tools.read_text())
         own = parse_own_packages(args.own.read_text())
+        unlisted = download_tools.read_unlisted_file(args.unlisted) if args.unlisted.exists() else {}
     except (OSError, ValueError) as error:
         print(f"required-packages: error: {error}", file=sys.stderr)
         return 1
-    versions, errors = component_versions(wanted, args.fm_tools_dir)
+    versions, errors = component_versions(wanted, args.fm_tools_dir, unlisted)
     if errors:
         print("\n".join(f"required-packages: error: {e}" for e in errors), file=sys.stderr)
         return 1
