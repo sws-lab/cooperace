@@ -306,6 +306,7 @@ class Archive:
     options: list[str]
     record: dict = field(default_factory=dict)
     version_source: str = ""
+    packages: list[str] = field(default_factory=list)
 
     @property
     def label(self) -> str:
@@ -447,7 +448,8 @@ def resolve_archive(component: str, archive_arg: str | None, tree: Path, work: P
     (component_dir / ".doi").write_text(doi + "\n")
     (target / "archive.json").write_text(json.dumps(record, indent=1) + "\n")
     return Archive(component, doi, component_dir, str(entry["version"]),
-                   [str(option) for option in entry.get("benchexec_toolinfo_options") or []], record, source)
+                   [str(option) for option in entry.get("benchexec_toolinfo_options") or []], record, source,
+                   [str(name) for name in entry.get("required_ubuntu_packages") or []])
 
 
 def resolve_installed(component, directory, doi, data, unlisted, fm_tools_dir) -> Archive:
@@ -462,7 +464,8 @@ def resolve_installed(component, directory, doi, data, unlisted, fm_tools_dir) -
         raise SmokeError(f"fm-tools lists {doi} (from {directory}/.doi) for no verifier version of {component}")
     return Archive(component, doi, directory, str(entry["version"]),
                    [str(option) for option in entry.get("benchexec_toolinfo_options") or []],
-                   {"doi": doi, "source": f"installed directory {directory}"}, source)
+                   {"doi": doi, "source": f"installed directory {directory}"}, source,
+                   [str(name) for name in entry.get("required_ubuntu_packages") or []])
 
 
 def stamp() -> str:
@@ -489,6 +492,20 @@ def static_checks(component: str, directory: Path) -> list[tuple[str, str]]:
     with contextlib.redirect_stdout(buffer):
         module.main(component, str(directory))
     return [(line.split()[0], line.split(None, 1)[1]) for line in buffer.getvalue().splitlines() if line.strip()]
+
+
+def package_check(archive: Archive, fm_tools_dir: Path | None) -> list[tuple[str, str]]:
+    """One line: whether the newest version of CoOpeRace's own fm-tools entry
+    lists every required_ubuntu_packages of the archive's version."""
+    own = verifier_versions(fm_tools_data("cooperace", fm_tools_dir) or {})
+    if not own:
+        return [("note", "no fm-tools entry of CoOpeRace to compare required_ubuntu_packages with")]
+    missing = sorted(set(archive.packages) - {str(name) for name in own[0].get("required_ubuntu_packages") or []})
+    if missing:
+        return [("FAIL", f"CoOpeRace's fm-tools entry ({own[0].get('version')}) lacks required_ubuntu_packages "
+                         f"{', '.join(missing)} of {archive.component} {archive.version}")]
+    return [("ok", f"CoOpeRace's fm-tools entry ({own[0].get('version')}) lists the required_ubuntu_packages "
+                   f"of {archive.component} {archive.version}")]
 
 
 def shipped_witnesses(directory: Path) -> list[str]:
@@ -606,8 +623,8 @@ def witness_facts(path: Path) -> dict:
         text = path.read_text(errors="replace")
     except OSError:
         return {"entry_type": "?", "format_version": "?"}
-    entry = re.search(r"entry_type:\s*['\"]?([\w-]+)", text)
-    version = re.search(r"format_version:\s*['\"]?([\d.]+)", text)
+    entry = re.search(r"entry_type['\"]?\s*:\s*['\"]?([\w-]+)", text)
+    version = re.search(r"format_version['\"]?\s*:\s*['\"]?([\d.]+)", text)
     return {"entry_type": entry.group(1) if entry else "-", "format_version": version.group(1) if version else "-"}
 
 
@@ -651,7 +668,8 @@ def is_answer(status: str | None) -> bool:
 
 def evaluate(task: dict, run: CoOpeRaceRun, *, same_archive: bool, trusts: str, needs_witness: bool,
              witnesses: list[dict], delivered: bool, lint: dict[str, int | None], outside: list[str],
-             tasks_peak: int | None, task_limit: int | None) -> tuple[list[str], list[str]]:
+             tasks_peak: int | None, task_limit: int | None,
+             takes_no_witness: bool = False) -> tuple[list[str], list[str]]:
     """(notes, failures) of one task, from its row of the task file `task`
     and the CoOpeRaceRun `run`. `same_archive`: the pre-run row is of the
     archive under test. `witnesses`: the witness files the component wrote
@@ -659,7 +677,9 @@ def evaluate(task: dict, run: CoOpeRaceRun, *, same_archive: bool, trusts: str, 
     `delivered` whether CoOpeRace delivered one, `lint` WitnessLint's exit
     code per file name (None: not linted), `outside` the files written
     outside the component's directory, `tasks_peak` the peak number of tasks
-    of its cgroup."""
+    of its cgroup. `takes_no_witness`: the registry names no witness file
+    of the component (WitnessSpec files ()), so its witness files are
+    ignored by design and reported as a note."""
     notes, failures = [], []
     prerun = raw_status(task.get("prerun_status", ""))
     expected = task.get("expected", "")
@@ -707,11 +727,15 @@ def evaluate(task: dict, run: CoOpeRaceRun, *, same_archive: bool, trusts: str, 
             notes.append(f"status {run.status!r}, output has {output[-1]!r}")
     # Witnesses
     unnamed = [w["name"] for w in witnesses if not w["named"] and not w["name"].endswith(".graphml")]
-    if unnamed:
-        failures.append("witness file not named by the registry: " + ", ".join(unnamed))
-    if answered and needs_witness and not delivered:
-        failures.append(f"no witness delivered for {run.result}, which needs one"
-                        + (f" ({', '.join(w['name'] for w in witnesses)} written)" if witnesses else ""))
+    if takes_no_witness:
+        if unnamed:
+            notes.append("the registry takes no witness from this component; it wrote " + ", ".join(unnamed))
+    else:
+        if unnamed:
+            failures.append("witness file not named by the registry: " + ", ".join(unnamed))
+        if answered and needs_witness and not delivered:
+            failures.append(f"no witness delivered for {run.result}, which needs one"
+                            + (f" ({', '.join(w['name'] for w in witnesses)} written)" if witnesses else ""))
     for name, code in lint.items():
         if code not in (0, None):
             failures.append(f"WitnessLint exit {code} on {name}")
@@ -922,9 +946,11 @@ def smoke(args, component: str, archive_arg: str | None) -> int:
     meta = {"component": component, "conf_name": spec.name, "archive": archive.doi, "version": archive.version,
             "options": archive.options, "version_source": archive.version_source, "record": archive.record,
             "directory": str(archive.directory), "cooperace": str(tree), "cooperace_revision": git_revision(tree),
-            "conf": str(conf_path),
+            "conf": str(conf_path), "packages": archive.packages,
+            "fm_tools_dir": None if fm_tools_dir is None else str(fm_tools_dir),
             "properties": properties, "attrs": args.attrs, "started": stamp(),
-            "static": static_checks(component, archive.directory), "shipped": shipped_witnesses(archive.directory),
+            "static": static_checks(component, archive.directory) + package_check(archive, fm_tools_dir),
+            "shipped": shipped_witnesses(archive.directory),
             "tasks": tasks, "task_limit": spec.task_limit,
             "witness_spec": {"directory": spec.witness.directory, "options": list(spec.witness.options),
                              "files": None if spec.witness.files is None else list(spec.witness.files)}}
@@ -953,6 +979,21 @@ def report(args, run_dir: Path) -> int:
     svb = Path(args.lane) / "svb" if getattr(args, "lane", None) else None
     tool_dir = f"/home/cwd/bin/cooperace/tools/{meta['component']}"
     rows, failures_all = [], []
+    if Path(meta["directory"]).is_dir():
+        # Checked again, so that a report after a change of the checks uses them
+        given = meta.get("fm_tools_dir") or getattr(args, "fm_tools_dir", None)
+        fm_tools_dir = Path(given) if given else None
+        packages = meta.get("packages")
+        if packages is None:
+            entry = version_for(fm_tools_data(meta["component"], fm_tools_dir), meta["archive"])
+            unlisted = read_unlisted(tree / "tools-unlisted.txt").get(meta["component"])
+            if entry is None and unlisted and unlisted[0] == meta["archive"]:
+                entry = version_for(fm_tools_data(meta["component"], fm_tools_dir, unlisted[1]), meta["archive"])
+            packages = [str(name) for name in (entry or {}).get("required_ubuntu_packages") or []]
+        archive = Archive(meta["component"], meta["archive"], Path(meta["directory"]), meta["version"],
+                          meta["options"], packages=packages)
+        meta["static"] = (static_checks(meta["component"], archive.directory)
+                          + package_check(archive, fm_tools_dir))
     for severity, line in meta["static"]:
         if severity == "FAIL":
             failures_all.append(f"FAIL {meta['component']} static: {line}")
@@ -1017,7 +1058,7 @@ def report(args, run_dir: Path) -> int:
         notes, failures = evaluate(task, run, same_archive=task.get("prerun_doi") == meta["archive"], trusts=trusts,
                                    needs_witness=needs, witnesses=infos, delivered=delivered is not None,
                                    lint=lint_by_name, outside=outside, tasks_peak=tasks_peak,
-                                   task_limit=meta["task_limit"])
+                                   task_limit=meta["task_limit"], takes_no_witness=spec.witness.files == ())
         for failure in failures:
             failures_all.append(f"FAIL {meta['component']} {task['id']} {task['task']}: {failure}")
         witness_text = "; ".join(f"{i['name']} {i['entry_type']} {i['format_version']}" for i in infos) or "-"

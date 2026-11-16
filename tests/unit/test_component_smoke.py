@@ -60,10 +60,10 @@ def task(prop="no-data-race", expected="false", prerun="false(no-data-race)", do
 
 
 def judge(task_row, run, *, same_archive=True, trusts="both", needs_witness=False, witnesses=(), delivered=False,
-          lint=None, outside=(), tasks_peak=10, task_limit=1024):
+          lint=None, outside=(), tasks_peak=10, task_limit=1024, takes_no_witness=False):
     return cs.evaluate(task_row, run, same_archive=same_archive, trusts=trusts, needs_witness=needs_witness,
                        witnesses=list(witnesses), delivered=delivered, lint=lint or {}, outside=list(outside),
-                       tasks_peak=tasks_peak, task_limit=task_limit)
+                       tasks_peak=tasks_peak, task_limit=task_limit, takes_no_witness=takes_no_witness)
 
 
 def witness(name="witness.yml", named=True, passes=True):
@@ -140,6 +140,14 @@ def test_a_missing_required_witness_and_a_witness_of_another_name_fail():
                              witnesses=[witness("error-witness.yml", named=False, passes=None)])
     assert "witness file not named by the registry: error-witness.yml" in failures
     assert "no witness delivered for false, which needs one (error-witness.yml written)" in failures
+
+
+def test_a_component_whose_witness_the_registry_takes_not_gets_notes():
+    run = run_of("false(no-data-race)", "false", "false(no-data-race)")
+    notes, failures = judge(task(), run, needs_witness=True, takes_no_witness=True,
+                            witnesses=[witness("witness.yml", named=False, passes=None)])
+    assert failures == []
+    assert notes == ["the registry takes no witness from this component; it wrote witness.yml"]
 
 
 def test_witnesslint_failure_and_a_refused_witness():
@@ -224,6 +232,8 @@ def test_raw_status_and_witness_facts(tmp_path):
     assert cs.raw_status("TIMEOUT") == "TIMEOUT"
     path = tmp_path / "w.yml"
     path.write_text("- entry_type: violation_sequence\n  metadata:\n    format_version: '2.2'\n")
+    assert cs.witness_facts(path) == {"entry_type": "violation_sequence", "format_version": "2.2"}
+    path.write_text('[\n {\n  "entry_type": "violation_sequence",\n  "metadata": {\n   "format_version": "2.2"\n')
     assert cs.witness_facts(path) == {"entry_type": "violation_sequence", "format_version": "2.2"}
     assert cs.is_witness_name("output/witness.yml") and not cs.is_witness_name("witness.txt")
 
