@@ -418,7 +418,7 @@ def test_random_scenarios_deliver_the_chronologically_first_accepted_verdict_wit
         runner.installation_problems = lambda _names: []
         runner.container_problems = lambda: []
         runner.probe_versions = lambda _names: None
-        runner.command = lambda actor, spec, witness_dir: ComponentCommand(["component"], str(tmp_path), {})
+        runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(["component"], str(tmp_path), {})
         delivered_at = []
 
         def deliver(files, delivered_at=delivered_at, original=runner.deliver):
@@ -486,7 +486,7 @@ def test_a_verdict_of_a_run_ended_by_a_limit_counts_outside_the_mode_but_not_in_
         runner.installation_problems = lambda _names: []
         runner.container_problems = lambda: []
         runner.probe_versions = lambda _names: None
-        runner.command = lambda actor, spec, witness_dir: ComponentCommand(["component"], str(tmp_path), {})
+        runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(["component"], str(tmp_path), {})
         results.append(cli.run({"properties": {"no-data-race": conf_strategy}}, runner, ComponentGroup()))
 
     assert results == ["true", "unknown"]
