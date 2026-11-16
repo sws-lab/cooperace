@@ -682,3 +682,22 @@ def test_only_a_witness_that_passes_is_returned_and_delivered(
             assert (cwd / "witness.yml").read_text() == files[delivered]
     finally:
         runner.cleanup()
+
+
+def test_deagle_s_shipped_smoke_test_witness_counts_for_no_verdict_deagle_delivers():
+    """Deagle 24278298 ships the witness.yml of its smoke test (witnesses/deagle/smoketest-24278298.yml,
+    an empty invariant_set of format 2.2 for unreach-call). Only what a run writes into the overlay of
+    Deagle's directory is collected (test_execution), and the wrapper deletes the file before each run
+    of deagle_exe. Should the file still be offered, it counts for no false, and the one verdict it
+    passes for, a true of unreach-call, is one whose witness the shipped conf never takes from Deagle."""
+    text = (FIXTURES / "deagle" / "smoketest-24278298.yml").read_text()
+    for prop in ("no-data-race", "unreach-call", "no-overflow"):
+        assert not witnesses.passes(text, prop, "false")
+    for subproperty in ("valid-deref", "valid-free", "valid-memtrack"):
+        assert not witnesses.passes(text, "valid-memsafety", "false", subproperty)
+    assert [prop for prop in ("no-data-race", "no-overflow", "valid-memsafety")
+            if witnesses.passes(text, prop, "true")] == []
+    assert witnesses.passes(text, "unreach-call", "true")
+    conf = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
+    assert [prop for prop, strategy in conf["properties"].items()
+            if "Deagle" in strategy["witnesses"] and witnesses.passes(text, prop, "true")] == []

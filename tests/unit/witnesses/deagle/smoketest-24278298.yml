@@ -1,0 +1,17 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.2"
+    uuid: "3169b77c-6ee4-495c-9923-3831baf7aaaa"
+    creation_time: "2026-11-16T02:42:32Z"
+    producer:
+      name: "Deagle"
+      version: "4.2.0 (svcomp2027-18-g7c927c8bd-dirty)"
+    task:
+      input_files:
+        - "test/fib_safe-5.i"
+      input_file_hashes:
+        "test/fib_safe-5.i": "74A086EDB560572752B8CBC391425D974C2CBBD7D3553767E0707A5DC02A4897"
+      specification: "CHECK( init(main()), LTL(G ! call(reach_error())) )"
+      data_model: ILP32
+      language: C
+  content: []
