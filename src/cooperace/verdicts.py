@@ -23,6 +23,13 @@ one exception is the list of disagreeing entries of a contradiction:
 components of the deciding bracket that have not answered are stopped, and
 the list names only those that answered.
 
+In the first-verdict mode (Strategy.first_verdict) none of this applies:
+the first answer recorded that matches an Entry, and that has a witness of
+its own that passes the check where the verdict needs one
+(witnesses.needs_witness), is the result, with its component's own witness
+if it has one; every other component is then stopped or not started, and no
+other component's witness is ever taken.
+
 Uses only the standard library and config, witnesses."""
 from __future__ import annotations
 
@@ -101,6 +108,8 @@ class Verdicts:
         self.strategy = strategy
         self.property_name = property_name
         self.answers: dict[str, Answer] = {}
+        #In the first-verdict mode, the component whose answer was recorded first
+        self.first: str | None = None
         #The components that the run's CPU-time budget stopped before they ended (Schedule.exhaust)
         self.cut: set[str] = set()
         #(bracket index, verdict) of each Entry, by component
@@ -115,9 +124,18 @@ class Verdicts:
     def record(self, tool: str, answer: Answer) -> bool:
         """Records the Answer of `tool`, a component that has ended, and
         returns True, if `tool` has an Entry for its verdict; else records
-        nothing and returns False."""
+        nothing and returns False. In the first-verdict mode, only the first
+        such answer is recorded, and `first` names its component; an answer
+        without a witness that passes where the verdict needs one
+        (needs_witness) is not accepted, as if it had no Entry."""
         if not self.has_entry(tool, answer.verdict):
             return False
+        if self.strategy.first_verdict:
+            if self.first is not None:
+                return False
+            if not answer.witness and needs_witness(self.property_name, answer.verdict):
+                return False
+            self.first = tool
         self.answers[tool] = answer
         return True
 
@@ -133,7 +151,13 @@ class Verdicts:
 
     def decision(self) -> Decision | None:
         """The Decision of the recorded answers, or None if every bracket's
-        meet is unknown."""
+        meet is unknown. In the first-verdict mode, that of the first
+        answer, or None before it."""
+        if self.strategy.first_verdict:
+            if self.first is None:
+                return None
+            verdict = self.answers[self.first].verdict
+            return Decision(self.strategy.bracket_of(self.first, verdict), verdict)
         for index in range(len(self.strategy.answers)):
             meet = self.bracket_meet(index)
             if meet != UNKNOWN:
@@ -190,7 +214,19 @@ class Verdicts:
         was stopped by the run's CPU-time budget (`cut`) before it ended: its
         window was not over, so the answer is not delivered. A veto that
         ends by itself, by its own limits or by its phase's wall-time limit
-        without a verdict does not hold the answer."""
+        without a verdict does not hold the answer.
+
+        In the first-verdict mode the Result is the first accepted answer
+        (record), taken from its component, with that component's witness
+        where it wrote one that passes and a witness can count for the
+        verdict (witness_counts), and without one otherwise; UNKNOWN before
+        any answer."""
+        if self.strategy.first_verdict:
+            if self.first is None:
+                return Result(UNKNOWN)
+            answer = self.answers[self.first]
+            return Result(answer.verdict, self.decision(), self.first,
+                          answer.witness and self.witness_counts(answer.verdict), answer.subproperty)
         decision = self.decision()
         if decision is None:
             return Result(UNKNOWN)
@@ -244,7 +280,12 @@ class Verdicts:
            (witness_counts), `tool` has an Entry for u, and it comes in
            supplier_order(u, i) before the current supplier, or anywhere in
            it if there is none; for a candidate other than (v, b) the current
-           supplier is none (it could supply a witness that comes first)."""
+           supplier is none (it could supply a witness that comes first).
+
+        In the first-verdict mode, True exactly while no answer is
+        recorded."""
+        if self.strategy.first_verdict:
+            return self.first is None
         decision = self.decision()
         if decision is None:
             return True

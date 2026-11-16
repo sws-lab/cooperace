@@ -37,7 +37,7 @@ from typing import Protocol
 from .config import Step, Strategy
 from .processes import PRINT_LOCK, ComponentGroup, run_cpu_seconds
 from .verdicts import CONTRADICTION, FALSE, RUNNING, TRUE, UNKNOWN, Actions, Answer, Schedule, Verdicts
-from .witnesses import subproperty_of
+from .witnesses import needs_witness, subproperty_of
 
 # What a StepRunner's run_step and run_strategy return: the verdict ("true",
 # "false" or "unknown" from run_step; run_strategy also returns
@@ -48,7 +48,13 @@ from .witnesses import subproperty_of
 # command line prints after "CoOpeRace verdict: " (for run_step the
 # StepRunner's to choose: components.reported_result, for example
 # "false(valid-deref)"; for a contradiction "ERROR (contradiction: ...)").
-Outcome = namedtuple("Outcome", "verdict component witness_files result")
+# Only in the first-verdict mode (config.Step.first_verdict) does run_step
+# fill the last two: `measured`, the fields "cputime=... walltime=...
+# memory=... terminationreason=..." of the component's run as its block
+# prints them, and `witness_passes`, whether a witness file it wrote passes
+# the check (None: it wrote none). Elsewhere both are None.
+Outcome = namedtuple("Outcome", "verdict component witness_files result measured witness_passes",
+                     defaults=(None, None))
 NO_OUTCOME = Outcome("unknown", None, [], "unknown")
 
 # Seconds between two checks of the clock while run_strategy waits for a
@@ -121,11 +127,24 @@ def describe_answer(verdicts: Verdicts, tool: str, outcome: Outcome) -> str:
     component `tool` (its name in the conf): the verdict and the bracket of
     its entry counting from 1, or that it has no entry and is ignored, and,
     where a witness can count for the verdict (verdicts.witness_counts), the
-    witness file or that there is none that passes the check."""
+    witness file or that there is none that passes the check. In the
+    first-verdict mode, a verdict that needs a witness (witnesses.needs_witness)
+    and has none that passes is not accepted, and the line ends ": ignored"
+    with the reason."""
     bracket = verdicts.strategy.bracket_of(tool, outcome.verdict)
     if bracket is None:
         return f"CoOpeRace answer: {tool} {outcome.verdict}, which has no entry in answers: ignored"
     line = f"CoOpeRace answer: {tool} {outcome.verdict}, bracket {bracket + 1}"
+    if verdicts.strategy.first_verdict:
+        if verdicts.witness_counts(outcome.verdict):
+            if outcome.witness_files:
+                line += f", witness {outcome.witness_files[0]} (passes the check)"
+            else:
+                line += (", no witness that passes the check" if outcome.witness_passes is False
+                         else ", no witness file")
+                if needs_witness(verdicts.property_name, outcome.verdict):
+                    line += ", which the verdict needs: ignored in the first-verdict mode"
+        return line
     if verdicts.witness_counts(outcome.verdict):
         line += (f", witness {outcome.witness_files[0]}" if outcome.witness_files
                  else ", no witness that passes the check")
@@ -145,7 +164,11 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
     when the strategy begins, when a component's run_step returns, and when
     the current phase's wall-time limit has passed on time.monotonic. An
     Outcome that run_step returns after its component was stopped is
-    ignored, with a line that says so.
+    ignored, with a line that says so. In the first-verdict mode, the
+    Outcomes that have arrived when one is taken are taken with it and
+    handled in the order of root.position (phase, then place in the phase),
+    so that of the answers seen at the same time the first by that order
+    decides; otherwise they are handled one by one as they arrive.
 
     Prints, besides the blocks the runner prints, one line "CoOpeRace answer:
     ..." for each Outcome with a verdict (describe_answer), one line when a
@@ -225,20 +248,24 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
             deadline = schedule.deadline()
             timeout = WAIT_SECONDS if deadline is None else min(WAIT_SECONDS, max(0.0, deadline - time.monotonic()))
             try:
-                tool, outcome, error = events.get(timeout=timeout)
+                batch = [events.get(timeout=timeout)]
             except queue.Empty:
                 act(schedule.time_passed(time.monotonic()))
                 continue
-            if error is not None:
-                raise error
-            answer = answer_of(outcome)
-            if schedule.states[tool] == RUNNING:
-                if answer is not None:
-                    outcomes[tool] = outcome
-                    say(describe_answer(verdicts, tool, outcome))
-                act(schedule.ended(tool, answer, time.monotonic()))
-            elif answer is not None:
-                say(f"CoOpeRace answer: {tool} {outcome.verdict}, after CoOpeRace stopped it: ignored")
+            if root.first_verdict:
+                batch += drain(events)
+                batch.sort(key=lambda event: root.position(event[0]))
+            for tool, outcome, error in batch:
+                if error is not None:
+                    raise error
+                answer = answer_of(outcome)
+                if schedule.states[tool] == RUNNING:
+                    if answer is not None:
+                        outcomes[tool] = outcome
+                        say(describe_answer(verdicts, tool, outcome))
+                    act(schedule.ended(tool, answer, time.monotonic()))
+                elif answer is not None:
+                    say(f"CoOpeRace answer: {tool} {outcome.verdict}, after CoOpeRace stopped it: ignored")
     except BaseException:
         group.stop()
         raise
@@ -252,11 +279,31 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
     return outcome_of(verdicts, outcomes)
 
 
+def drain(events: queue.Queue) -> list:
+    """The events in `events` now, taken without waiting."""
+    taken = []
+    while True:
+        try:
+            taken.append(events.get_nowait())
+        except queue.Empty:
+            return taken
+
+
 def outcome_of(verdicts: Verdicts, outcomes: dict[str, Outcome]) -> Outcome:
     """The Outcome run_strategy returns for the answers in `verdicts`, given
     the Outcome of each component with a verdict in `outcomes`, after
-    printing the lines about overridden answers and a missing witness."""
+    printing the lines about overridden answers and a missing witness. In
+    the first-verdict mode it prints instead one line "CoOpeRace first
+    verdict: ..." (first_verdict_line) and returns the Outcome of the first
+    answer, with its component's witness file where the Result delivers
+    one."""
     result = verdicts.result()
+    if verdicts.strategy.first_verdict:
+        outcome = outcomes[result.tool] if result.tool is not None else None
+        say(first_verdict_line(result, outcome))
+        if outcome is None:
+            return NO_OUTCOME
+        return outcome._replace(witness_files=list(outcome.witness_files) if result.witness else [])
     decision = result.decision
     if decision is not None and decision.verdict != CONTRADICTION:
         for tool, answer in verdicts.answers.items():
@@ -279,6 +326,21 @@ def outcome_of(verdicts: Verdicts, outcomes: dict[str, Outcome]) -> Outcome:
         return NO_OUTCOME
     outcome = outcomes[result.tool]
     return outcome._replace(witness_files=list(outcome.witness_files) if result.witness else [])
+
+
+def first_verdict_line(result, outcome: Outcome | None) -> str:
+    """The line that gives the result of the first-verdict mode: the
+    deciding component (its name in the conf), its verdict, the measured
+    fields of its run (Outcome.measured) and the witness delivered, with the
+    outcome of its check; or that no component gave an accepted verdict."""
+    if outcome is None:
+        return ("CoOpeRace first verdict: none (mode first-verdict): no component gave an accepted verdict: "
+                "the result is unknown")
+    line = (f"CoOpeRace first verdict: {result.tool} {result.verdict} (mode first-verdict), "
+            f"{outcome.measured or 'cputime=- walltime=- memory=- terminationreason=-'}")
+    if result.witness:
+        return line + f", witness {outcome.witness_files[0]} delivered (passes the check)"
+    return line + ", no witness delivered"
 
 
 def execute(root: Strategy, runner: StepRunner, group: ComponentGroup | None = None) -> str:
