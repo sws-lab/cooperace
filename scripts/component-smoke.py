@@ -408,7 +408,7 @@ def resolve_archive(component: str, archive_arg: str | None, tree: Path, work: P
         recorded = (local / ".doi").read_text().strip() if (local / ".doi").is_file() else None
         if not recorded:
             # An unpacked archive without a record: the record id in its path names the DOI
-            match = re.findall(r"(\d{6,})", str(local))
+            match = re.findall(r"(?<!\d)(\d{7,9})(?!\d)", str(local))
             if not match:
                 raise SmokeError(f"{local} has no .doi and no Zenodo record id in its path; give the zip")
             recorded = DOI_PREFIX + match[-1]
@@ -417,14 +417,14 @@ def resolve_archive(component: str, archive_arg: str | None, tree: Path, work: P
         raise SmokeError(f"{local} does not exist")
     if local is not None and entry is None:
         # A local archive: take the version of fm-tools whose DOI the file name holds, else the newest
-        match = re.search(r"(\d{6,})", local.name)
-        entry = version_for(data, DOI_PREFIX + match.group(1)) if match else None
+        match = re.findall(r"(?<!\d)(\d{7,9})(?!\d)", str(local))
+        entry = version_for(data, DOI_PREFIX + match[-1]) if match else None
         if entry is None:
             versions = verifier_versions(data or {})
             entry = versions[0] if versions else {"version": "unknown", "benchexec_toolinfo_options": []}
             source = "newest fm-tools version (local archive of unknown DOI)"
         else:
-            source = "fm-tools, by the record id in the file name"
+            source = "fm-tools, by the record id in the path"
         doi = str(entry.get("doi") or f"local:{local}")
 
     label = doi.removeprefix(DOI_PREFIX)
@@ -433,6 +433,7 @@ def resolve_archive(component: str, archive_arg: str | None, tree: Path, work: P
     if local is not None:
         zip_path = local
         record["source"] = str(local)
+        target.mkdir(parents=True)
     else:
         url, md5, size, name = zenodo_file(label)
         check_free_space(work, 3 * size)
