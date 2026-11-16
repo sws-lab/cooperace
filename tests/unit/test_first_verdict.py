@@ -471,6 +471,11 @@ def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, c
         ignored_after_stop = {line.removeprefix("CoOpeRace answer: ").split(", after ")[0].rsplit(" ", 1)[0]
                               for line in lines if line.endswith(", after CoOpeRace stopped it: ignored")}
         verdicts = {tool: accepted(root, property_name, tool, *fakes.ended[tool][:3]) for tool in fakes.ended}
+        #An answer CoOpeRace never saw came after the run had ended (by a decision, a wall-time
+        #limit or the budget) while its witness was checked; it counts as one that came after a stop
+        observed = {tool for tool in fakes.ended
+                    if any(line.startswith(f"CoOpeRace answer: {tool} ") for line in lines)}
+        ignored_after_stop |= set(fakes.ended) - observed
         candidates = {tool: fakes.ended[tool][3] for tool, (verdict, _) in verdicts.items()
                       if verdict is not None and tool not in ignored_after_stop}
         witness = tmp_path / "witness.yml"
