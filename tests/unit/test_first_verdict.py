@@ -391,14 +391,50 @@ def fast(monkeypatch):
 @pytest.mark.parametrize("property_name", list(PROPERTY_FILES))
 def test_random_scenarios_deliver_the_chronologically_first_accepted_verdict_with_its_own_witness(
         property_name, tmp_path, monkeypatch, capsys, fast):
+    check_scenarios(property_name, random_strategy, f"first verdict {property_name}", tmp_path, monkeypatch, capsys)
+
+
+# The first-verdict conf that scripts/svcomp-dist.sh packs with CONF_VARIANT=fv-theta
+FV_THETA = json.loads((ROOT / "conf" / "svcomp27-fv-theta.json").read_text())
+# Its wall-time limits scaled to the scenarios' delays (1200 s becomes 1.2 s, 37 s 0.037 s)
+FV_THETA_WALL_SCALE = 0.001
+
+
+def scaled(conf_strategy, scale):
+    """`conf_strategy` with the wall-time limits of its phases multiplied by `scale`."""
+    phases = [{**phase, "wallTimeLimit": phase["wallTimeLimit"] * scale}
+              if isinstance(phase, dict) and "wallTimeLimit" in phase else phase
+              for phase in conf_strategy["phases"]]
+    return {**conf_strategy, "phases": phases}
+
+
+def test_the_fv_theta_conf_is_in_the_mode_in_every_property():
+    strategies = config.load_strategies(FV_THETA, REGISTRY)
+
+    assert set(strategies) == set(PROPERTY_FILES)
+    assert all(loaded.first_verdict for loaded in strategies.values())
+    assert all(len(loaded.answers) == 1 for loaded in strategies.values())
+
+
+@pytest.mark.parametrize("property_name", list(PROPERTY_FILES))
+def test_random_scenarios_on_the_fv_theta_conf_deliver_the_first_accepted_verdict_with_its_own_witness(
+        property_name, tmp_path, monkeypatch, capsys, fast):
+    conf_strategy = scaled(FV_THETA["properties"][property_name], FV_THETA_WALL_SCALE)
+    check_scenarios(property_name, lambda _rng: conf_strategy, f"fv-theta {property_name}", tmp_path, monkeypatch,
+                    capsys)
+
+
+def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, capsys):
+    """Runs SCENARIOS random behaviours of the components of the strategies
+    `make_strategy(rng)` through cli.run and checks the mode's rules on each."""
     task = tmp_path / "task.c"
     task.write_text("int main(void) { return 0; }\n")
     monkeypatch.chdir(tmp_path)
-    rng = random.Random(f"first verdict {property_name}")
+    rng = random.Random(seed)
     counts = {"definite": 0, "unknown": 0, "late-rejected": 0}
 
     for number in range(SCENARIOS):
-        conf_strategy = random_strategy(rng)
+        conf_strategy = make_strategy(rng)
         conf = {"properties": {property_name: conf_strategy}}
         root = config.load(conf_strategy, REGISTRY)
         names = {REGISTRY[tool].tool().name(): tool for tool in root.tools}

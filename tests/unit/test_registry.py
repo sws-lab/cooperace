@@ -152,6 +152,7 @@ def test_each_conf_variant_runs_components_of_the_lock_files_only_and_theta_s_ad
         added[path.name] = directories - set(archive)
 
     assert added["svcomp27-theta.json"] == {"theta"}
+    assert added["svcomp27-fv-theta.json"] == {"theta"}
 
 
 def test_read_component_versions_ignores_further_keys(tmp_path):
