@@ -87,10 +87,18 @@ def main(component, path):
     elif component == "ikos-conc":
         has("bin/svcomp_witness.py")
         if "bin/svcomp_witness.py" in names:
-            grep("bin/svcomp_witness.py", r"--out", "takes --out (registry WitnessSpec)")
-            text = read("bin/svcomp_witness.py")
+            # 24225248: bin/svcomp_witness.py is a shell-and-Python shim that runs the module
+            # ikos.svcomp_witness of its bundled Python; the checks then read that module
+            script = "bin/svcomp_witness.py"
+            if re.search(r"^from ikos\.svcomp_witness import main", read(script), re.M):
+                modules = sorted(n for n in names if n.endswith("site-packages/ikos/svcomp_witness.py"))
+                checks.append(("bin/svcomp_witness.py runs ikos.svcomp_witness, which the archive holds",
+                               bool(modules), "FAIL"))
+                script = modules[0] if modules else script
+            grep(script, r"--out", "takes --out (registry WitnessSpec)")
+            text = read(script)
             for line in ("The program is definitely UNSAFE", "The program is SAFE"):
-                checks.append((f'bin/svcomp_witness.py: prints "{line}" (toolinfo/ikos_conc.py)', line in text, "FAIL"))
+                checks.append((f'{script}: prints "{line}" (toolinfo/ikos_conc.py)', line in text, "FAIL"))
     else:
         sys.exit(f"unknown component {component}")
 
