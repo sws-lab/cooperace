@@ -150,6 +150,13 @@ CHECK_MARGIN_SECONDS = 5.0
 CHECK_MEMORY_BYTES = 1 << 30
 CHECK_MEMORY_SHARE = 0.1
 
+# The name under which components.witness_files_to_file_root delivers the
+# witness, and so the name of the file the competition's validators and
+# WitnessLint are given (bench-defs' validation definitions read
+# ".../${taskdef_name}/witness.yml" from the run's result files). WitnessLint
+# refuses a witness whose file name does not end in .yml or .yml.gz.
+DELIVERED_NAME = "witness.yml"
+
 # Held while a check runs in a process of its own (_passes_apart).
 _APART_LOCK = threading.Lock()
 

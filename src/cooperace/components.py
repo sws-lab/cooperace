@@ -65,7 +65,7 @@ from .config import Step
 from .processes import PRINT_LOCK, ComponentGroup, run_memory_limit
 from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
-from .witnesses import needs_witness, passing_witness, subproperty_of
+from .witnesses import DELIVERED_NAME, needs_witness, passing_witness, subproperty_of
 
 
 @dataclass(frozen=True)
@@ -654,8 +654,9 @@ class ComponentRunner:
     def linted_witness(self, step: Step, witness_files: list[str], verdict: str,
                        subproperty: str | None) -> str | None:
         """The first of `witness_files` (GraphML files left out) that counts by
-        WitnessLint (witnesslint.lint), run on the file as deliver would
-        deliver it and on the task's program, or None. A file counts if the
+        WitnessLint (witnesslint.lint_delivered: a copy as deliver would
+        deliver it, under the name DELIVERED_NAME, on the task's program), or
+        None. A file counts if the
         linter says it is valid; not if it says it is invalid; and, where the
         linter fails technically or its self-test failed
         (witnesslint.self_test_problems), if witnesses.passing_witness
@@ -674,9 +675,8 @@ class ComponentRunner:
                          f"check decides on {step.component}'s witness {path}, which it {internal_text}")
                 counts = internal
             else:
-                copy = path + ".as-delivered"
-                witness_files_to_path(path, copy, {self.file: self.task_path})
-                got = witnesslint.lint(copy, self.file, verdict, step.run_cpu_time_budget)
+                got = witnesslint.lint_delivered(path, self.file, verdict, step.run_cpu_time_budget,
+                                                 {self.file: self.task_path}, self.work_dir)
                 if got.outcome == witnesslint.FAILED:
                     say_line(f"CoOpeRace: WARNING: WitnessLint failed technically on {step.component}'s witness "
                              f"{path} ({got.status}): the internal check decides, and it {internal_text}")
@@ -1011,7 +1011,7 @@ def witness_files_to_file_root(witness_files: list[str], paths: Mapping[str, str
     for file in witness_files:
         if file.lower().endswith(".graphml"):
             raise ValueError(f"a GraphML file is never delivered: {file}")
-        target = os.path.join(os.getcwd(), "witness.yml")
+        target = os.path.join(os.getcwd(), DELIVERED_NAME)
         if not paths:
             shutil.copy2(file, target)
             continue
@@ -1021,19 +1021,6 @@ def witness_files_to_file_root(witness_files: list[str], paths: Mapping[str, str
             text = text.replace(old, new)
         with open(target, "w", encoding="utf-8", errors="surrogateescape") as out:
             out.write(text)
-
-
-def witness_files_to_path(source: str, target: str, paths: Mapping[str, str]) -> None:
-    """Writes the witness file `source` to `target` as
-    witness_files_to_file_root delivers it: every occurrence of a key of
-    `paths` replaced by its value."""
-    paths = {old: new for old, new in paths.items() if old and old != new}
-    with open(source, encoding="utf-8", errors="surrogateescape") as file:
-        text = file.read()
-    for old, new in paths.items():
-        text = text.replace(old, new)
-    with open(target, "w", encoding="utf-8", errors="surrogateescape") as out:
-        out.write(text)
 
 
 def remove_old_witness_files() -> None:

@@ -21,10 +21,13 @@ from src.cooperace.config import ConfError
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# A linter that decides by a marker in the witness: "# lint: invalid" (or a
-# file named *invalid.witness.yml) is invalid syntax, "# lint: type" a witness
-# of the unexpected type, "# lint: crash" a traceback, "# lint: hang" a linter
-# that never ends, "# lint: silent" no output; anything else is valid.
+# A linter that, like WitnessLint 2.4 (yaml_linter.matches_file_name_schema),
+# refuses a witness file whose name does not end in .yml or .yml.gz, and a
+# waypoint without "action" (the self-test's invalid witness), and otherwise
+# decides by a marker in the witness: "# lint: invalid" is invalid syntax,
+# "# lint: type" a witness of the unexpected type, "# lint: crash" a
+# traceback, "# lint: hang" a linter that never ends, "# lint: silent" no
+# output; anything else is valid.
 FAKE_LINTER = textwrap.dedent('''\
     import sys, time
     path = sys.argv[sys.argv.index("--witness") + 1]
@@ -35,6 +38,10 @@ FAKE_LINTER = textwrap.dedent('''\
         print("witnesslint finished with exit code 5")
         sys.exit(5)
     print("Running witnesslint version 2.4")
+    if not path.endswith((".yml", ".yml.gz")):
+        print("CRITICAL: Witness file name does not match the schema.")
+        print("witnesslint finished with exit code 1")
+        sys.exit(1)
     if "# lint: crash" in text:
         print("Traceback (most recent call last):")
         sys.exit(1)
@@ -46,7 +53,15 @@ FAKE_LINTER = textwrap.dedent('''\
         print("Witness Type-Match: False")
         print("witnesslint finished with exit code 0")
         sys.exit(0)
-    if "# lint: invalid" in text or path.endswith("invalid.witness.yml"):
+    import yaml
+    try:
+        entries = yaml.safe_load(text)
+    except yaml.YAMLError:
+        entries = None
+    waypoints = [waypoint["waypoint"] for entry in entries or [] if isinstance(entry, dict)
+                 for segment in entry.get("content") or [] if isinstance(segment, dict)
+                 for waypoint in segment.get("segment") or [] if isinstance(waypoint, dict) and "waypoint" in waypoint]
+    if "# lint: invalid" in text or any("action" not in waypoint for waypoint in waypoints):
         print("witnesslint finished with exit code 1")
         sys.exit(1)
     print("Witness Type-Match: True")
@@ -198,3 +213,23 @@ def test_the_checker_lock_names_witnesslint_2_4():
 
     assert lines == ["witnesslint: 10.5281/zenodo.24089806"]
     assert os.path.basename(witnesslint.LINTER_DIR) == "witnesslint"
+
+
+def test_a_copy_is_linted_under_the_delivered_name_and_the_original_is_kept(tmp_path, fake_linter):
+    """WitnessLint refuses a file whose name does not end in .yml: lint_delivered
+    lints a copy named witness.yml, with the task's path replaced, and leaves
+    the component's file and no copy behind (036ec13 linted "<file>.as-delivered")."""
+    source = tmp_path / "out" / "witness.yml.component"
+    source.parent.mkdir()
+    source.write_text("# /abs/task.c\n- entry_type: violation_sequence\n")
+    program = tmp_path / "program.c"
+    program.write_text("")
+    work = tmp_path / "work"
+    work.mkdir()
+
+    assert witnesslint.lint(str(source), str(program), "false").status == "ERROR (invalid witness syntax)"
+    got = witnesslint.lint_delivered(str(source), str(program), "false", None, {"/abs/task.c": "rel/task.c"},
+                                     str(work))
+
+    assert got == (witnesslint.VALID, "done")
+    assert source.read_text().startswith("# /abs/task.c") and list(work.iterdir()) == []
