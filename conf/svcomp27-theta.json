@@ -4,80 +4,46 @@
       "phases": [
         {
           "tools": [
-            "IKOS-ConC"
-          ],
-          "wallTimeLimit": 50
-        },
-        {
-          "tools": [
             "Theta"
           ],
-          "wallTimeLimit": 1264
+          "wallTimeLimit": 690
         },
         {
           "tools": [
-            "Goblint"
+            "Goblint",
+            "IKOS-ConC"
           ],
-          "wallTimeLimit": 38
+          "wallTimeLimit": 120
         },
-        {
-          "tools": [
-            "Deagle"
-          ],
-          "wallTimeLimit": 1052
-        },
-        [
-          "sv-sanitizers"
-        ],
         [
           "Dartagnan"
         ]
       ],
       "cpuTimeLimits": {
-        "IKOS-ConC": 23,
-        "Theta": 833,
-        "Goblint": 15,
-        "Deagle": 691
+        "Theta": 450,
+        "Goblint": 30,
+        "IKOS-ConC": 60
       },
       "memoryLimits": {
-        "IKOS-ConC": "90%",
         "Theta": "90%",
-        "Goblint": "90%",
-        "Deagle": "90%",
-        "sv-sanitizers": "90%",
-        "Dartagnan": "90%"
+        "Goblint": "35%",
+        "IKOS-ConC": "30%",
+        "Dartagnan": "80%"
       },
       "runCpuTimeBudget": 870,
       "answers": [
         [
-          "IKOS-ConC"
-        ],
-        [
-          "Theta"
-        ],
-        [
-          "Deagle"
-        ],
-        [
-          "Dartagnan:true"
-        ],
-        [
-          "Goblint:true"
-        ],
-        [
-          "Dartagnan:false"
-        ],
-        [
-          "sv-sanitizers:false"
+          "Theta",
+          "Goblint:true",
+          "IKOS-ConC:true",
+          "IKOS-ConC:false",
+          "Dartagnan"
         ]
       ],
       "witnesses": [
-        "Deagle",
         "Theta",
-        "Dartagnan",
         "IKOS-ConC",
-        "sv-sanitizers",
-        "Goblint"
+        "Dartagnan"
       ],
       "ignoreIfCalls": {
         "Dartagnan": [
@@ -86,13 +52,6 @@
           "pthread_barrier_destroy"
         ],
         "Dartagnan:true": [
-          "pthread_mutexattr_settype"
-        ],
-        "Deagle": [
-          "pthread_barrier_init",
-          "pthread_barrier_wait",
-          "pthread_barrier_destroy",
-          "pthread_once",
           "pthread_mutexattr_settype"
         ]
       }
@@ -107,71 +66,50 @@
         },
         {
           "tools": [
-            "sv-sanitizers"
-          ],
-          "wallTimeLimit": 38
-        },
-        {
-          "tools": [
+            "sv-sanitizers",
             "Goblint"
           ],
-          "wallTimeLimit": 38
-        },
-        {
-          "tools": [
-            "ULTIMATE GemCutter"
-          ],
-          "wallTimeLimit": 1010
+          "wallTimeLimit": 68
         },
         [
-          "Deagle"
+          "ULTIMATE GemCutter",
+          "Dartagnan"
         ]
       ],
       "cpuTimeLimits": {
         "Theta": 518,
-        "sv-sanitizers": 15,
-        "Goblint": 15,
-        "ULTIMATE GemCutter": 663
+        "sv-sanitizers": 30,
+        "Goblint": 30
       },
       "memoryLimits": {
         "Theta": "90%",
-        "sv-sanitizers": "90%",
-        "Goblint": "90%",
-        "ULTIMATE GemCutter": "90%",
-        "Deagle": "90%"
+        "sv-sanitizers": "45%",
+        "Goblint": "45%",
+        "ULTIMATE GemCutter": "60%",
+        "Dartagnan": "35%"
       },
       "runCpuTimeBudget": 870,
       "answers": [
         [
-          "Theta"
-        ],
-        [
-          "Goblint:true"
-        ],
-        [
-          "ULTIMATE GemCutter"
-        ],
-        [
-          "Deagle"
-        ],
-        [
+          "Theta",
+          "Goblint:true",
+          "ULTIMATE GemCutter:true",
+          "Dartagnan:false",
           "sv-sanitizers:false"
         ]
       ],
       "witnesses": [
-        "sv-sanitizers",
-        "Deagle",
         "Theta",
         "ULTIMATE GemCutter",
-        "Goblint"
+        "Goblint",
+        "Dartagnan",
+        "sv-sanitizers"
       ],
       "ignoreIfCalls": {
-        "Deagle": [
+        "Dartagnan": [
           "pthread_barrier_init",
           "pthread_barrier_wait",
-          "pthread_barrier_destroy",
-          "pthread_once",
-          "pthread_mutexattr_settype"
+          "pthread_barrier_destroy"
         ]
       }
     },
@@ -179,81 +117,45 @@
       "phases": [
         {
           "tools": [
-            "ULTIMATE GemCutter"
+            "Theta"
           ],
-          "wallTimeLimit": 990
+          "wallTimeLimit": 594
         },
         {
           "tools": [
             "Goblint"
           ],
-          "wallTimeLimit": 46
-        },
-        {
-          "tools": [
-            "sv-sanitizers"
-          ],
-          "wallTimeLimit": 38
-        },
-        {
-          "tools": [
-            "Dartagnan"
-          ],
-          "wallTimeLimit": 452
-        },
-        {
-          "tools": [
-            "Deagle"
-          ],
-          "wallTimeLimit": 772
+          "wallTimeLimit": 45
         },
         [
-          "Theta"
+          "ULTIMATE GemCutter",
+          "Deagle"
         ]
       ],
       "cpuTimeLimits": {
-        "ULTIMATE GemCutter": 650,
-        "Goblint": 21,
-        "sv-sanitizers": 15,
-        "Dartagnan": 291,
-        "Deagle": 505
+        "Theta": 386,
+        "Goblint": 30
       },
       "memoryLimits": {
-        "ULTIMATE GemCutter": "90%",
+        "Theta": "90%",
         "Goblint": "90%",
-        "sv-sanitizers": "90%",
-        "Dartagnan": "90%",
-        "Deagle": "90%",
-        "Theta": "90%"
+        "ULTIMATE GemCutter": "80%",
+        "Deagle": "15%"
       },
       "runCpuTimeBudget": 870,
       "answers": [
         [
-          "ULTIMATE GemCutter"
-        ],
-        [
-          "Goblint:true"
-        ],
-        [
-          "sv-sanitizers:true"
-        ],
-        [
-          "Dartagnan"
-        ],
-        [
-          "Deagle"
-        ],
-        [
-          "Theta"
+          "Theta",
+          "Goblint:true",
+          "ULTIMATE GemCutter",
+          "Deagle:false"
         ]
       ],
       "witnesses": [
-        "Deagle",
-        "Dartagnan",
         "Theta",
         "ULTIMATE GemCutter",
-        "sv-sanitizers",
-        "Goblint"
+        "Goblint",
+        "Deagle"
       ],
       "ignoreIfCalls": {
         "Deagle": [
@@ -269,84 +171,56 @@
       "phases": [
         {
           "tools": [
-            "Goblint"
-          ],
-          "wallTimeLimit": 38
-        },
-        {
-          "tools": [
-            "Dartagnan"
-          ],
-          "wallTimeLimit": 723
-        },
-        {
-          "tools": [
-            "ULTIMATE GemCutter"
-          ],
-          "wallTimeLimit": 634
-        },
-        {
-          "tools": [
             "Theta"
           ],
-          "wallTimeLimit": 45
+          "wallTimeLimit": 360
         },
         {
           "tools": [
-            "sv-sanitizers"
+            "sv-sanitizers",
+            "Goblint"
           ],
-          "wallTimeLimit": 219
+          "wallTimeLimit": 68
+        },
+        {
+          "tools": [
+            "Deagle",
+            "ULTIMATE GemCutter"
+          ],
+          "wallTimeLimit": 150
         },
         [
           "Deagle"
         ]
       ],
       "cpuTimeLimits": {
-        "Goblint": 15,
-        "Dartagnan": 472,
-        "ULTIMATE GemCutter": 413,
-        "Theta": 20,
-        "sv-sanitizers": 136
+        "Theta": 230,
+        "sv-sanitizers": 30,
+        "Goblint": 30,
+        "ULTIMATE GemCutter": 60
       },
       "memoryLimits": {
-        "Goblint": "90%",
-        "Dartagnan": "90%",
-        "ULTIMATE GemCutter": "90%",
         "Theta": "90%",
-        "sv-sanitizers": "90%",
-        "Deagle": "90%"
+        "sv-sanitizers": "45%",
+        "Goblint": "45%",
+        "Deagle": "55%",
+        "ULTIMATE GemCutter": "40%"
       },
       "runCpuTimeBudget": 870,
       "answers": [
         [
-          "Goblint:true"
-        ],
-        [
-          "ULTIMATE GemCutter"
-        ],
-        [
-          "Theta"
-        ],
-        [
-          "sv-sanitizers:false"
-        ],
-        [
-          "Deagle:false"
-        ],
-        [
+          "Theta",
+          "Goblint:true",
+          "Deagle:false",
+          "sv-sanitizers:false",
+          "ULTIMATE GemCutter:false",
           "Deagle:true"
-        ],
-        [
-          "Dartagnan:true"
         ]
       ],
       "witnesses": [
-        "ULTIMATE GemCutter",
         "Theta",
         "Deagle",
-        "Dartagnan",
-        "sv-sanitizers",
-        "Goblint"
+        "sv-sanitizers"
       ],
       "ignoreIfCalls": {
         "Deagle": [
