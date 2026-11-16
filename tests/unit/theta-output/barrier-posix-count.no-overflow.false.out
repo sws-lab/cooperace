@@ -1,0 +1,47 @@
+
+Using Java: /usr/bin/java (version 25)
+Verifying input '../../sv-benchmarks/c/pthread-overflow/barrier-posix-count.c' using arguments '--svcomp --portfolio STABLE --loglevel RESULT --property ../../sv-benchmarks/c/properties/no-overflow.prp --architecture ILP32 --memlimit 3000000000'
+LD_LIBRARY_PATH=/home/cwd/bin/cooperace-verify-eprime2/lib /usr/bin/java -Xss120m -Xmx14210m -jar /home/cwd/bin/cooperace-verify-eprime2/theta.jar --svcomp --portfolio STABLE --loglevel RESULT --property ../../sv-benchmarks/c/properties/no-overflow.prp --architecture ILP32 --memlimit 3000000000 --input ../../sv-benchmarks/c/pthread-overflow/barrier-posix-count.c --smt-home /home/cwd/bin/cooperace-verify-eprime2/solvers
+Deprecated logLevel for --svcomp: RESULT. Changing to BENCHMARK.
+ParsingResult Success
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::loadLibrary has been called by hu.bme.mit.theta.solver.z3.Z3SolverFactory in an unnamed module (file:/home/cwd/bin/cooperace-verify-eprime2/theta.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+ParsingResult Success
+note: frontend build failed due to a pointer-splitting limitation under --memory-model multi; retrying with --memory-model flat
+ParsingResult Success
+Arithmetic: [ARR, NONLIN_INT]
+
+Frontend finished:   (in 823 ms)
+ParsingResult Success
+Alias graph size: 0 -> []
+XCFA-TRAITS {"property":"ERROR_LOCATION","propertyFile":"no-overflow.prp","arithmetic":"integer","arithmeticAutoSelected":true,"arithmeticTraits":["ARR","NONLIN_INT"],"multiThreading":true,"smtTypes":{"Int":17,"Bool":3},"bvWidths":[],"procedures":2,"locations":146,"edges":145,"maxLocationsPerProc":105,"maxEdgesPerProc":103,"globalVars":7,"localVars":13,"params":3,"labels":123,"cyclomatic":3,"maxCyclomatic":3,"backEdges":0,"cyclicProcedures":0,"acyclic":true,"branchingLocations":3,"inlined":true,"unsafeUnrollUsed":false,"addressReuseObservable":false,"overApproximatedVars":0,"errorLocations":2,"initProcedures":1,"dereferences":15,"dereferenceReads":5,"dereferenceWrites":10,"constantOffsetDereferences":12,"references":0,"aliasGraphSize":0,"aliasGraphMaxFanout":0,"labelKinds":{"assign":39,"other-stmt":3,"havoc":6,"assume":43,"atomic":16,"memory-assign":10,"thread-join":3,"thread-start":3},"havocs":6,"source":{"storage:extern":6,"functionDeclarator":10,"pointerType":13,"typedefUse":9,"pointerDeclarator":14,"qualifier:const":2,"gccAttribute":6,"callWithArguments":13,"functionDefinition":3,"if":1,"cast":2,"arrayIndex":8,"for":4,"increment":4,"return":2},"assumes":43,"calls":0,"libraryCalls":0}
+Using portfolio: MULTITHREAD
+
+Using portfolio: MULTITHREAD27
+
+Current configuration: MULTITHREAD_OC_PROPAGATOR_integer_flat_new-true
+Current configuration: XcfaConfig(inputConfig=InputConfig(inputFile=../../sv-benchmarks/c/pthread-overflow/barrier-posix-count.c, catFile=null, xcfaWCtx=missing, propertyFile=../../sv-benchmarks/c/properties/no-overflow.prp, inputProperty=OVERFLOW, frontendConfig=FrontendConfig(lbeLevel=NO_LBE, enableStaticCoi=false, ptrSizeInMemory=false, loopUnroll=1000, memoryInit=AUTO, forceUnroll=-1, forceUnrollRecursion=-1, enableDataRaceToReachability=false, enableFew=false, disableSpinLoopEffects=false, inputType=C, specConfig=CFrontendConfig(arithmetic=integer, architecture=ILP32, memoryModel=flat, useCir2c=false, cir2cDir=./cir2c, enableSignedWraparound=false)), backendConfig=BackendConfig(backend=OC, solverHome=/home/cwd/bin/cooperace-verify-eprime2/solvers, timeoutMs=100000, inProcess=true, portfolioStep=false, memlimit=0, specConfig=OcConfig(decisionProcedure=PROPAGATOR, outputConflictClauses=false, inputConflictDecisionProcedure=, autoConflict=SIMPLE, autoConflictBound=-1, memoryConsistencyModel=SC, smtSolver=Z3:new, validateSolver=false, unsatReferenceSolver=, forceUnrollBoundStart=1, forceUnrollBoundEnd=-1, forceUnrollBoundStep=1, maxExitQueries=-1)), outputConfig=OutputConfig(versionInfo=false, enabled=CUSTOM, resultFolder=., acceptUnreliableSafe=false, cOutputConfig=COutputConfig(enabled=false, useArr=false, useExArr=false, useRange=false), xcfaOutputConfig=XcfaOutputConfig(enabled=false), chcOutputConfig=ChcOutputConfig(enabled=false), svLibOutputConfig=SvLibOutputConfig(generateWitness=false), precOutputConfig=PrecOutputConfig(format=[GENERIC, WITNESS], serializationMode=NEVER), witnessConfig=WitnessConfig(enabled=SVCOMP, concretizerSolver=Z3, validateConcretizerSolver=false, inputFileForWitness=../../sv-benchmarks/c/pthread-overflow/barrier-posix-count.c), argConfig=ArgConfig(enabled=false)), debugConfig=DebugConfig(debug=false, stacktrace=false, logLevel=BENCHMARK, argdebug=false, argToFile=false))
+subprocess: ParsingResult Success
+subprocess: WARNING: A restricted method in java.lang.System has been called
+subprocess: WARNING: java.lang.System::loadLibrary has been called by hu.bme.mit.theta.solver.z3.Z3SolverFactory in an unnamed module (file:/home/cwd/bin/cooperace-verify-eprime2/theta.jar)
+subprocess: WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+subprocess: WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+subprocess: 
+subprocess: Arithmetic: []
+subprocess: 
+subprocess: Frontend finished:   (in 3297 ms)
+subprocess: ParsingResult Success
+subprocess: Alias graph size: 0 -> []
+subprocess: XCFA-TRAITS {"property":"ERROR_LOCATION","propertyFile":"no-overflow.prp","arithmetic":"integer","arithmeticAutoSelected":false,"arithmeticTraits":[],"multiThreading":true,"smtTypes":{"Int":17,"Bool":3},"bvWidths":[],"procedures":2,"locations":146,"edges":145,"maxLocationsPerProc":105,"maxEdgesPerProc":103,"globalVars":7,"localVars":13,"params":3,"labels":123,"cyclomatic":3,"maxCyclomatic":3,"backEdges":0,"cyclicProcedures":0,"acyclic":true,"branchingLocations":3,"inlined":true,"unsafeUnrollUsed":false,"addressReuseObservable":false,"overApproximatedVars":0,"errorLocations":2,"initProcedures":1,"dereferences":15,"dereferenceReads":5,"dereferenceWrites":10,"constantOffsetDereferences":12,"references":0,"aliasGraphSize":0,"aliasGraphMaxFanout":0,"labelKinds":{"assign":39,"other-stmt":3,"havoc":6,"assume":43,"atomic":16,"memory-assign":10,"thread-join":3,"thread-start":3},"havocs":6,"source":{"storage:extern":6,"functionDeclarator":10,"pointerType":13,"typedefUse":9,"pointerDeclarator":14,"qualifier:const":2,"gccAttribute":6,"callWithArguments":13,"functionDefinition":3,"if":1,"cast":2,"arrayIndex":8,"for":4,"increment":4,"return":2},"assumes":43,"calls":0,"libraryCalls":0}
+subprocess: WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+subprocess: WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/home/cwd/bin/cooperace-verify-eprime2/theta.jar)
+subprocess: WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+subprocess: WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+subprocess: (Property no-overflow)
+subprocess: (SafetyResult Unsafe Trace length: 101)
+Config MULTITHREAD_OC_PROPAGATOR_integer_flat_new-true succeeded in 7331 ms
+success-result: MULTITHREAD_OC_PROPAGATOR_integer_flat_new-true
+

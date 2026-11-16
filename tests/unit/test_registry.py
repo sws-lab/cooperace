@@ -52,6 +52,7 @@ DIRECTORIES = {
     "RacerF": "racerf",
     "iekke": "iekke",
     "IKOS-ConC": "ikos-conc",
+    "Theta": "theta",
 }
 
 
@@ -78,7 +79,8 @@ def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entr
     (tools-unlisted.txt), of version svcomp27 of goblint.yml in fm-tools 9dd09a3f, of
     dartagnan.yml in 5f26160a, of ugemcutter.yml in 6452480b, of ikos-conc.yml in dbda8837 and
     of uautomizer.yml in b7ccdb13, and of version 2.0 of iekke.yml in 554cc768: each the newest
-    archive of its component with a pre-run on the current task set."""
+    archive of its component with a pre-run on the current task set. Theta's are checked in
+    test_theta.py."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
     assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24080342", "svcomp27",

@@ -71,3 +71,27 @@ GPL-3.0 text (`tools/deagle/COPYING`). Source: https://github.com/thufv/deagle (
 ## sv-sanitizers (`tools/sv-sanitizers/`)
 
 MIT; no bundled third-party code.
+
+## Theta (`tools/theta/`, Zenodo 10.5281/zenodo.24128717), in the archive of the conf variant theta only
+
+The archive built with `CONF_VARIANT=theta` (`scripts/svcomp-dist.sh`) also holds Theta svcomp27
+(version 8.10.1), exactly as its Zenodo archive holds it; the default archive does not. Theta is
+under the Apache License 2.0 (`tools/theta/LICENSE`). Source: https://github.com/ftsrg/theta,
+release 8.10.1. `tools/theta/LIB_LICENSES.md` holds the licence texts of its libraries and solvers;
+those under the GPL or LGPL are:
+
+- **Yices 2** 2.6.4 with JavaSMT's JNI bindings, GPL-3.0, statically linking GNU MP (LGPL-3.0 or
+  GPL-2.0-or-later): `tools/theta/lib/libyices2java.so`. Licence: `tools/theta/LIB_LICENSES.md`.
+  Source: https://github.com/SRI-CSL/yices2 (tag Yices-2.6.4) and
+  https://github.com/sosy-lab/java-smt/tree/master/lib/native/source/yices2.
+- **GNU MPFR**, LGPL-3.0-or-later, in `tools/theta/lib/mpfr_java-1.4-linux64.jar`
+  (`libmpfr_java.so`, with MPFR-Java under the University of Illinois/NCSA licence). Licence:
+  `tools/theta/LIB_LICENSES.md`. Source: https://www.mpfr.org and
+  https://github.com/runtimeverification/mpfr-java.
+- **libpoly**, LGPL-3.0, and GMP/MPIR, LGPL, as libraries of the cvc5 and CVC4 builds in
+  `tools/theta/lib/` and `tools/theta/solvers/cvc5/`. Licence: `tools/theta/LIB_LICENSES.md`,
+  `tools/theta/solvers/cvc5/1.3.4/COPYING`. Source: https://github.com/SRI-CSL/libpoly,
+  https://gmplib.org, https://github.com/cvc5/cvc5 (1.3.4).
+- Not under the GPL: Z3 (MIT), Bitwuzla 0.9.1 (MIT), cvc5 (BSD-3-Clause, built without GPL
+  libraries per its `COPYING`), JavaSMT (Apache-2.0), and MathSAT5 5.6.19, whose licence
+  (`tools/theta/solvers/mathsat/5.6.19/LICENSE.txt`) allows research and evaluation use only.

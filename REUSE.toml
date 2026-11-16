@@ -42,10 +42,11 @@ SPDX-FileCopyrightText = "2024-2026 University of Tartu"
 SPDX-License-Identifier = "MIT"
 
 # Witnesses that sv-sanitizers, Dartagnan and IKOS-ConC svcomp27 wrote on no-data-race
-# tasks of SV-Benchmarks, copied unchanged as fixtures of the unit tests
-# (tests/unit/test_witness_check.py).
+# tasks of SV-Benchmarks, and Theta svcomp27's witnesses and output on tasks of
+# several properties, copied unchanged as fixtures of the unit tests
+# (tests/unit/test_witness_check.py, tests/unit/test_theta.py).
 [[annotations]]
-path = "tests/unit/witnesses/**"
+path = ["tests/unit/witnesses/**", "tests/unit/theta-output/**"]
 SPDX-FileCopyrightText = "2024-2026 University of Tartu"
 SPDX-License-Identifier = "MIT"
 

@@ -123,13 +123,21 @@ class ComponentSpec:
     tools-options.json, `witness` the WitnessSpec of its witness files, and
     `task_limit` the most tasks its run may have at once (TASK_LIMIT), or
     None for no limit. The options it is run with are those of its
-    ComponentVersion, before those of `witness`."""
+    ComponentVersion, before those of `witness`.
+
+    `gets_memory_limit` says whether the tool-info module's cmdline is given
+    the component's memory limit in its ResourceLimits, as BenchExec gives a
+    tool the run's (ComponentRunner.command): for a component whose tool-info
+    module passes it on and that sizes itself from it. Every other module is
+    given empty ResourceLimits, so that its command line stays the one the
+    competition's options give."""
 
     name: str
     module: str
     directory: str
     witness: WitnessSpec = DEFAULT_WITNESS
     task_limit: int | None = TASK_LIMIT
+    gets_memory_limit: bool = False
 
     def tool(self) -> BaseTool2:
         """A new object of the tool-info module's class Tool. The module is
@@ -197,6 +205,15 @@ REGISTRY = {spec.name: spec for spec in (
     #tool-info module is not in the bundled BenchExec 3.35; toolinfo/ holds the bench-defs' copy.
     ComponentSpec("IKOS-ConC", "src.cooperace.toolinfo.ikos_conc", "ikos-conc",
                   witness=WitnessSpec("run", ("--out", "{dir}/witness.yml"), ("witness.yml",))),
+    #Theta svcomp27 (8.10.1, 10.5281/zenodo.24128717): theta-start.sh runs theta.jar in its
+    #working directory, Theta's directory, which writes witness.yml (and witness.graphml, never
+    #delivered) there for a true and for a false; the archive ships neither. Its portfolio runs
+    #each configuration in a child JVM whose heap (-Xmx) is the --memlimit that BenchExec's
+    #theta module passes from the run's memory limit (1420 MB without one), so it is given
+    #its own memory limit (gets_memory_limit). The portfolio's time slices are fixed (they
+    #assume the 900 s of the competition); a CPU-time limit of CoOpeRace's ends it early.
+    ComponentSpec("Theta", "benchexec.tools.theta", "theta",
+                  witness=WitnessSpec("component", (), ("witness.yml",)), gets_memory_limit=True),
 )}
 
 # The file in TOOL_DIR that holds the ComponentVersion of every component of
@@ -495,7 +512,8 @@ class ComponentRunner:
                   file=sys.stderr, flush=True)
             actor.version = lambda executable: UNKNOWN_VERSION
 
-    def command(self, actor: BaseTool2, spec: ComponentSpec, witness_dir: str) -> ComponentCommand:
+    def command(self, actor: BaseTool2, spec: ComponentSpec, witness_dir: str,
+                memory: int | None = None) -> ComponentCommand:
         """The ComponentCommand that starts the component `actor`, the
         tool-info object of the registry entry `spec`, on the task, with the
         witness directory `witness_dir` of its run, as BenchExec would start it
@@ -505,8 +523,12 @@ class ComponentRunner:
           executable that `actor.executable` finds in the tool directory,
           the options of the component's ComponentVersion followed by those
           of its WitnessSpec, the task file, the property file, the task
-          options data_model and language, and an empty ResourceLimits (the
-          tool-info module for CoOpeRace passes CoOpeRace no limits).
+          options data_model and language, and ResourceLimits that are empty
+          (the tool-info module for CoOpeRace passes CoOpeRace no limits),
+          except for a component whose `spec.gets_memory_limit`: its
+          ResourceLimits hold `memory`, the component's memory limit in
+          bytes, or, if it has none (None), the run's (run_memory_limit), which
+          then bounds it, or none if the run has none either.
           cmdline_for_run makes a relative path relative to the working
           directory, and expands environment variables and ~ in every
           argument; the executable, the task and the property file are
@@ -525,9 +547,12 @@ class ComponentRunner:
         tool_location = os.path.join(self.tools_dir, spec.directory)
         executable = actor.executable(BaseTool2.ToolLocator(tool_directory=tool_location))
         options = list(version.options) + witness_options(spec.witness, witness_dir)
+        limits = BaseTool2.ResourceLimits()
+        if spec.gets_memory_limit:
+            limits = BaseTool2.ResourceLimits(memory=memory if memory is not None else run_memory_limit())
         cmdline = bmodel.cmdline_for_run(
             actor, executable, options, [self.file], None, self.property_file,
-            {"data_model": self.data_model, "language": "C"}, BaseTool2.ResourceLimits())
+            {"data_model": self.data_model, "language": "C"}, limits)
         cwd = os.path.normpath(os.path.join(tool_location, actor.working_directory(executable)))
         return ComponentCommand(cmdline, cwd, actor.environment(executable))
 
@@ -561,8 +586,8 @@ class ComponentRunner:
         spec = self.registry[step.component]
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
-        command = self.command(actor, spec, witness_dir)
         memory, cpu = announce_limits(step)
+        command = self.command(actor, spec, witness_dir, memory)
         tasks = announce_task_limit(step.component, spec.task_limit, execution.task_limit_supported)
         tool_result = execution.execute_run(
             command.cmdline, command.cwd, command.environments, group,

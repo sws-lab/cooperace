@@ -1,0 +1,64 @@
+- entry_type: 'violation_sequence'
+  metadata:
+    format_version: '2.2'
+    uuid: '389a62c2-5bb5-4ec4-b7a8-4d7ca13b2d7f'
+    creation_time: '2026-11-16T20:19:19Z'
+    producer:
+      name: 'Theta-svcomp'
+      version: '8.10.1'
+    task:
+      input_files:
+      - 'bigshot_p.i'
+      input_file_hashes:
+        'bigshot_p.i': '4f85a81c281496cbdf0eab98e129af733fe18998c76267e6089945bdfc7c0c54'
+      specification: 'CHECK( init(main()), LTL(G ! data-race) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content:
+  - segment:
+    - waypoint:
+        type: 'function_enter'
+        location:
+          file_name: 'bigshot_p.i'
+          line: 1122
+          column: 36
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_enter'
+        location:
+          file_name: 'bigshot_p.i'
+          line: 1123
+          column: 36
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'bigshot_p.i'
+          line: 1111
+          column: 3
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'target'
+        location:
+          file_name: 'bigshot_p.i'
+          line: 1111
+          column: 3
+        action: 'follow'
+        thread_id: 1
+    - waypoint:
+        type: 'target'
+        location:
+          file_name: 'bigshot_p.i'
+          line: 1116
+          column: 7
+        action: 'follow'
+        thread_id: 2

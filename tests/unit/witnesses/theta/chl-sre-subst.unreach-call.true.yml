@@ -1,0 +1,17 @@
+- entry_type: 'invariant_set'
+  metadata:
+    format_version: '2.1'
+    uuid: 'ddf50393-d061-4060-bf5a-1739000b2fcd'
+    creation_time: '2026-11-16T20:19:26Z'
+    producer:
+      name: 'Theta-svcomp'
+      version: '8.10.1'
+    task:
+      input_files:
+      - 'chl-sre-subst.wvr.c'
+      input_file_hashes:
+        'chl-sre-subst.wvr.c': '3f15efb4f8a286b7a1ad39e3d0e5f0f11fbc70672e37c5d5b49fafb43ac86a5c'
+      specification: 'CHECK( init(main()), LTL(G ! call(reach_error())) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content: []

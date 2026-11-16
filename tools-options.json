@@ -74,5 +74,16 @@
     "doi": "10.5281/zenodo.17589798",
     "version": "svcomp26",
     "options": []
+  },
+  "theta": {
+    "doi": "10.5281/zenodo.24128717",
+    "version": "svcomp27",
+    "options": [
+      "--svcomp",
+      "--portfolio",
+      "STABLE",
+      "--loglevel",
+      "RESULT"
+    ]
   }
 }

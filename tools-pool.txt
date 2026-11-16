@@ -7,9 +7,12 @@
 # while ULTIMATE Taipan (svcomp26) has a newer 2027 version that this file
 # does not name. scripts/download-tools.py --pool
 # installs them into tools/; scripts/svcomp-dist.sh packs only tools.txt.
+# Theta svcomp27 (24128717, pre-run 13 November 2026) is the archive fm-tools
+# main 75f310bc registers.
 uautomizer: 10.5281/zenodo.24133222
 iekke: 10.5281/zenodo.24187653
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
 cpachecker: 10.5281/zenodo.24218973
 racerf: 10.5281/zenodo.17589798
+theta: 10.5281/zenodo.24128717

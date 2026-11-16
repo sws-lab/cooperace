@@ -56,7 +56,8 @@ def run(tmp_path, monkeypatch, capsys):
         runner.installation_problems = lambda _names: []
         runner.container_problems = lambda: []
         runner.probe_versions = lambda _names: None
-        runner.command = lambda actor, spec, witness_dir: ComponentCommand(["component"], str(tmp_path), {})
+        runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(
+            ["component"], str(tmp_path), {})
         fakes.start = time.monotonic()
         result = cli.run(conf, runner, ComponentGroup())
         took = time.monotonic() - fakes.start

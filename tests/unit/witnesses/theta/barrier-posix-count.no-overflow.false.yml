@@ -1,0 +1,210 @@
+- entry_type: 'violation_sequence'
+  metadata:
+    format_version: '2.2'
+    uuid: '1c4e5fa5-b509-410f-a4a2-e915d984323a'
+    creation_time: '2026-11-16T20:19:48Z'
+    producer:
+      name: 'Theta-svcomp'
+      version: '8.10.1'
+    task:
+      input_files:
+      - 'barrier-posix-count.c'
+      input_file_hashes:
+        'barrier-posix-count.c': '81025991d3e63f6141115203d0ab53bb2370337b57edc2ad3e159172e5dd4c41'
+      specification: 'CHECK( init(main()), LTL(G ! overflow) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content:
+  - segment:
+    - waypoint:
+        type: 'function_return'
+        constraint:
+          value: '\result == 2147484394LL'
+          format: 'ext_c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 41
+          column: 53
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_return'
+        constraint:
+          value: '\result == 0'
+          format: 'ext_c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 41
+          column: 53
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_return'
+        constraint:
+          value: '\result == 2147483648LL'
+          format: 'ext_c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 41
+          column: 53
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'branching'
+        constraint:
+          value: 'false'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 13
+          column: 3
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_enter'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 46
+          column: 64
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 25
+          column: 3
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 26
+          column: 3
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'branching'
+        constraint:
+          value: 'false'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 13
+          column: 3
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_enter'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 46
+          column: 64
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 25
+          column: 3
+        action: 'follow'
+        thread_id: 2
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 26
+          column: 3
+        action: 'follow'
+        thread_id: 2
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 29
+          column: 3
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 31
+          column: 5
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 29
+          column: 3
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 31
+          column: 5
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 29
+          column: 3
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'target'
+        location:
+          file_name: 'barrier-posix-count.c'
+          line: 31
+          column: 5
+        action: 'follow'
+        thread_id: 1

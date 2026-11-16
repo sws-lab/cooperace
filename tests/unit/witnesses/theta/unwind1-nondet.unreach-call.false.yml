@@ -1,0 +1,92 @@
+- entry_type: 'violation_sequence'
+  metadata:
+    format_version: '2.2'
+    uuid: '67901df8-1364-4978-8194-2cd59a72f230'
+    creation_time: '2026-11-16T20:19:34Z'
+    producer:
+      name: 'Theta-svcomp'
+      version: '8.10.1'
+    task:
+      input_files:
+      - 'unwind1-nondet.i'
+      input_file_hashes:
+        'unwind1-nondet.i': '591990a0070f9287f734f2988edce5e1b5a43791c74b5c6b7374ff93ddaa2267'
+      specification: 'CHECK( init(main()), LTL(G ! call(reach_error())) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content:
+  - segment:
+    - waypoint:
+        type: 'function_return'
+        constraint:
+          value: '\result == 0'
+          format: 'ext_c_expression'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 772
+          column: 32
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_enter'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 775
+          column: 33
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_enter'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 776
+          column: 33
+        action: 'follow'
+        thread_id: 0
+  - segment:
+    - waypoint:
+        type: 'function_return'
+        constraint:
+          value: '\result == 0'
+          format: 'ext_c_expression'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 757
+          column: 30
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '1'
+          format: 'c_expression'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 760
+          column: 9
+        action: 'follow'
+        thread_id: 1
+  - segment:
+    - waypoint:
+        type: 'assumption'
+        constraint:
+          value: '(limit == 1)'
+          format: 'c_expression'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 766
+          column: 5
+        action: 'follow'
+        thread_id: 2
+  - segment:
+    - waypoint:
+        type: 'target'
+        location:
+          file_name: 'unwind1-nondet.i'
+          line: 753
+          column: 69
+        action: 'follow'
+        thread_id: 2

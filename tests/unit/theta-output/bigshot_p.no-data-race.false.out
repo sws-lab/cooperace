@@ -1,0 +1,44 @@
+
+Using Java: /usr/bin/java (version 25)
+Verifying input '../../sv-benchmarks/c/pthread/bigshot_p.i' using arguments '--svcomp --portfolio STABLE --loglevel RESULT --property ../../sv-benchmarks/c/properties/no-data-race.prp --architecture ILP32 --memlimit 3000000000'
+LD_LIBRARY_PATH=/home/cwd/bin/cooperace-verify-eprime2/lib /usr/bin/java -Xss120m -Xmx14210m -jar /home/cwd/bin/cooperace-verify-eprime2/theta.jar --svcomp --portfolio STABLE --loglevel RESULT --property ../../sv-benchmarks/c/properties/no-data-race.prp --architecture ILP32 --memlimit 3000000000 --input ../../sv-benchmarks/c/pthread/bigshot_p.i --smt-home /home/cwd/bin/cooperace-verify-eprime2/solvers
+Deprecated logLevel for --svcomp: RESULT. Changing to BENCHMARK.
+ParsingResult Success
+Arithmetic: []
+
+Frontend finished:   (in 2039 ms)
+ParsingResult Success
+Alias graph size: 2 -> [3, 1]
+XCFA-TRAITS {"property":"DATA_RACE","propertyFile":"no-data-race.prp","arithmetic":"integer","arithmeticAutoSelected":true,"arithmeticTraits":[],"multiThreading":true,"smtTypes":{"Int":15,"Bool":1},"bvWidths":[],"procedures":3,"locations":40,"edges":42,"maxLocationsPerProc":22,"maxEdgesPerProc":22,"globalVars":5,"localVars":11,"params":5,"labels":77,"cyclomatic":8,"maxCyclomatic":3,"backEdges":1,"cyclicProcedures":1,"acyclic":false,"branchingLocations":6,"inlined":true,"unsafeUnrollUsed":false,"addressReuseObservable":false,"overApproximatedVars":0,"errorLocations":1,"initProcedures":1,"dereferences":37,"dereferenceReads":5,"dereferenceWrites":32,"constantOffsetDereferences":31,"references":0,"aliasGraphSize":2,"aliasGraphMaxFanout":3,"labelKinds":{"other-stmt":2,"assign":18,"assume":20,"havoc":1,"memory-assign":32,"thread-join":2,"thread-start":2},"havocs":1,"source":{"storage:extern":6,"functionDeclarator":12,"qualifier:const":5,"pointerType":18,"pointerDeclarator":19,"gccAttribute":8,"functionDefinition":5,"cast":1,"ternary":1,"if":3,"callWithArguments":10,"typedefUse":6,"return":4,"arrayIndex":1},"assumes":20,"calls":0,"libraryCalls":0}
+Using portfolio: MULTITHREAD
+
+Using portfolio: MULTITHREAD27
+
+Current configuration: MULTITHREAD_OC_IDL_bitvector_multi_yices2-true
+Current configuration: XcfaConfig(inputConfig=InputConfig(inputFile=../../sv-benchmarks/c/pthread/bigshot_p.i, catFile=null, xcfaWCtx=missing, propertyFile=../../sv-benchmarks/c/properties/no-data-race.prp, inputProperty=DATA_RACE, frontendConfig=FrontendConfig(lbeLevel=NO_LBE, enableStaticCoi=false, ptrSizeInMemory=false, loopUnroll=1000, memoryInit=AUTO, forceUnroll=-1, forceUnrollRecursion=-1, enableDataRaceToReachability=false, enableFew=false, disableSpinLoopEffects=false, inputType=C, specConfig=CFrontendConfig(arithmetic=bitvector, architecture=ILP32, memoryModel=multi, useCir2c=false, cir2cDir=./cir2c, enableSignedWraparound=false)), backendConfig=BackendConfig(backend=OC, solverHome=/home/cwd/bin/cooperace-verify-eprime2/solvers, timeoutMs=100000, inProcess=true, portfolioStep=false, memlimit=0, specConfig=OcConfig(decisionProcedure=IDL, outputConflictClauses=false, inputConflictDecisionProcedure=, autoConflict=SIMPLE, autoConflictBound=-1, memoryConsistencyModel=SC, smtSolver=JavaSMT:YICES2, validateSolver=false, unsatReferenceSolver=, forceUnrollBoundStart=1, forceUnrollBoundEnd=-1, forceUnrollBoundStep=1, maxExitQueries=-1)), outputConfig=OutputConfig(versionInfo=false, enabled=CUSTOM, resultFolder=., acceptUnreliableSafe=false, cOutputConfig=COutputConfig(enabled=false, useArr=false, useExArr=false, useRange=false), xcfaOutputConfig=XcfaOutputConfig(enabled=false), chcOutputConfig=ChcOutputConfig(enabled=false), svLibOutputConfig=SvLibOutputConfig(generateWitness=false), precOutputConfig=PrecOutputConfig(format=[GENERIC, WITNESS], serializationMode=NEVER), witnessConfig=WitnessConfig(enabled=SVCOMP, concretizerSolver=Z3, validateConcretizerSolver=false, inputFileForWitness=../../sv-benchmarks/c/pthread/bigshot_p.i), argConfig=ArgConfig(enabled=false)), debugConfig=DebugConfig(debug=false, stacktrace=false, logLevel=BENCHMARK, argdebug=false, argToFile=false))
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by com.sun.jna.Native in an unnamed module (file:/home/cwd/bin/cooperace-verify-eprime2/theta.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+subprocess: ParsingResult Success
+subprocess: Arithmetic: []
+subprocess: 
+subprocess: Frontend finished:   (in 2043 ms)
+subprocess: ParsingResult Success
+subprocess: Alias graph size: 2 -> [3, 1]
+subprocess: XCFA-TRAITS {"property":"DATA_RACE","propertyFile":"no-data-race.prp","arithmetic":"bitvector","arithmeticAutoSelected":false,"arithmeticTraits":[],"multiThreading":true,"smtTypes":{"Bv32":15,"Bool":1},"bvWidths":[32],"procedures":3,"locations":40,"edges":42,"maxLocationsPerProc":22,"maxEdgesPerProc":22,"globalVars":5,"localVars":11,"params":5,"labels":77,"cyclomatic":8,"maxCyclomatic":3,"backEdges":1,"cyclicProcedures":1,"acyclic":false,"branchingLocations":6,"inlined":true,"unsafeUnrollUsed":false,"addressReuseObservable":false,"overApproximatedVars":0,"errorLocations":1,"initProcedures":1,"dereferences":37,"dereferenceReads":5,"dereferenceWrites":32,"constantOffsetDereferences":31,"references":0,"aliasGraphSize":2,"aliasGraphMaxFanout":3,"labelKinds":{"other-stmt":2,"assign":18,"assume":20,"havoc":1,"memory-assign":32,"thread-join":2,"thread-start":2},"havocs":1,"source":{"storage:extern":6,"functionDeclarator":12,"qualifier:const":5,"pointerType":18,"pointerDeclarator":19,"gccAttribute":8,"functionDefinition":5,"cast":1,"ternary":1,"if":3,"callWithArguments":10,"typedefUse":6,"return":4,"arrayIndex":1},"assumes":20,"calls":0,"libraryCalls":0}
+subprocess: WARNING: A restricted method in java.lang.System has been called
+subprocess: WARNING: java.lang.System::loadLibrary has been called by org.sosy_lab.common.NativeLibraries in an unnamed module (file:/home/cwd/bin/cooperace-verify-eprime2/theta.jar)
+subprocess: WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+subprocess: WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+subprocess: 
+subprocess: WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+subprocess: WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/home/cwd/bin/cooperace-verify-eprime2/theta.jar)
+subprocess: WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+subprocess: WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+subprocess: (Property no-data-race)
+subprocess: (SafetyResult Unsafe Trace length: 13)
+Config MULTITHREAD_OC_IDL_bitvector_multi_yices2-true succeeded in 4980 ms
+success-result: MULTITHREAD_OC_IDL_bitvector_multi_yices2-true
+
