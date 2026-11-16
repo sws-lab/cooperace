@@ -83,6 +83,11 @@ def with_changes(strategy, **changes):
 
 # --- the confs in the repository ---------------------------------------------
 
+# The SV-COMP 2027 confs: the default one and the variant scripts/svcomp-dist.sh
+# packs in its place with CONF_VARIANT=theta (Theta as a seventh component). The
+# rules for the competition's limits below hold for both.
+SVCOMP27_CONFS = [ROOT / "conf" / "svcomp27.json", ROOT / "conf" / "svcomp27-theta.json"]
+
 def test_the_repository_has_the_confs_this_file_checks():
     names = {path.relative_to(ROOT).as_posix() for path in SHIPPED_CONFS}
 
@@ -442,14 +447,16 @@ def test_a_run_cpu_time_budget_that_is_not_a_positive_number_is_refused(known, b
             f"runCpuTimeBudget is {budget!r}, which is not a positive number of seconds")
 
 
-def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known):
-    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+@pytest.mark.parametrize("conf_path", SVCOMP27_CONFS, ids=lambda path: path.name)
+def test_the_svcomp27_conf_gives_every_property_a_budget_below_the_competitions_900_s(known, conf_path):
+    strategies = config.load_strategies(json.loads(conf_path.read_text()), known)
     assert {name: s.run_cpu_time_budget for name, s in strategies.items()} == dict.fromkeys(strategies, 870)
     # Each step has it, for the check of its witness (witnesses.check_seconds)
     assert {s.step(tool).run_cpu_time_budget for s in strategies.values() for tool in s.tools} == {870}
 
 
-def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_budget(known):
+@pytest.mark.parametrize("conf_path", SVCOMP27_CONFS, ids=lambda path: path.name)
+def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_budget(known, conf_path):
     """In every phase of conf/svcomp27.json, each tool without a CPU-time limit
     of its own runs until the run's budget, so it has a memory limit, a
     percentage of the run's, and the limits of the tools of one phase add up
@@ -458,7 +465,7 @@ def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_bu
     cgroup's memory.oom.group) and lose the answers already decided. Dartagnan
     in particular, a GraalVM native image whose heap grows to 80% of the
     memory it sees, reached 10 GB at full limits without answering."""
-    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    strategies = config.load_strategies(json.loads(conf_path.read_text()), known)
     for name, strategy in strategies.items():
         for phase in strategy.phases:
             uncapped = [tool for tool in phase.tools if tool not in strategy.cpu_time_limits]
@@ -469,14 +476,15 @@ def test_the_svcomp27_conf_limits_the_memory_of_each_tool_that_runs_until_the_bu
             assert "Dartagnan" in strategy.memory_limits, name
 
 
-def test_the_svcomp27_conf_limits_the_memory_of_every_phase_1_tool(known):
+@pytest.mark.parametrize("conf_path", SVCOMP27_CONFS, ids=lambda path: path.name)
+def test_the_svcomp27_conf_limits_the_memory_of_every_phase_1_tool(known, conf_path):
     """In conf/svcomp27.json every tool of phase 1 has a memory limit too, a
     percentage of the run's, and those of phase 1 add up to at most 95%.
     These tools have CPU-time limits, so the rule above does not cover them;
     yet on pthread-lp64-twins/sssc12-2-lp64 (valid-memsafety) sv-sanitizers
     alone filled the 3 GB of the run within 34 s, and the whole run was
     killed with Goblint's answer already in."""
-    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    strategies = config.load_strategies(json.loads(conf_path.read_text()), known)
     for name, strategy in strategies.items():
         tools = strategy.phases[0].tools
         limits = {tool: strategy.memory_limits.get(tool) for tool in tools}
@@ -484,7 +492,8 @@ def test_the_svcomp27_conf_limits_the_memory_of_every_phase_1_tool(known):
         assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
 
 
-def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known):
+@pytest.mark.parametrize("conf_path", SVCOMP27_CONFS, ids=lambda path: path.name)
+def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known, conf_path):
     """In every phase of conf/svcomp27.json the memory limits of all its tools,
     those with a CPU-time limit included, add up to at most 95% of the run's:
     the tools of a phase run at the same time, and a run over its limit is
@@ -493,7 +502,7 @@ def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known)
     started beside Goblint (35%) and IKOS-ConC (30%), filled its 2.4 GB of
     3 GB within 26 s of CPU time on ldv-linux-3.14-races/*cafe_ccic* while
     Goblint still ran."""
-    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    strategies = config.load_strategies(json.loads(conf_path.read_text()), known)
     for name, strategy in strategies.items():
         for phase in strategy.phases:
             limits = {tool: strategy.memory_limits.get(tool) for tool in phase.tools}
@@ -501,7 +510,8 @@ def test_the_svcomp27_conf_limits_the_memory_of_every_phase_to_95_percent(known)
             assert sum(float(limit[:-1]) for limit in limits.values()) <= 95, (name, limits)
 
 
-def test_the_svcomp27_conf_ends_every_phase_of_tools_with_cpu_time_limits_by_a_wall_time_limit(known):
+@pytest.mark.parametrize("conf_path", SVCOMP27_CONFS, ids=lambda path: path.name)
+def test_the_svcomp27_conf_ends_every_phase_of_tools_with_cpu_time_limits_by_a_wall_time_limit(known, conf_path):
     """In conf/svcomp27.json a phase whose tools all have CPU-time limits,
     so that none runs on to the run's CPU-time budget, has a wall-time limit:
     a tool that waits without using CPU time, or a RunExecutor that does not
@@ -512,7 +522,7 @@ def test_the_svcomp27_conf_ends_every_phase_of_tools_with_cpu_time_limits_by_a_w
     second of their CPU-time limits together, plus 1 s for each (BenchExec
     ends a tool up to about 1 s after its limit). Phase 1's 45 s stop only
     tools of phase 1 alone; conf/README.md says why they need no more."""
-    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    strategies = config.load_strategies(json.loads(conf_path.read_text()), known)
     for name, strategy in strategies.items():
         for index, phase in enumerate(strategy.phases):
             if not all(tool in strategy.cpu_time_limits for tool in phase.tools):
@@ -523,13 +533,14 @@ def test_the_svcomp27_conf_ends_every_phase_of_tools_with_cpu_time_limits_by_a_w
                 assert phase.wall_time_limit >= 1.1 * cpu + len(phase.tools), (name, index + 1, cpu)
 
 
-def test_the_svcomp27_conf_keeps_the_task_limits_of_every_phase_to_4096(known):
+@pytest.mark.parametrize("conf_path", SVCOMP27_CONFS, ids=lambda path: path.name)
+def test_the_svcomp27_conf_keeps_the_task_limits_of_every_phase_to_4096(known, conf_path):
     """In every phase of conf/svcomp27.json the task limits of its tools
     (ComponentSpec.task_limit) add up to at most 4096: within a run limited
     to 5000 tasks, as README.md runs CoOpeRace under runexec, CoOpeRace
     keeps 900 of its own even when every tool of a phase reaches its limit,
     as sv-sanitizers does on a program that creates threads without bound."""
-    strategies = config.load_strategies(json.loads((ROOT / "conf" / "svcomp27.json").read_text()), known)
+    strategies = config.load_strategies(json.loads(conf_path.read_text()), known)
     for name, strategy in strategies.items():
         for phase in strategy.phases:
             limits = {tool: REGISTRY[tool].task_limit for tool in phase.tools}

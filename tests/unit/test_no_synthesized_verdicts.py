@@ -5,7 +5,8 @@
 """No synthesized verdicts (cooperace/D15): CoOpeRace reports `true` or
 `false(...)` only if a component produced that answer.
 
-For every strategy of conf/svcomp27.json, cli.run (and so strategy.execute)
+For every strategy of conf/svcomp27.json and of conf/svcomp27-theta.json (the
+conf variant with Theta, scripts/svcomp-dist.sh CONF_VARIANT=theta), cli.run (and so strategy.execute)
 runs the real ComponentRunner.run_component, whose components are faked one
 level below it: execution.execute_run waits a random time, or until CoOpeRace
 stops the component, and ends as the scenario says (a status, a hang guard
@@ -42,11 +43,15 @@ from src.cooperace.witnesses import specification, subproperty_of
 ROOT = Path(__file__).resolve().parents[2]
 CONF = json.loads((ROOT / "conf" / "svcomp27.json").read_text())
 PROPERTIES = list(CONF["properties"])
+# The confs whose strategies are run, by name. The variant's six sequential
+# phases take longer per scenario, so it gets fewer scenarios.
+CONFS = {"svcomp27": CONF, "svcomp27-theta": json.loads((ROOT / "conf" / "svcomp27-theta.json").read_text())}
 PROPERTY_FILES = {name: ROOT / "tests" / "properties" / f"{name}.prp" for name in PROPERTIES}
 
 # The scale of the conf's wall-time limits (45 s and 120 s become 0.45 s and 1.2 s)
 WALL_SCALE = 0.01
 SCENARIOS_PER_PROPERTY = 60
+SCENARIOS = {"svcomp27": SCENARIOS_PER_PROPERTY, "svcomp27-theta": SCENARIOS_PER_PROPERTY // 2}
 
 # Every status a component can end with that matters here: the verdicts of each property, verdicts
 # of other properties, and the statuses of a component without a verdict
@@ -142,8 +147,8 @@ def fast_strategies(monkeypatch):
     monkeypatch.setattr(execution, "task_limit_supported", lambda: True)
 
 
-def scaled_conf():
-    conf = copy.deepcopy(CONF)
+def scaled_conf(original=CONF):
+    conf = copy.deepcopy(original)
     for entry in conf["properties"].values():
         for phase in entry["phases"]:
             if isinstance(phase, dict) and "wallTimeLimit" in phase:
@@ -152,18 +157,20 @@ def scaled_conf():
 
 
 @pytest.mark.parametrize("property_name", PROPERTIES)
+@pytest.mark.parametrize("conf_name", list(CONFS))
 def test_a_definite_result_is_a_component_s_accepted_verdict_and_otherwise_unknown(
-        property_name, tmp_path, monkeypatch, capsys, fast_strategies):
-    conf = scaled_conf()
+        conf_name, property_name, tmp_path, monkeypatch, capsys, fast_strategies):
+    conf = scaled_conf(CONFS[conf_name])
     root = load_strategies(conf, REGISTRY)[property_name]
     task = tmp_path / "task.c"
     task.write_text("int main(void) { return 0; }\n")
     monkeypatch.chdir(tmp_path)
     names = {REGISTRY[tool].tool().name(): tool for tool in root.tools}
-    rng = random.Random(f"D15 {property_name}")
+    #The default conf keeps the seeds it had before the variant was added
+    rng = random.Random(f"D15 {property_name}" if conf_name == "svcomp27" else f"D15 {conf_name} {property_name}")
     definite = unknown = 0
 
-    for number in range(SCENARIOS_PER_PROPERTY):
+    for number in range(SCENARIOS[conf_name]):
         scenario = Scenario(rng, root.tools)
         fakes = FakeComponents(scenario, property_name, names)
         monkeypatch.setattr(execution, "execute_run", fakes.execute_run)

@@ -14,6 +14,12 @@ FMTOOLS_ENTRY ?=
 # (scripts/svcomp-dist.sh, conf/README.md "The witness table").
 WITNESS_MODE ?= default
 export WITNESS_MODE
+# The conf packed as conf/svcomp27.json: default, or NAME for
+# conf/svcomp27-NAME.json with the components of tools-pool.txt it runs
+# (scripts/svcomp-dist.sh). The fm-tools entry (FMTOOLS_ENTRY) must then
+# list those components' required packages too.
+CONF_VARIANT ?= default
+export CONF_VARIANT
 # Further options of `docker run`, for example --cpuset-cpus 0-3.
 DOCKER_RUN_OPTIONS ?=
 

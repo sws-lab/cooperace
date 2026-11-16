@@ -136,6 +136,24 @@ def test_the_archive_lock_holds_the_components_of_the_default_conf_only():
     assert set(archive) == {REGISTRY[name].directory for name in names}
 
 
+def test_each_conf_variant_runs_components_of_the_lock_files_only_and_theta_s_adds_theta():
+    """scripts/svcomp-dist.sh with CONF_VARIANT=NAME packs conf/svcomp27-NAME.json
+    and adds the components of tools-pool.txt that it runs; every such conf
+    runs only components of the two lock files. The variant theta adds Theta
+    alone."""
+    archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
+    variants = sorted((ROOT / "conf").glob("svcomp27-*.json"))
+    added = {}
+    for path in variants:
+        conf = json.loads(path.read_text())
+        names = {name for strategy in config.load_strategies(conf, REGISTRY).values() for name in strategy.tools}
+        directories = {REGISTRY[name].directory for name in names}
+        assert directories <= set(archive) | set(pool), path.name
+        added[path.name] = directories - set(archive)
+
+    assert added["svcomp27-theta.json"] == {"theta"}
+
+
 def test_read_component_versions_ignores_further_keys(tmp_path):
     path = tmp_path / OPTIONS_FILE
     path.write_text(json.dumps({"goblint": {"doi": "d", "version": "v", "options": ["-a"], "later": {}}}))

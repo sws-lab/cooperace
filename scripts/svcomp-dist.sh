@@ -28,6 +28,14 @@
 # in unreach-call and no-overflow; "strict" packs conf/witness-modes/strict.json
 # in its place, which accepts 2.1 or higher there, as the SV-COMP 2027
 # benchmarks page states, and ends VERSION with "witnesses-strict".
+#
+# CONF_VARIANT selects the conf the archive carries as conf/svcomp27.json, the
+# one ./cooperace runs by default: "default" (or unset) keeps
+# conf/svcomp27.json; another name NAME packs conf/svcomp27-NAME.json in its
+# place, adds to the archive's tools.txt, and packs, each component of
+# tools-pool.txt that this conf runs and tools.txt lacks (Theta, for "theta"),
+# and ends VERSION with "conf-NAME". tools/ must hold those components at the
+# DOI of tools-pool.txt (scripts/download-tools.py --pool).
 
 set -euo pipefail
 
@@ -41,6 +49,11 @@ case "${WITNESS_MODE}" in
   *) echo "WITNESS_MODE must be default or strict, not ${WITNESS_MODE}" >&2; exit 1 ;;
 esac
 DIST="${ROOT}/dist/cooperace"
+CONF_VARIANT="${CONF_VARIANT:-default}"
+case "${CONF_VARIANT}" in
+  default) ;;
+  *[!a-z0-9-]*|'') echo "CONF_VARIANT must be default or the NAME of a conf/svcomp27-NAME.json, not ${CONF_VARIANT}" >&2; exit 1 ;;
+esac
 
 TREE=HEAD
 if ! git diff --quiet HEAD --; then
@@ -65,26 +78,77 @@ git archive "${TREE}" cooperace src conf lib LICENSE LICENSES/GPL-2.0-only.txt L
 git show "${TREE}:scripts/sv-comp/smoketest.sh" > "${DIST}/smoketest.sh"
 chmod +x "${DIST}/smoketest.sh"
 
+if [ "${CONF_VARIANT}" != default ]; then
+  VARIANT_CONF="${DIST}/conf/svcomp27-${CONF_VARIANT}.json"
+  if [ ! -f "${VARIANT_CONF}" ]; then
+    echo "CONF_VARIANT=${CONF_VARIANT}: conf/svcomp27-${CONF_VARIANT}.json is not in the commit." >&2
+    exit 1
+  fi
+  cp "${VARIANT_CONF}" "${DIST}/conf/svcomp27.json"
+  # The components of tools-pool.txt that the variant's conf runs and tools.txt
+  # lacks, as "<name>: <doi>" lines, by the registry of the archive's own code.
+  git show "${TREE}:tools-pool.txt" > "${DIST}/.tools-pool.txt"
+  python3 - "${DIST}" "${DIST}/conf/svcomp27.json" "${DIST}/.tools-pool.txt" >> "${DIST}/tools.txt" <<'PY'
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from src.cooperace import config
+from src.cooperace.components import REGISTRY
+
+def lock(path):
+    entries = {}
+    for line in open(path):
+        line = line.split("#", 1)[0].strip()
+        if line:
+            name, _, doi = (part.strip() for part in line.partition(":"))
+            entries[name] = doi
+    return entries
+
+archive, pool = lock(sys.argv[1] + "/tools.txt"), lock(sys.argv[3])
+strategies = config.load_strategies(json.load(open(sys.argv[2])), REGISTRY)
+needed = sorted({REGISTRY[name].directory for strategy in strategies.values() for name in strategy.tools})
+for directory in needed:
+    if directory in archive:
+        continue
+    if directory not in pool:
+        sys.exit(f"the conf runs {directory}, which neither tools.txt nor tools-pool.txt names")
+    print(f"{directory}: {pool[directory]}")
+PY
+  rm -f "${DIST}/.tools-pool.txt"
+  echo "CONF_VARIANT=${CONF_VARIANT}: conf/svcomp27-${CONF_VARIANT}.json packed as conf/svcomp27.json; tools.txt:" >&2
+  cat "${DIST}/tools.txt" >&2
+fi
+
 # tools.txt, the lock file of the components, has one "<name>: <doi>" line per
 # component. tools/ must hold exactly those DOIs, as download-tools.py records,
 # and tools-options.json the options of those DOIs.
 python3 scripts/download-tools.py --check
-while IFS=: read -r name _; do
+while IFS=: read -r name doi; do
   name="${name//[[:space:]]/}"
+  doi="${doi//[[:space:]]/}"
   case "${name}" in ''|'#'*) continue ;; esac
   if [ ! -d "tools/${name}" ]; then
     echo "tools.txt names ${name}, but tools/${name} does not exist. Run scripts/download-tools.py." >&2
     exit 1
   fi
+  # download-tools.py --check covers tools.txt; a component a variant adds is checked here
+  if [ "$(cat "tools/${name}/.doi" 2>/dev/null)" != "${doi}" ]; then
+    echo "tools/${name} is not installed from ${doi}. Run scripts/download-tools.py --pool." >&2
+    exit 1
+  fi
   cp -a "tools/${name}" "${DIST}/tools/${name}"
 done < "${DIST}/tools.txt"
 
+VERSION_TEXT="${FMTOOLS_VERSION} ${DESCRIBE}"
+if [ "${CONF_VARIANT}" != default ]; then
+  VERSION_TEXT="${VERSION_TEXT} conf-${CONF_VARIANT}"
+fi
 if [ "${WITNESS_MODE}" = strict ]; then
   cp "${DIST}/conf/witness-modes/strict.json" "${DIST}/conf/witnesses.json"
-  echo "${FMTOOLS_VERSION} ${DESCRIBE} witnesses-strict" > "${DIST}/VERSION"
-else
-  echo "${FMTOOLS_VERSION} ${DESCRIBE}" > "${DIST}/VERSION"
+  VERSION_TEXT="${VERSION_TEXT} witnesses-strict"
 fi
+echo "${VERSION_TEXT}" > "${DIST}/VERSION"
 find "${DIST}" -name '.DS_Store' -delete
 
 # The same commit gives the same zip: every file gets the commit's time, and

@@ -46,9 +46,13 @@ program. One of them needs a notice here:
   Parma Polyhedra Library (GPL-3.0) in `tools/ikos-conc/licenses/ppl-source/`. Neither NASA nor the
   authors of IKOS-ConC endorse CoOpeRace.
 
+The archive of the conf variant `theta` (`make svcomp CONF_VARIANT=theta`; `conf/README.md`) also
+holds **Theta** svcomp27 (`tools/theta/`, Zenodo 10.5281/zenodo.24128717, Apache-2.0,
+`tools/theta/LICENSE`), with the licences of its libraries and solvers in `tools/theta/LIB_LICENSES.md`.
+
 `THIRD-PARTY-SOURCES.md` lists every part of the bundled components that is under the GPL or LGPL
 (PPL and APRON in IKOS-ConC, APRON in Goblint, Ultimate and LTL2BA in GemCutter, the JDK class
-library in Dartagnan's native image), where its licence text is in the archive, and where its
+library in Dartagnan's native image, Yices 2, MPFR and libpoly in Theta), where its licence text is in the archive, and where its
 Corresponding Source is; the archive also holds `LICENSES/GPL-2.0-only.txt` and
 `LICENSES/GPL-3.0-or-later.txt`.
 
