@@ -26,8 +26,9 @@ import pytest
 from benchexec import result as bresult
 from support import CORRECTNESS_WITNESS, PASSING_WITNESS
 from test_strategy import Script, printed, run
+from test_witnesslint import FAKE_LINTER
 
-from src.cooperace import cli, components, config, execution, strategy
+from src.cooperace import cli, components, config, execution, strategy, witnesslint
 from src.cooperace.components import REGISTRY, ComponentCommand, ComponentRunner, confirm_verdict, reported_result
 from src.cooperace.config import ConfError, Entry
 from src.cooperace.processes import ComponentGroup
@@ -290,6 +291,7 @@ SCENARIOS = 25
 # result must be delivered after the decider's end.
 TIE = 0.03
 DELIVERY = 0.5
+LINT_TIE = 0.3
 
 
 def witness_text(property_name, verdict, status, tool):
@@ -334,7 +336,8 @@ class FakeComponents:
 
     def execute_run(self, cmdline, cwd, environments, group, *, output_dir, **_limits):
         tool = self.tool()
-        delay, status, reason, witness = self.behaviour[tool]
+        delay, status, reason, witness = self.behaviour[tool][:4]
+        marker = self.behaviour[tool][4] if len(self.behaviour[tool]) > 4 else None
         if status == "hang":
             raise execution.ComponentHang("start timed out")
         deadline = time.monotonic() + delay
@@ -347,6 +350,8 @@ class FakeComponents:
             verdict = TRUE if status == bresult.RESULT_TRUE_PROP else FALSE
             text = (witness_text(self.property_name, verdict, status, tool) if witness == "passing"
                     else f"# written by {tool}\n- not: a witness\n")
+            if marker is not None:
+                text = f"# lint: {marker}\n{text}"
             path = Path(output_dir) / REGISTRY[tool].witness.files[0]
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
@@ -364,9 +369,11 @@ class FakeComponents:
         return 1e6
 
 
-def accepted(root, property_name, tool, status, reason, text):
+def accepted(root, property_name, tool, status, reason, text, lint=False):
     """The verdict of a component that ended by itself with `status`, if the
-    first-verdict mode accepts it, else None; and whether its witness passes."""
+    first-verdict mode accepts it, else None; and whether its witness counts:
+    by the internal check, or, with `lint`, for a required witness, by the
+    fake linter of test_witnesslint (the internal check where it crashes)."""
     for verdict in (TRUE, FALSE):
         if confirm_verdict("all", status, verdict, property_name):
             break
@@ -375,6 +382,11 @@ def accepted(root, property_name, tool, status, reason, text):
     sub = subproperty_of(reported_result(property_name, status))
     passing = text is not None and witness_format(property_name, verdict, sub) is not None and passes(
         text, property_name, verdict, sub)
+    if lint and text is not None and needs_witness(property_name, verdict):
+        if "# lint: invalid" in text:
+            passing = False
+        elif "# lint: crash" not in text:
+            passing = True
     if reason is not None or root.bracket_of(tool, verdict) is None:
         return None, passing
     if needs_witness(property_name, verdict) and not passing:
@@ -388,10 +400,12 @@ def fast(monkeypatch):
     monkeypatch.setattr(execution, "task_limit_supported", lambda: True)
 
 
+@pytest.mark.parametrize("lint", [False, True], ids=["internal-check", "witnesslint"])
 @pytest.mark.parametrize("property_name", list(PROPERTY_FILES))
 def test_random_scenarios_deliver_the_chronologically_first_accepted_verdict_with_its_own_witness(
-        property_name, tmp_path, monkeypatch, capsys, fast):
-    check_scenarios(property_name, random_strategy, f"first verdict {property_name}", tmp_path, monkeypatch, capsys)
+        property_name, lint, tmp_path, monkeypatch, capsys, fast):
+    check_scenarios(property_name, random_strategy, f"first verdict {property_name}" + (" lint" if lint else ""), lint,
+                    tmp_path, monkeypatch, capsys)
 
 
 # The first-verdict conf that scripts/svcomp-dist.sh packs with CONF_VARIANT=fv-theta
@@ -416,25 +430,36 @@ def test_the_fv_theta_conf_is_in_the_mode_in_every_property():
     assert all(len(loaded.answers) == 1 for loaded in strategies.values())
 
 
+@pytest.mark.parametrize("lint", [False, True], ids=["internal-check", "witnesslint"])
 @pytest.mark.parametrize("property_name", list(PROPERTY_FILES))
 def test_random_scenarios_on_the_fv_theta_conf_deliver_the_first_accepted_verdict_with_its_own_witness(
-        property_name, tmp_path, monkeypatch, capsys, fast):
-    conf_strategy = scaled(FV_THETA["properties"][property_name], FV_THETA_WALL_SCALE)
-    check_scenarios(property_name, lambda _rng: conf_strategy, f"fv-theta {property_name}", tmp_path, monkeypatch,
-                    capsys)
+        property_name, lint, tmp_path, monkeypatch, capsys, fast):
+    conf_strategy = {key: value for key, value in FV_THETA["properties"][property_name].items() if key != "witnessLint"}
+    conf_strategy = scaled(conf_strategy, FV_THETA_WALL_SCALE)
+    check_scenarios(property_name, lambda _rng: conf_strategy, f"fv-theta {property_name}" + (" lint" if lint else ""),
+                    lint, tmp_path, monkeypatch, capsys)
 
 
-def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, capsys):
+def check_scenarios(property_name, make_strategy, seed, lint, tmp_path, monkeypatch, capsys):
     """Runs SCENARIOS random behaviours of the components of the strategies
-    `make_strategy(rng)` through cli.run and checks the mode's rules on each."""
+    `make_strategy(rng)` (with witnessLint if `lint`) through cli.run and checks the
+    mode's rules on each."""
     task = tmp_path / "task.c"
     task.write_text("int main(void) { return 0; }\n")
     monkeypatch.chdir(tmp_path)
     rng = random.Random(seed)
+    #The lint runs before CoOpeRace sees the answer, so ends that close count as at the same time
+    tie = LINT_TIE if lint else TIE
+    if lint:
+        linter = tmp_path / "linter"
+        linter.mkdir()
+        (linter / "witnesslinter.py").write_text(FAKE_LINTER)
+        monkeypatch.setattr(witnesslint, "LINTER_DIR", str(linter))
+        monkeypatch.setattr(witnesslint, "_usable", None)
     counts = {"definite": 0, "unknown": 0, "late-rejected": 0}
 
     for number in range(SCENARIOS):
-        conf_strategy = make_strategy(rng)
+        conf_strategy = {**make_strategy(rng), **({"witnessLint": True} if lint else {})}
         conf = {"properties": {property_name: conf_strategy}}
         root = config.load(conf_strategy, REGISTRY)
         names = {REGISTRY[tool].tool().name(): tool for tool in root.tools}
@@ -445,7 +470,8 @@ def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, c
             status = rng.choice(STATUSES[:8]) if kind == "limit" else rng.choice(STATUSES)
             behaviour[tool] = (delay, "hang" if kind == "hang" else status,
                                rng.choice(["cputime", "memory"]) if kind == "limit" else None,
-                               rng.choice(["passing", "failing", None]))
+                               rng.choice(["passing", "failing", None]),
+                               rng.choice([None, None, "invalid", "crash"]) if lint else None)
         fakes = FakeComponents(behaviour, rng.choice([None, None, rng.uniform(0.1, 1.0)]), property_name)
         monkeypatch.setattr(execution, "execute_run", fakes.execute_run)
         monkeypatch.setattr(components, "component_status", fakes.component_status)
@@ -471,9 +497,10 @@ def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, c
         where = f"scenario {number} of {property_name}: {conf_strategy}, {behaviour}, budget {fakes.budget_after}"
         ignored_after_stop = {line.removeprefix("CoOpeRace answer: ").split(", after ")[0].rsplit(" ", 1)[0]
                               for line in lines if line.endswith(", after CoOpeRace stopped it: ignored")}
-        verdicts = {tool: accepted(root, property_name, tool, *fakes.ended[tool][:3]) for tool in fakes.ended}
-        #An answer CoOpeRace never saw came after the run had ended (by a decision, a wall-time
-        #limit or the budget) while its witness was checked; it counts as one that came after a stop
+        verdicts = {tool: accepted(root, property_name, tool, *fakes.ended[tool][:3], lint=lint)
+                    for tool in fakes.ended}
+        #An answer CoOpeRace never saw came after the run had ended (by a decision or a limit),
+        #while the witness was checked; it is treated as one that came after a stop
         observed = {tool for tool in fakes.ended
                     if any(line.startswith(f"CoOpeRace answer: {tool} ") for line in lines)}
         ignored_after_stop |= set(fakes.ended) - observed
@@ -492,11 +519,11 @@ def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, c
         assert len(deciders) == 1, where
         decider = deciders[0]
         first = min(candidates.values())
-        assert decider in candidates and candidates[decider] <= first + TIE, where
+        assert decider in candidates and candidates[decider] <= first + tie, where
         #A component that answered later was stopped, or its answer came after the decision
         for tool in ignored_after_stop:
             if verdicts.get(tool, (None,))[0] is not None:
-                assert fakes.ended[tool][3] >= candidates[decider] - TIE, where
+                assert fakes.ended[tool][3] >= candidates[decider] - tie, where
                 counts["late-rejected"] += 1
         status, _reason, text, ended_at = fakes.ended[decider]
         verdict, passing = verdicts[decider]
@@ -508,6 +535,12 @@ def check_scenarios(property_name, make_strategy, seed, tmp_path, monkeypatch, c
             assert not witness.exists(), where
         assert any(line.startswith(f"CoOpeRace first verdict: {decider} {verdict} (mode first-verdict), cputime=")
                    for line in lines), where
+        if lint and text is not None and needs_witness(property_name, verdict):
+            linted = [line for line in lines if line.startswith((f"CoOpeRace: WitnessLint on {decider}'s witness",
+                                                                  "CoOpeRace: WARNING: WitnessLint failed technically "
+                                                                  f"on {decider}'s witness"))]
+            assert linted, (where, [line for line in lines if "WitnessLint" in line or "answer" in line])
+            counts["linted"] = counts.get("linted", 0) + 1
 
     assert counts["definite"] > 0 and counts["unknown"] > 0, counts
 
@@ -543,3 +576,39 @@ def test_the_readme_example_of_the_mode_loads():
 
     strategies = config.load_strategies(json.loads(block), REGISTRY)
     assert all(loaded.first_verdict for loaded in strategies.values())
+
+
+@pytest.mark.parametrize("linter, delivered", [
+    ('print("witnesslint finished with exit code 1")\nimport sys\nsys.exit(1)\n', True),   # says invalid to all
+    (None, False),                                                                       # the fake: invalid here
+])
+def test_a_linter_that_fails_its_self_test_leaves_the_decision_to_the_internal_check(
+        linter, delivered, tmp_path, monkeypatch, capsys, fast):
+    task = tmp_path / "task.c"
+    task.write_text("int main(void) { return 0; }\n")
+    monkeypatch.chdir(tmp_path)
+    directory = tmp_path / "linter"
+    directory.mkdir()
+    (directory / "witnesslinter.py").write_text(linter or FAKE_LINTER)
+    monkeypatch.setattr(witnesslint, "LINTER_DIR", str(directory))
+    monkeypatch.setattr(witnesslint, "_usable", None)
+    #Goblint's true has a witness that passes the internal check; the fake linter calls it invalid
+    fakes = FakeComponents({"Goblint": (0.01, bresult.RESULT_TRUE_PROP, None, "passing", "invalid")}, None,
+                           "unreach-call")
+    monkeypatch.setattr(execution, "execute_run", fakes.execute_run)
+    monkeypatch.setattr(components, "component_status", fakes.component_status)
+    runner = ComponentRunner(str(task), str(PROPERTY_FILES["unreach-call"]), "ILP32", property_name="unreach-call")
+    runner.installation_problems = lambda _names: []
+    runner.container_problems = lambda: []
+    runner.probe_versions = lambda _names: None
+    runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(
+        ["component"], str(tmp_path), {})
+    conf = {"properties": {"unreach-call": {"firstVerdict": True, "witnessLint": True, "phases": [["Goblint"]],
+                                            "answers": [["Goblint"]]}}}
+
+    result = cli.run(conf, runner, ComponentGroup())
+
+    out = capsys.readouterr().out
+    assert result == ("true" if delivered else "unknown")
+    assert (tmp_path / "witness.yml").exists() == delivered
+    assert ("CoOpeRace: WARNING: WitnessLint is not used" in out) == delivered

@@ -75,6 +75,12 @@ gitlab.com at that commit), says so on one line beginning "EXCEPTION", and
 refuses the exception once fm-tools main lists the DOI again, or when it names
 another DOI than the lock file or a component of no lock file.
 
+A third lock file, tools-checkers.txt, names the checkers the archive bundles
+beside its components: WitnessLint, which src/cooperace/witnesslint.py runs as
+the competition runs it. A checker is always installed, like a component of
+tools.txt, but its fm-tools versions are witness validators, so the first
+version with its DOI is taken, and it has no options in tools-options.json.
+
 The script can be run from any directory; the lock files, tools-options.json
 and tools/ are in the repository that contains it.
 """
@@ -91,6 +97,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DOI_FILE = ROOT / "tools.txt"
 POOL_FILE = ROOT / "tools-pool.txt"
 UNLISTED_FILE = ROOT / "tools-unlisted.txt"
+CHECKERS_FILE = ROOT / "tools-checkers.txt"
 FM_TOOLS_RAW_URL = "https://gitlab.com/sosy-lab/benchmarking/fm-tools/-/raw/{revision}/data/"
 OPTIONS_FILE = ROOT / "tools-options.json"
 TOOLS_ROOT = ROOT / "tools"
@@ -208,6 +215,28 @@ def version_entry_for(data: dict, reference: str) -> dict | None:
                 and not any(WITNESS_PLACEHOLDER in option for option in entry_options(entry))):
             return entry
     return None
+
+
+def checker_entry_for(data: dict, reference: str) -> dict | None:
+    """The first version of an fm-tools entry whose DOI (or URL) is
+    `reference`, witness validator or not, or None: the version a checker of
+    tools-checkers.txt is installed from."""
+    for entry in version_entries(data):
+        if str(entry.get("doi") or entry.get("url")) == reference:
+            return entry
+    return None
+
+
+def read_checkers_file(path: Path) -> dict[str, str]:
+    """The checkers of tools-checkers.txt `path`, as {name: doi}; empty if the
+    file does not exist. Raises ValueError, naming the file, for one that
+    cannot be parsed."""
+    try:
+        return parse_tools_file(path.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as error:
+        raise ValueError(f"{path}: {error}") from error
 
 
 def version_id_for(data: dict, reference: str) -> str | None:
@@ -382,6 +411,7 @@ def main() -> None:
         archive, pool = read_lock_files(DOI_FILE, POOL_FILE)
         recorded = read_options_file(OPTIONS_FILE)
         exceptions = read_unlisted_file(UNLISTED_FILE)
+        checkers = read_checkers_file(CHECKERS_FILE)
     except ValueError as error:
         sys.exit(f"Cannot read the lock files: {error}")
     every = {**archive, **pool}
@@ -390,7 +420,11 @@ def main() -> None:
         sys.exit(f"{UNLISTED_FILE.name} names {', '.join(strays)}, which no lock file names")
     to_install = every if args.pool else archive
 
+    clashes = sorted(set(checkers) & set(every))
+    if clashes:
+        sys.exit(f"{CHECKERS_FILE.name} names {', '.join(clashes)}, which a lock file of components names too")
     stale = {} if args.options_only else stale_tools(to_install, TOOLS_ROOT)
+    stale_checkers = {} if args.options_only else stale_tools(checkers, TOOLS_ROOT)
     # --options-only rewrites every object, so that options changed in
     # fm-tools for the same DOI are taken too
     outdated = list(every) if args.options_only else stale_options(every, recorded)
@@ -399,6 +433,9 @@ def main() -> None:
         for name, doi in to_install.items():
             print(f"{name}: {doi}: " + ("up to date" if name not in stale
                                        else f"to install (recorded: {stale[name] or 'none'})"))
+        for name, doi in checkers.items():
+            print(f"{name}: {doi} (checker): " + ("up to date" if name not in stale_checkers
+                                                  else f"to install (recorded: {stale_checkers[name] or 'none'})"))
     for name in outdated:
         print(f"{name}: {every[name]}: its options in {OPTIONS_FILE.name} are to be written")
     for name in unlisted:
@@ -409,6 +446,9 @@ def main() -> None:
         if stale:
             problems.append(f"{len(stale)} component(s) in {TOOLS_ROOT} do not match the lock files: "
                             + ", ".join(stale))
+        if stale_checkers:
+            problems.append(f"{len(stale_checkers)} checker(s) in {TOOLS_ROOT} do not match {CHECKERS_FILE.name}: "
+                            + ", ".join(stale_checkers))
         if outdated or unlisted:
             problems.append(f"{OPTIONS_FILE.name} does not match the lock files: " + ", ".join(outdated + unlisted))
         elif args.fm_tools_dir is not None:
@@ -426,9 +466,19 @@ def main() -> None:
                   + ", ".join(exceptions))
         return
 
-    if not stale and not outdated and not unlisted:
+    if not stale and not outdated and not unlisted and not stale_checkers:
         print(f"All components in {TOOLS_ROOT} and {OPTIONS_FILE.name} match the lock files.")
         return
+
+    checker_entries = {}
+    for name in stale_checkers:
+        data = load_fm_tool_data(name, args.fm_tools_dir)
+        entry = checker_entry_for(data, checkers[name])
+        if entry is None:
+            sys.exit(f"{name}: fm-tools lists {checkers[name]} for no version; it lists "
+                     + (", ".join(listed_references(data)) or "no versions"))
+        checker_entries[name] = (data, entry)
+        print(f"{name}: {checkers[name]} is version {entry['version']} in fm-tools (checker)")
 
     entries = look_up([name for name in every if name in stale or name in outdated], every, args.fm_tools_dir,
                       exceptions)
@@ -445,6 +495,9 @@ def main() -> None:
         data, entry = entries[name]
         print(f"Installing {name} {to_install[name]} ({entry['version']})")
         install(name, data, str(entry["version"]), to_install[name], TOOLS_ROOT)
+    for name, (data, entry) in checker_entries.items():
+        print(f"Installing the checker {name} {checkers[name]} ({entry['version']})")
+        install(name, data, str(entry["version"]), checkers[name], TOOLS_ROOT)
 
 if __name__ == "__main__":
     main()

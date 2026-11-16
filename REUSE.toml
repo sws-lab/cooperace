@@ -26,6 +26,7 @@ path = [
     "tools.txt",
     "tools-pool.txt",
     "tools-unlisted.txt",
+    "tools-checkers.txt",
     "tools-options.json",
     "scripts/sv-comp/zenodo-metadata.json",
     "src/tool_combinations/README.md",
@@ -44,9 +45,11 @@ SPDX-License-Identifier = "MIT"
 # Witnesses that sv-sanitizers, Dartagnan and IKOS-ConC svcomp27 wrote on no-data-race
 # tasks of SV-Benchmarks, and Theta svcomp27's witnesses and output on tasks of
 # several properties, copied unchanged as fixtures of the unit tests
-# (tests/unit/test_witness_check.py, tests/unit/test_theta.py).
+# (tests/unit/test_witness_check.py, tests/unit/test_theta.py), and Dartagnan's witness on
+# goblint-regression/02-base_26-malloc_struct (tests/witnesslint/: as written,
+# and with one waypoint's "action" removed) for the WitnessLint self-test.
 [[annotations]]
-path = ["tests/unit/witnesses/**", "tests/unit/theta-output/**"]
+path = ["tests/unit/witnesses/**", "tests/unit/theta-output/**", "tests/witnesslint/*.witness.yml"]
 SPDX-FileCopyrightText = "2024-2026 University of Tartu"
 SPDX-License-Identifier = "MIT"
 

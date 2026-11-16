@@ -35,7 +35,12 @@ FM_TOOLS = {"goblint": GOBLINT_DATA,
             "dartagnan": {"versions": [{"version": "svcomp26", "doi": "10.5281/zenodo.3",
                                         "benchexec_toolinfo_options": []}]},
             "deagle": {"versions": [{"version": "svcomp26", "doi": "10.5281/zenodo.4",
-                                     "benchexec_toolinfo_options": ["--x"]}]}}
+                                     "benchexec_toolinfo_options": ["--x"]}]},
+            #A checker: every version is a witness validator
+            "witnesslint": {"versions": [{"version": "2.4-correctness-witnesses-v2", "doi": "10.5281/zenodo.9",
+                                          "benchexec_toolinfo_options": ["--witness", "${witness}"]},
+                                         {"version": "2.4-violation-witnesses-v2", "doi": "10.5281/zenodo.9",
+                                          "benchexec_toolinfo_options": ["--witness", "${witness}"]}]}}
 
 
 def test_parse_tools_file():
@@ -105,7 +110,8 @@ class Setup:
     (`options`, a dict, or None for no file), a tools/ directory and a stub for
     the fm-tools lookup and for the installation."""
 
-    def __init__(self, tmp_path, monkeypatch, lock, pool="", options=None, unlisted=None, old_fm_tools=None):
+    def __init__(self, tmp_path, monkeypatch, lock, pool="", options=None, unlisted=None, old_fm_tools=None,
+                 checkers=None):
         self.tools = tmp_path / "tools"
         self.lock = tmp_path / "tools.txt"
         self.lock.write_text(lock)
@@ -121,6 +127,10 @@ class Setup:
         self.old_fm_tools = old_fm_tools or {}
         self.loaded = []
         self.installed = []
+        self.checkers = tmp_path / "tools-checkers.txt"
+        if checkers is not None:
+            self.checkers.write_text(checkers)
+        monkeypatch.setattr(dt, "CHECKERS_FILE", self.checkers)
         monkeypatch.setattr(dt, "UNLISTED_FILE", self.unlisted)
         monkeypatch.setattr(dt, "load_fm_tool_data_at", self.load_at)
         monkeypatch.setattr(dt, "DOI_FILE", self.lock)
@@ -367,3 +377,37 @@ def test_the_entry_at_a_commit_is_read_from_the_history_of_the_checkout(tmp_path
     git("commit", "-q", "-m", "unrelated")
     with pytest.raises(RuntimeError, match="not in the history of HEAD"):
         dt.load_fm_tool_data_at("deagle", tmp_path, old)
+
+
+# --- the checkers of tools-checkers.txt ------------------------------------------------
+
+def test_a_stale_checker_is_installed_from_its_first_version_without_options(tmp_path, monkeypatch, capsys):
+    setup = Setup(tmp_path, monkeypatch, "goblint: 10.5281/zenodo.1\n", options={"goblint": record("goblint")},
+                  checkers="witnesslint: 10.5281/zenodo.9\n")
+    make_tool(setup.tools, "goblint", "10.5281/zenodo.1")
+    seen = []
+    monkeypatch.setattr(dt, "install", lambda name, data, version, doi, root: seen.append((name, version, doi)))
+
+    setup.run(monkeypatch)
+
+    assert seen == [("witnesslint", "2.4-correctness-witnesses-v2", "10.5281/zenodo.9")]
+    assert "witnesslint" not in setup.written_options()
+    assert "(checker): to install" in capsys.readouterr().out
+
+
+def test_check_reports_a_stale_checker_and_accepts_an_installed_one(tmp_path, monkeypatch):
+    setup = Setup(tmp_path, monkeypatch, "goblint: 10.5281/zenodo.1\n", options={"goblint": record("goblint")},
+                  checkers="witnesslint: 10.5281/zenodo.9\n")
+    make_tool(setup.tools, "goblint", "10.5281/zenodo.1")
+    with pytest.raises(SystemExit, match="checker\\(s\\) in .* do not match tools-checkers.txt: witnesslint"):
+        setup.run(monkeypatch, "--check")
+
+    make_tool(setup.tools, "witnesslint", "10.5281/zenodo.9")
+    setup.run(monkeypatch, "--check")
+
+
+def test_a_checker_that_a_component_lock_names_is_refused(tmp_path, monkeypatch):
+    setup = Setup(tmp_path, monkeypatch, "goblint: 10.5281/zenodo.1\n", checkers="goblint: 10.5281/zenodo.1\n")
+
+    with pytest.raises(SystemExit, match="tools-checkers.txt names goblint"):
+        setup.run(monkeypatch, "--check")

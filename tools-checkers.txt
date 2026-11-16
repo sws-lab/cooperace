@@ -1,0 +1,8 @@
+# The checkers the SV-COMP archive bundles beside its components, one
+# "<name>: <doi>" line each (scripts/download-tools.py installs them into
+# tools/<name>, scripts/svcomp-dist.sh packs them).
+#
+# WitnessLint 2.4 (fm-tools witnesslint, versions 2.4-*-witnesses-v1/v2), the
+# archive bench-defs' witnesslint-validate-{violation,correctness}-witnesses-v2
+# run in the 2027 pre-runs; src/cooperace/witnesslint.py runs it as they do.
+witnesslint: 10.5281/zenodo.24089806

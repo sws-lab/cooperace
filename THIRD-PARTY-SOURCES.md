@@ -30,6 +30,14 @@ https://github.com/2393591260/ikos-conc, commit 3d3b027d5a8669c45dc7b998f971aa5d
   Source: https://github.com/antoinemine/apron. The archive does not record which APRON revision
   was built; ask IKOS-ConC's author for it.
 
+## WitnessLint (`tools/witnesslint/`, Zenodo 10.5281/zenodo.24089806)
+
+A checker, not a component (`tools-checkers.txt`): WitnessLint 2.4 of
+https://github.com/sosy-lab/sv-witnesses, the archive SV-COMP 2027 lints witnesses with. It has
+no part under the GPL or LGPL: its code is under the Apache License 2.0
+(`tools/witnesslint/LICENSE`, `tools/witnesslint/LICENSES/Apache-2.0.txt`), some files under
+BSD-2-Clause and CC0-1.0 (`tools/witnesslint/LICENSES/`).
+
 ## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.24080342)
 
 Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit 9febbae9c.

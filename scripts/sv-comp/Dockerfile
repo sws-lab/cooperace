@@ -100,6 +100,11 @@ fresh_copy
 ./smoketest.sh
 
 echo
+echo "== WitnessLint self-test (src/cooperace/witnesslint.py): a valid and an invalid witness =="
+fresh_copy
+python3 -m src.cooperace.witnesslint
+
+echo
 echo "== ./cooperace under runexec with the competition's options, as BenchExec runs it =="
 fresh_copy
 # The property, the task and the expected last line of smoketest.sh.

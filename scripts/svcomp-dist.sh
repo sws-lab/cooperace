@@ -72,8 +72,9 @@ rm -rf "${DIST}"
 mkdir -p "${DIST}/tools"
 
 git archive "${TREE}" cooperace src conf lib LICENSE LICENSES/GPL-2.0-only.txt LICENSES/GPL-3.0-or-later.txt \
-  README.md THIRD-PARTY-SOURCES.md tools.txt tools-options.json \
+  README.md THIRD-PARTY-SOURCES.md tools.txt tools-options.json tools-checkers.txt \
   tests/properties/no-data-race.prp tests/no-data-race/00-sanity_09-include.i \
+  tests/witnesslint/program.c tests/witnesslint/valid.witness.yml tests/witnesslint/invalid.witness.yml \
   | tar -x -C "${DIST}"
 git show "${TREE}:scripts/sv-comp/smoketest.sh" > "${DIST}/smoketest.sh"
 chmod +x "${DIST}/smoketest.sh"
@@ -139,6 +140,16 @@ while IFS=: read -r name doi; do
   fi
   cp -a "tools/${name}" "${DIST}/tools/${name}"
 done < "${DIST}/tools.txt"
+# The checkers of tools-checkers.txt (WitnessLint), which download-tools.py --check has checked too.
+while IFS=: read -r name _; do
+  name="${name//[[:space:]]/}"
+  case "${name}" in ''|'#'*) continue ;; esac
+  if [ ! -d "tools/${name}" ]; then
+    echo "tools-checkers.txt names ${name}, but tools/${name} does not exist. Run scripts/download-tools.py." >&2
+    exit 1
+  fi
+  cp -a "tools/${name}" "${DIST}/tools/${name}"
+done < "${DIST}/tools-checkers.txt"
 
 VERSION_TEXT="${FMTOOLS_VERSION} ${DESCRIBE}"
 if [ "${CONF_VARIANT}" != default ]; then

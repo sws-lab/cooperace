@@ -65,7 +65,7 @@ from .config import Step
 from .processes import PRINT_LOCK, ComponentGroup, run_memory_limit
 from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
-from .witnesses import passing_witness, subproperty_of
+from .witnesses import needs_witness, passing_witness, subproperty_of
 
 
 @dataclass(frozen=True)
@@ -643,10 +643,57 @@ class ComponentRunner:
         result = reported_result(self.property_name, status)
         witness = passing_witness(witness_files, self.property_name, verdict, subproperty_of(result),
                                   cpu_time_budget=step.run_cpu_time_budget)
+        if step.first_verdict and step.witness_lint and needs_witness(self.property_name, verdict):
+            witness = self.linted_witness(step, witness_files, verdict, subproperty_of(result))
         if step.first_verdict:
             return Outcome(verdict, actor.name(), [] if witness is None else [witness], result,
                            measured_fields(tool_result), (witness is not None) if witness_files else None)
         return Outcome(verdict, actor.name(), [] if witness is None else [witness], result)
+
+
+    def linted_witness(self, step: Step, witness_files: list[str], verdict: str,
+                       subproperty: str | None) -> str | None:
+        """The first of `witness_files` (GraphML files left out) that counts by
+        WitnessLint (witnesslint.lint), run on the file as deliver would
+        deliver it and on the task's program, or None. A file counts if the
+        linter says it is valid; not if it says it is invalid; and, where the
+        linter fails technically or its self-test failed
+        (witnesslint.self_test_problems), if witnesses.passing_witness
+        accepts it, with a line "CoOpeRace: WARNING: ..." that says so. Each
+        outcome is printed on a line "CoOpeRace: WitnessLint ..."."""
+        from . import witnesslint
+
+        problems = witnesslint.self_test_problems()
+        found = None
+        for path in [path for path in witness_files if not path.lower().endswith(".graphml")]:
+            internal = passing_witness([path], self.property_name, verdict, subproperty,
+                                       cpu_time_budget=step.run_cpu_time_budget) is not None
+            internal_text = "passes" if internal else "does not pass"
+            if problems:
+                say_line(f"CoOpeRace: WARNING: WitnessLint is not used ({'; '.join(problems)}): the internal "
+                         f"check decides on {step.component}'s witness {path}, which it {internal_text}")
+                counts = internal
+            else:
+                copy = path + ".as-delivered"
+                witness_files_to_path(path, copy, {self.file: self.task_path})
+                got = witnesslint.lint(copy, self.file, verdict, step.run_cpu_time_budget)
+                if got.outcome == witnesslint.FAILED:
+                    say_line(f"CoOpeRace: WARNING: WitnessLint failed technically on {step.component}'s witness "
+                             f"{path} ({got.status}): the internal check decides, and it {internal_text}")
+                    counts = internal
+                else:
+                    say_line(f"CoOpeRace: WitnessLint on {step.component}'s witness {path}: {got.outcome} "
+                             f"({got.status}); the internal check {internal_text}")
+                    counts = got.outcome == witnesslint.VALID
+            if counts and found is None:
+                found = path
+        return found
+
+
+def say_line(line: str) -> None:
+    """Prints `line` holding PRINT_LOCK."""
+    with PRINT_LOCK:
+        print(line, flush=True)
 
 
 # The pattern, as a glob, of the files a component without a list of witness
@@ -974,6 +1021,19 @@ def witness_files_to_file_root(witness_files: list[str], paths: Mapping[str, str
             text = text.replace(old, new)
         with open(target, "w", encoding="utf-8", errors="surrogateescape") as out:
             out.write(text)
+
+
+def witness_files_to_path(source: str, target: str, paths: Mapping[str, str]) -> None:
+    """Writes the witness file `source` to `target` as
+    witness_files_to_file_root delivers it: every occurrence of a key of
+    `paths` replaced by its value."""
+    paths = {old: new for old, new in paths.items() if old and old != new}
+    with open(source, encoding="utf-8", errors="surrogateescape") as file:
+        text = file.read()
+    for old, new in paths.items():
+        text = text.replace(old, new)
+    with open(target, "w", encoding="utf-8", errors="surrogateescape") as out:
+        out.write(text)
 
 
 def remove_old_witness_files() -> None:
