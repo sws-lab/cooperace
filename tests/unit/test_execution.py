@@ -539,6 +539,28 @@ def test_the_witness_written_in_the_component_directory_is_delivered_and_a_stale
     assert not (tmp_path / "stubs" / "Stub_A" / "fresh-witness.yml").exists()
 
 
+@pytest.mark.parametrize("writes", [False, True])
+def test_a_shipped_witness_of_the_witness_s_own_name_counts_only_when_the_run_writes_it_again(
+        tmp_path, run_dir, capsys, writes):
+    # Deagle 24278298 ships the witness.yml of its smoke test in its directory, the name its wrapper
+    # writes; the wrapper deletes witness.yml before each run of deagle_exe. A run that deletes it
+    # and writes none delivers no witness (the deletion is a whiteout in the overlay, not a file);
+    # a run that writes it again delivers the new one. The shipped file is untouched either way.
+    fresh = f'cp {shlex.quote(str(PASSING_WITNESS))} witness.yml\n' if writes else ""
+    body = f'cd "$(dirname "$0")"\nrm -f witness.yml\n{fresh}echo "STUB-STATUS: false"\n'
+    run = stub_run(tmp_path, data_race_conf(one_after_another("Stub A")), Stub_A=body)
+    shipped = tmp_path / "stubs" / "Stub_A" / "witness.yml"
+    shipped.write_text(OTHER_PASSING_WITNESS.read_text())
+
+    run.execute()
+
+    assert shipped.read_text() == OTHER_PASSING_WITNESS.read_text()
+    if writes:
+        assert (run_dir / "witness.yml").read_text() == PASSING_WITNESS.read_text()
+    else:
+        assert not (run_dir / "witness.yml").exists()
+
+
 def test_a_component_reads_a_task_and_a_property_file_in_a_hidden_directory(tmp_path, run_dir, capsys):
     # The pre-run of SV-COMP 2027 ran every task from /home/cwd/sv-benchmarks,
     # which a component's container hid: every component failed to read its
