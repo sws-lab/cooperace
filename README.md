@@ -176,6 +176,57 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
 If you want to force a completely fresh run (no cached layers), clear BuildKit cache data before re-running:
 `docker builder prune --all --force`.
 
+## Checking a component archive (component smoke)
+
+When a component publishes a new archive, what breaks usually shows only inside CoOpeRace: a renamed witness
+file, an option the tool-info module must pass, an output line it no longer reads.
+[`scripts/component-smoke.py`](scripts/component-smoke.py) answers within minutes whether CoOpeRace runs one
+archive of one component:
+
+```bash
+scripts/component-smoke.py run goblint                          # the archive tools.txt names
+scripts/component-smoke.py run goblint --archive registered     # the newest archive fm-tools registers
+scripts/component-smoke.py run goblint --archive 24288102       # a Zenodo record, a zip or an unpacked directory
+scripts/component-smoke.py all --tools-list tools.txt tools-pool.txt --archive registered
+scripts/component-smoke.py report <run directory>               # evaluate a run again
+```
+
+It needs `--work` (archives and runs), `--lane` (a directory with `svb/`, an sv-benchmarks checkout, and
+`latest/benchexec`, a BenchExec checkout), `--lane-wrapper` (a directory with a `container.sh` whose `IMG=`
+line pins the competition image and a `benchexec-launcher` mounted as `/usr/bin/benchexec`) and, for
+WitnessLint, `--witnesslint` (its unpacked archive); each also from the environment (`COMPONENT_SMOKE_WORK`,
+`COOPERACE_LANE`, `COOPERACE_LANE_WRAPPER`, `WITNESSLINT_DIR`). `--fm-tools-dir` reads fm-tools from a
+checkout with full history (for the commits of `tools-unlisted.txt`) instead of its main branch.
+
+For each archive it:
+
+1. fetches it as `scripts/download-tools.py` does (the single file of the Zenodo record, its MD5 checked against
+   Zenodo's, unpacked with exactly one top-level directory and the file modes kept) into a new directory, records
+   its size, SHA-1 and SHA-256, and runs [`scripts/archive-static-check.py`](scripts/archive-static-check.py);
+2. runs the component on the tasks of [`scripts/component-smoke-tasks.tsv`](scripts/component-smoke-tasks.tsv)
+   (per property it is used for: a correct `true`, a correct `false`, a quick non-answer, and a pair of ILP32 and
+   LP64 twins where the pre-run has one) the way CoOpeRace runs it: a copy of CoOpeRace whose conf runs the
+   component alone, with the limits, phase wall-time limit and `ignoreIfCalls` the default conf (or `--conf`)
+   gives it, through BenchExec's `benchexec` and CoOpeRace's tool-info module in the competition image, at the
+   pre-run limits (3 GB, 1 core, 15 min), one task at a time
+   ([`scripts/component-smoke-inside.sh`](scripts/component-smoke-inside.sh)). The copy's launcher runs
+   `cli.main` unchanged; it only keeps the work directory, with the component's witness files, and lists every
+   file each component run wrote in its container;
+3. reports per task the component's status and what `confirm_verdict` made of it, the expected verdict and the
+   pre-run row, the witness files (name, entry type, format version), CoOpeRace's witness check and WitnessLint
+   on them, CPU time and memory against the pre-run, the peak tasks of the component's cgroup, the files written
+   outside its directory, and the witness files the archive ships. It writes `results.tsv` and `summary.md`
+   into the run's directory and exits 1 with a line `FAIL <component> <task>: <reason>` per failure: a lost
+   answer that no limit explains (an unread output line is quoted), a wrong or differing answer, a verdict that
+   needs a witness without one, a witness file the registry does not name, a WitnessLint error, a failed version
+   probe, a failed static check.
+
+A component of the registry that the default conf does not run (a pool component) is run without limits of its
+own on the properties the task file gives it. For a component without a registry entry the script says
+`no registry entry` and lists what an entry would need, from its fm-tools entry. `select` writes the task file
+from a pre-run table (`verified.parquet` of the organizers' results, with pandas):
+`scripts/component-smoke.py select --table verified.parquet --svb <sv-benchmarks> --component goblint=<DOI> ...`.
+
 ## Uploading the SV-COMP archive to Zenodo
 
 `scripts/sv-comp/upload-zenodo.py` uploads the archive as a new version of CoOpeRace's Zenodo record
