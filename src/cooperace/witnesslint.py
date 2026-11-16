@@ -33,16 +33,19 @@ invalid) and says whether the linter gives VALID and INVALID for them."""
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
+from collections.abc import Mapping
 from typing import NamedTuple
 
 from benchexec import util as butil
 from benchexec.tools.template import BaseTool2
 
 from . import TOOL_DIR
-from .witnesses import _APART_LOCK, CHECK_MARGIN_SECONDS, run_cpu_seconds, run_memory_limit
+from .witnesses import _APART_LOCK, CHECK_MARGIN_SECONDS, DELIVERED_NAME, run_cpu_seconds, run_memory_limit
 
 # The directory of the installed linter, which holds witnesslinter.py.
 LINTER_DIR = os.path.join(TOOL_DIR, "tools", "witnesslint")
@@ -163,6 +166,34 @@ def lint(path: str, program: str, verdict: str, cpu_time_budget: int | float | N
     return Lint(FAILED, f"status {status}, exit code {done.returncode}")
 
 
+def lint_delivered(path: str, program: str, verdict: str, cpu_time_budget: int | float | None = None,
+                   paths: Mapping[str, str] | None = None, directory: str | None = None) -> Lint:
+    """lint of the witness file `path` as CoOpeRace delivers it and the
+    competition lints it: a copy under the name DELIVERED_NAME, in a new
+    directory of its own under `directory` (the system's temporary directory
+    if None), with every occurrence of a key of `paths` replaced by its value
+    (as components.witness_files_to_file_root replaces the task's path). The
+    copy is removed afterwards; `path` is not changed. Never raises."""
+    paths = {old: new for old, new in (paths or {}).items() if old and old != new}
+    try:
+        own = tempfile.mkdtemp(prefix="cooperace-lint-", dir=directory)
+    except OSError as error:
+        return Lint(FAILED, f"no directory for its copy ({error})")
+    try:
+        with open(path, encoding="utf-8", errors="surrogateescape") as file:
+            text = file.read()
+        for old, new in paths.items():
+            text = text.replace(old, new)
+        copy = os.path.join(own, DELIVERED_NAME)
+        with open(copy, "w", encoding="utf-8", errors="surrogateescape") as out:
+            out.write(text)
+        return lint(copy, program, verdict, cpu_time_budget)
+    except OSError as error:
+        return Lint(FAILED, f"its copy could not be made ({error})")
+    finally:
+        shutil.rmtree(own, ignore_errors=True)
+
+
 # The witnesses of the self-test, relative to TOOL_DIR, and the program they are of.
 SELF_TEST_DIR = os.path.join("tests", "witnesslint")
 SELF_TEST = (("valid.witness.yml", "false", VALID), ("invalid.witness.yml", "false", INVALID))
@@ -170,12 +201,13 @@ SELF_TEST_PROGRAM = "program.c"
 
 
 def self_test() -> list[str]:
-    """Lints the witnesses of SELF_TEST and returns one problem for each
-    that does not get its expected outcome; [] if the linter works."""
+    """Lints the witnesses of SELF_TEST through lint_delivered, the path a
+    component's witness takes, and returns one problem for each that does
+    not get its expected outcome; [] if the linter works."""
     directory = os.path.join(TOOL_DIR, SELF_TEST_DIR)
     problems = []
     for name, verdict, expected in SELF_TEST:
-        got = lint(os.path.join(directory, name), os.path.join(directory, SELF_TEST_PROGRAM), verdict)
+        got = lint_delivered(os.path.join(directory, name), os.path.join(directory, SELF_TEST_PROGRAM), verdict)
         if got.outcome != expected:
             problems.append(f"WitnessLint gives {got.outcome} ({got.status}) for {SELF_TEST_DIR}/{name}, "
                             f"expected {expected}")
