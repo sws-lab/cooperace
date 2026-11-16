@@ -159,10 +159,12 @@ REGISTRY = {spec.name: spec for spec in (
                   witness=WitnessSpec("run", ("--set", "witness.yaml.path", "{dir}/witness.yml",
                                               "--set", "exp.region-offsets", "false"),
                                       ("witness.yml",))),
-    #The wrapper deagle (4.2.0, 10.5281/zenodo.24150501) runs deagle_exe with --yaml-witness
-    #witness.yml in its working directory, Deagle's directory, for every property, and deletes
-    #the file unless it answers true or false (4.1.0, 23488039, wrote error-witness.yml; its
-    #archive still holds one such file, of 20 October, which the overlay keeps from counting)
+    #The wrapper deagle (4.2.0, 10.5281/zenodo.24278298, as 24150501 before it) runs deagle_exe
+    #with --yaml-witness witness.yml in its working directory, Deagle's directory, for every
+    #property, and deletes the file before each run of deagle_exe and unless it answers true or
+    #false (4.1.0, 23488039, wrote error-witness.yml). The archive of 24278298 holds a
+    #witness.yml of its smoke test, of 16 November; only what a run writes into the overlay of
+    #Deagle's directory is collected, so it never counts
     ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle",
                   witness=WitnessSpec("component", (), ("witness.yml",))),
     #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,

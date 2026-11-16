@@ -11,5 +11,5 @@ uautomizer: 10.5281/zenodo.24133222
 iekke: 10.5281/zenodo.24187653
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
-cpachecker: 10.5281/zenodo.24021993
+cpachecker: 10.5281/zenodo.24218973
 racerf: 10.5281/zenodo.17589798

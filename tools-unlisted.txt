@@ -5,15 +5,19 @@
 # registered a newer archive that has no pre-run yet, the bundled DOI is gone
 # from fm-tools main; its version and options are read from the commit named
 # here, the last commit of fm-tools main whose entry lists it. Checked on
-# 14 November 2026 against fm-tools main 006c632b:
+# 16 November 2026 against fm-tools main 75f310bc:
 #
-# sv-sanitizers 24041366 (0.3.3, pre-run 9 November); fm-tools e94634d2 registers 24117367 (0.3.4)
-sv-sanitizers: 10.5281/zenodo.24041366 d8d51aed
-# Deagle 24150501 (4.2.0, pre-run 12 November); fm-tools 0873f21f registers 24192208
-deagle: 10.5281/zenodo.24150501 cb98189b
+# Goblint 24080342 (svcomp27-0-g9febbae9c, pre-run 9 November); fm-tools 75f310bc registers 24288102
+goblint: 10.5281/zenodo.24080342 9dd09a3f
+# Dartagnan 24134559 (4.5.0-alpha, pre-run 12 November); fm-tools 715a5c3d registers 24261782
+dartagnan: 10.5281/zenodo.24134559 5f26160a
 # ULTIMATE GemCutter 24060016 (0.3.2-dev-991986cc09, pre-run 10 November); fm-tools aa0b5593
 # registered 24133237, which never ran, and 4a8ff986 registers 24202456
 ugemcutter: 10.5281/zenodo.24060016 6452480b
+# IKOS-ConC 23736684 (pre-run 30 October); fm-tools 140bd795 registers 24225248
+ikos-conc: 10.5281/zenodo.23736684 dbda8837
 # ULTIMATE Automizer 24133222 (pool; 0.3.2-dev-f60e54cd9f, pre-run 12 November); fm-tools 4a8ff986
 # registers 24202446
 uautomizer: 10.5281/zenodo.24133222 b7ccdb13
+# iekke 24187653 (pool; 2.0, pre-run 13 November); fm-tools 7760f47e registers 24279954
+iekke: 10.5281/zenodo.24187653 554cc768

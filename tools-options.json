@@ -13,12 +13,12 @@
     "options": []
   },
   "sv-sanitizers": {
-    "doi": "10.5281/zenodo.24041366",
+    "doi": "10.5281/zenodo.24117367",
     "version": "svcomp27",
     "options": []
   },
   "deagle": {
-    "doi": "10.5281/zenodo.24150501",
+    "doi": "10.5281/zenodo.24278298",
     "version": "svcomp27",
     "options": []
   },
@@ -59,8 +59,8 @@
     "options": []
   },
   "cpachecker": {
-    "doi": "10.5281/zenodo.24021993",
-    "version": "4.2.2-3728-g5c33b8d955",
+    "doi": "10.5281/zenodo.24218973",
+    "version": "4.2.2-5072-g4453227651",
     "options": [
       "--svcomp27",
       "--heap",

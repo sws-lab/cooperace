@@ -62,7 +62,7 @@ Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon
   https://github.com/openjdk/jdk25u/releases/tag/jdk-25.0.4%2B7. The licences of the other
   dependencies in the image are in `tools/dartagnan/LICENSES/`.
 
-## Deagle (`tools/deagle/`, Zenodo 10.5281/zenodo.24150501)
+## Deagle (`tools/deagle/`, Zenodo 10.5281/zenodo.24278298)
 
 Deagle's `LICENSE` is BSD-4-Clause, with the terms of CBMC and MiniSat. Its archive also holds the
 GPL-3.0 text (`tools/deagle/COPYING`). Source: https://github.com/thufv/deagle (version 4.2.0;
