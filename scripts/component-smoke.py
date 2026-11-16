@@ -995,6 +995,7 @@ def report(args, run_dir: Path) -> int:
                           meta["options"], packages=packages)
         meta["static"] = (static_checks(meta["component"], archive.directory)
                           + package_check(archive, fm_tools_dir))
+        (run_dir / "meta.json").write_text(json.dumps(meta, indent=1) + "\n")
     for severity, line in meta["static"]:
         if severity == "FAIL":
             failures_all.append(f"FAIL {meta['component']} static: {line}")
