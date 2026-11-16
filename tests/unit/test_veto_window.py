@@ -132,3 +132,70 @@ def test_budget_expiry_after_the_window_keeps_deagle_s_true(run):
                                         GEMCUTTER: (0.1, bresult.RESULT_UNKNOWN, None)}, budget_after=0.6)
 
     assert (result, decider) == ("true", "Deagle")
+
+
+# --- added by the review of 16 November 2026 ----------------------------------------------------------------
+
+
+def test_a_false_of_gemcutter_before_deagle_s_true_is_delivered(run):
+    #GemCutter vetoes first; Deagle keeps running for a witness that would come first, then answers true
+    result, decider, out, _took = run({"Deagle": (0.4, "true", None), GEMCUTTER: (0.05, DEREF, "passing")})
+
+    assert (result, decider) == ("false(valid-deref)", GEMCUTTER)
+    assert "Deagle true in bracket 3 is overridden by false in bracket 2" in out
+
+
+def test_a_veto_whose_witness_fails_the_check_is_delivered_without_a_witness(run):
+    #valid-memsafety needs no witness for false (conf/witnesses.json), so the veto is not lost
+    result, decider, out, _took = run({"Deagle": (0.02, "true", None), GEMCUTTER: (0.2, DEREF, "failing")})
+
+    assert (result, decider) == ("false(valid-deref)", GEMCUTTER)
+    assert "ULTIMATE GemCutter false, bracket 2, no witness that passes the check" in out
+
+
+def test_deagle_s_true_after_the_wall_time_limit_stopped_gemcutter_is_delivered(run):
+    #The window closed by phase 2's wall-time limit (1.5 s) while Deagle still ran; Deagle goes on in phase 3
+    result, decider, out, took = run({"Deagle": (2.0, "true", None), GEMCUTTER: (3.0, DEREF, "passing")})
+
+    assert (result, decider) == ("true", "Deagle")
+    assert "has passed: stopping ULTIMATE GemCutter" in out
+    assert took >= 2.0
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_random_scenarios_keep_the_veto(run, seed):
+    """Over random scenarios of Deagle and GemCutter (around the scaled wall-time limit of phase 2, 1.5 s)
+    and a random budget: Deagle's true is never the result when GemCutter's accepted false was recorded,
+    nor when the budget stopped GemCutter; a recorded false of GemCutter beside Deagle's true gives a false."""
+    import random
+
+    rng = random.Random(f"veto {seed}")
+    falses = (DEREF, bresult.RESULT_FALSE_FREE, bresult.RESULT_FALSE_MEMTRACK)
+    seen = set()
+    for _ in range(25):
+        def delay():
+            #Not within 0.15 s of the limit, where a false and the stop race (an answer after the window)
+            value = rng.uniform(0, 2.5)
+            return value if abs(value - 1.5) > 0.15 else value + 0.3
+
+        deagle_status = rng.choices(["true", DEREF, bresult.RESULT_UNKNOWN, "TIMEOUT"], [4, 1, 1, 1])[0]
+        #A true of valid-memsafety has no witness (the fake cannot write one: witnesses.specification is None)
+        deagle = (delay(), deagle_status, rng.choice(["passing", None]) if deagle_status == DEREF else None)
+        gemcutter = (delay(), rng.choices([*falses, bresult.RESULT_UNKNOWN, "OUT OF MEMORY", "TIMEOUT", "hang-start"],
+                                                 [3, 1, 1, 1, 1, 1, 1])[0],
+                     rng.choice(["passing", "failing", None]))
+        budget = rng.choice([None, None, rng.uniform(0.1, 2.5)])
+        result, decider, out, _took = run({"Deagle": deagle, GEMCUTTER: gemcutter}, budget_after=budget)
+        where = (deagle, gemcutter, budget, result, decider)
+        cut = [line for line in out.splitlines() if "its budget is" in line and GEMCUTTER in line]
+        vetoed = f"CoOpeRace answer: {GEMCUTTER} false, bracket 2" in out
+        if (result, decider) == ("true", "Deagle"):
+            assert not vetoed and not cut, where
+            seen.add("true")
+        if vetoed and "CoOpeRace answer: Deagle true" in out:
+            assert result.startswith("false"), where
+            seen.add("veto")
+        if cut and "CoOpeRace answer: Deagle true" in out and not vetoed:
+            assert result == "unknown", where
+            seen.add("held")
+    assert "true" in seen and "veto" in seen, seen
