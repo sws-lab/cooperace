@@ -31,7 +31,12 @@ checked. A strategy is a JSON object with:
   components that can veto it. Each has an entry for the other verdict in a
   more trusted bracket, so the answer waits for it by the bracket rules, and
   a CPU-time limit, which bounds the wait. If the run's CPU-time budget stops
-  one of them before it ended, the answer is not delivered (verdicts.Result).
+  one of them before it ended, the answer is not delivered (verdicts.Result);
+- "firstVerdict", optional: true for the first-verdict mode, in which
+  "answers" is one bracket, the accepted entries, and the first accepted
+  verdict a component gives is the result, with that component's own
+  witness file (verdicts.Verdicts). The mode has no "witnesses" and no
+  "vetoWindows". false, or no key, is the mode of brackets.
 
 load_strategies turns a conf into a map from property to Strategy, and load
 turns one strategy into a Strategy, refusing with ConfError whatever the
@@ -53,8 +58,13 @@ VERDICTS = ("true", "false")
 
 # The keys of a strategy, and the keys of a phase given as an object.
 STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits", "runCpuTimeBudget",
-                 "ignoreIfCalls", "vetoWindows")
+                 "ignoreIfCalls", "vetoWindows", "firstVerdict")
 REQUIRED_KEYS = ("phases", "answers", "witnesses")
+# The keys a strategy in the first-verdict mode ("firstVerdict": true) needs,
+# and those it must not have: each would hold an answer or take a witness
+# from another component than the one that answered first.
+FIRST_VERDICT_REQUIRED_KEYS = ("phases", "answers")
+FIRST_VERDICT_REFUSED_KEYS = ("witnesses", "vetoWindows")
 PHASE_KEYS = ("tools", "wallTimeLimit")
 
 # The keys of the tree format, which load refuses with a message naming the
@@ -76,13 +86,17 @@ class Step:
     "all"), and `memory_limit` and `cpu_time_limit` its entries in the
     strategy's `memoryLimits` and `cpuTimeLimits`, as the conf gives them, or
     None. `run_cpu_time_budget` is the strategy's runCpuTimeBudget (None:
-    none), within which the check of the component's witness stays."""
+    none), within which the check of the component's witness stays.
+    `first_verdict` is the strategy's first-verdict mode: then a verdict of
+    a run that a limit or a stop ended is no verdict, and the component's
+    witness file is returned whether or not it passes the check."""
 
     component: str
     accept: str
     memory_limit: int | float | str | None = None
     cpu_time_limit: int | float | str | None = None
     run_cpu_time_budget: int | float | None = None
+    first_verdict: bool = False
 
 
 @dataclass(frozen=True)
@@ -116,7 +130,9 @@ class Strategy:
     runCpuTimeBudget in seconds, None without one. `ignore_if_calls` maps an
     Entry of `answers` to the functions whose call drops it (guarded).
     `veto_windows` maps an Entry of `answers` to the components that can veto
-    it (the conf's "vetoWindows").
+    it (the conf's "vetoWindows"). `first_verdict` is the conf's
+    "firstVerdict": then `answers` is one bracket, `witnesses` and
+    `veto_windows` are empty, and the first accepted verdict decides.
 
     load guarantees that every component of `phases` has at least one Entry,
     that every Entry and every name in `witnesses` names a component of
@@ -130,6 +146,7 @@ class Strategy:
     run_cpu_time_budget: int | float | None = None
     ignore_if_calls: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
     veto_windows: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
+    first_verdict: bool = False
 
     @property
     def tools(self) -> tuple[str, ...]:
@@ -166,7 +183,14 @@ class Strategy:
         both verdicts: which verdict counts is the executor's to decide from
         `answers`."""
         return Step(tool, "all", self.memory_limits.get(tool), self.cpu_time_limits.get(tool),
-                    self.run_cpu_time_budget)
+                    self.run_cpu_time_budget, self.first_verdict)
+
+    def position(self, tool: str) -> tuple[int, int]:
+        """The place of `tool` in `phases`: the index of the first phase it
+        is in, and its index in that phase. The first-verdict mode orders by
+        it the answers that run_strategy sees at the same time."""
+        first = self.phases_of(tool)[0]
+        return first, self.phases[first].tools.index(tool)
 
 
 class ConfError(ValueError):
@@ -317,7 +341,10 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     a "vetoWindows" that is not an object, a key there that is not one entry
     "Name:true" or "Name:false" of answers, or a value that is not a
     non-empty list of components each of which has an entry for the other
-    verdict in a bracket above that entry's and a CPU-time limit."""
+    verdict in a bracket above that entry's and a CPU-time limit; or has a
+    "firstVerdict" that is not true or false, or is true and has more than
+    one bracket in "answers", or has "witnesses" or "vetoWindows"
+    (FIRST_VERDICT_REFUSED_KEYS)."""
     if not isinstance(strategy, dict):
         raise ConfError("the strategy must be a JSON object")
     _refuse_tree_format(strategy, "the strategy")
@@ -325,9 +352,18 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
         if key not in STRATEGY_KEYS:
             raise ConfError(f"the strategy has the key {key!r}, expected only "
                             + ", ".join(repr(key) for key in STRATEGY_KEYS))
-    for key in REQUIRED_KEYS:
+    first_verdict = strategy.get("firstVerdict", False)
+    if not isinstance(first_verdict, bool):
+        raise ConfError(f"firstVerdict is {first_verdict!r}, expected true or false")
+    for key in FIRST_VERDICT_REQUIRED_KEYS if first_verdict else REQUIRED_KEYS:
         if key not in strategy:
             raise ConfError(f"the strategy has no {key!r}")
+    if first_verdict:
+        for key in FIRST_VERDICT_REFUSED_KEYS:
+            if key in strategy:
+                raise ConfError(f"the strategy has firstVerdict true and {key!r}; in the first-verdict mode the "
+                                "first accepted verdict is delivered with its own component's witness, "
+                                "so no answer waits and no other component supplies a witness")
 
     if not isinstance(strategy["phases"], list) or not strategy["phases"]:
         raise ConfError(f"phases must be a non-empty list of phases, not {strategy['phases']!r}")
@@ -342,6 +378,9 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
                             "consecutive; a component runs in one stretch of consecutive phases")
 
     answers = _answers(strategy["answers"])
+    if first_verdict and len(answers) != 1:
+        raise ConfError(f"the strategy has firstVerdict true and {len(answers)} brackets in answers; "
+                        "in the first-verdict mode answers is one bracket, the accepted entries")
     with_entry = {entry.tool for bracket in answers for entry in bracket}
     for name in sorted(with_entry):
         if name not in tools:
@@ -350,7 +389,7 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
         if name not in with_entry:
             raise ConfError(f"component {name!r} is in a phase but has no entry in answers")
 
-    witnesses = _names(strategy["witnesses"], "witnesses")
+    witnesses = _names(strategy.get("witnesses", []), "witnesses")
     for name in witnesses:
         if name not in with_entry:
             raise ConfError(f"witnesses names {name!r}, which has no entry in answers")
@@ -362,7 +401,7 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     return Strategy(phases, answers, witnesses,
                     cpu_time_limits, _limits(strategy, "memoryLimits", tools),
                     budget, _ignore_if_calls(strategy.get("ignoreIfCalls", {}), answers),
-                    _veto_windows(strategy.get("vetoWindows", {}), answers, cpu_time_limits))
+                    _veto_windows(strategy.get("vetoWindows", {}), answers, cpu_time_limits), first_verdict)
 
 
 def _veto_windows(value: object, answers: tuple[frozenset[Entry], ...],

@@ -542,6 +542,14 @@ class ComponentRunner:
         (witnesses.subproperty_of), or none if no file passes; the verdict is
         returned either way.
 
+        In the first-verdict mode (`step.first_verdict`), a verdict of a run
+        that RunExecutor ended for a limit or a stop (a termination reason,
+        such as "cputime" or "memory") is no verdict: NO_OUTCOME, after the
+        block (with result "unknown") and a line that says so. The
+        Outcome's witness_files are as outside the mode (the component's own
+        file that passes the check, or none), and the Outcome has `measured`
+        and `witness_passes`.
+
         The component's entry in the registry is looked up by the conf's name
         of the component, `step.component`, which config.load has checked is
         in the registry, and its options in `versions`, which
@@ -592,6 +600,14 @@ class ComponentRunner:
         else:
             verdict = "unknown"
 
+        if step.first_verdict and verdict != "unknown" and tool_result.termination_reason is not None:
+            print_component_run(actor.name(), tool_result, status, "unknown")
+            with PRINT_LOCK:
+                print(f"CoOpeRace: {step.component} {verdict} from a run that ended by "
+                      f"terminationreason={tool_result.termination_reason}: no verdict in the first-verdict mode",
+                      flush=True)
+            return NO_OUTCOME
+
         print_component_run(actor.name(), tool_result, status, verdict)
 
         if verdict == "unknown":
@@ -599,6 +615,9 @@ class ComponentRunner:
         result = reported_result(self.property_name, status)
         witness = passing_witness(witness_files, self.property_name, verdict, subproperty_of(result),
                                   cpu_time_budget=step.run_cpu_time_budget)
+        if step.first_verdict:
+            return Outcome(verdict, actor.name(), [] if witness is None else [witness], result,
+                           measured_fields(tool_result), (witness is not None) if witness_files else None)
         return Outcome(verdict, actor.name(), [] if witness is None else [witness], result)
 
 
@@ -856,6 +875,13 @@ def print_component_run(name: str, tool_result: subprocess.CompletedProcess, sta
     lines += run_lines(name, tool_result)
     with PRINT_LOCK:
         print("\n".join(lines), flush=True)
+
+
+def measured_fields(tool_result: subprocess.CompletedProcess) -> str:
+    """The fields "cputime=<s>s walltime=<s>s memory=<bytes>B
+    terminationreason=<reason>" of the line "Tool name: <name> Measured:
+    ..." of run_lines for the run `tool_result` that was started."""
+    return run_lines("", tool_result)[0].split(" Measured: ", 1)[1]
 
 
 def run_lines(name: str, tool_result: subprocess.CompletedProcess) -> list[str]:

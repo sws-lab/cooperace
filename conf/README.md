@@ -196,13 +196,42 @@ The limit needs the `pids` controller in the cgroup in which BenchExec makes the
 
 `ignoreIfCalls` maps an entry of `answers` (`"Name:true"`, `"Name:false"`, or `"Name"` for the entries of Name that `answers` has) to a non-empty list of C function names. Before the strategy runs, CoOpeRace reads the task's program file: if it calls one of the names, the entry is dropped from `answers`, with a line `CoOpeRace: the task calls f: Name:verdict is ignored`. A bracket left empty is dropped; a tool left without an entry is dropped from the phases, from `witnesses` and from the limits, and a phase left empty is dropped. If no entry is left, no tool runs and the verdict is `unknown`. A call is the name followed by `(` where an expression or a statement can start (after `;`, `{`, `}`, `=`, `(`, `,`, `!`, `&`, `|`, `?`, `:`, `)` or `return`), so a declaration such as glibc's `extern int pthread_once (...)` in a preprocessed file is no call (`config.called_functions`). This is a guard against a component's known modelling gap, not an analysis: a call through a macro or a function pointer is not seen.
 
+## The first-verdict mode
+
+`"firstVerdict": true` in a strategy turns off the rules of brackets, witness suppliers and veto windows for that property. The first component that gives an accepted verdict decides, and CoOpeRace delivers that verdict at once with that component's own witness. No answer is held, nothing is concluded at a timeout, and no witness of another component is taken. The other keys keep their meaning: `phases`, `cpuTimeLimits`, `memoryLimits`, `runCpuTimeBudget` and `ignoreIfCalls`. The tools in the strategy below are an example only:
+
+```json
+{
+    "properties": {
+        "no-data-race": {
+            "firstVerdict":  true,
+            "phases":        [{"tools": ["Goblint", "IKOS-ConC"], "wallTimeLimit": 120}, ["Dartagnan"]],
+            "cpuTimeLimits": {"Goblint": 30, "IKOS-ConC": 60},
+            "memoryLimits":  {"Goblint": "35%", "IKOS-ConC": "30%", "Dartagnan": "80%"},
+            "runCpuTimeBudget": 870,
+            "answers":       [["Goblint:true", "IKOS-ConC:false", "Dartagnan"]]
+        }
+    }
+}
+```
+
+- **`answers` is one bracket**, the set of accepted entries (`Tool`, `Tool:true`, `Tool:false`). A verdict without an entry is recorded in the log (`... has no entry in answers: ignored`), and the run goes on as if the tool had given none.
+- **An accepted answer is a definite verdict together with a witness of its own that has the kind, version and property the rules ask for.** Where the witness table requires a witness for the property and verdict (`required: true`), the verdict counts only if the tool's own witness passes the check of [`witnesses`](#witnesses-whose-witness-is-delivered). The check is the same as outside the mode, and no validator runs. Otherwise the log says `..., no witness that passes the check, which the verdict needs: ignored in the first-verdict mode` (or `no witness file`), and the run goes on: a later tool can still answer with its own verdict and its own witness. Where the table has `null` or `required: false`, the verdict counts. It is delivered with the tool's own witness if that passes the check, and without a witness otherwise.
+- **The first accepted verdict ends the run at once.** When it arrives, every other tool is stopped, no tool is started, and the verdict is delivered. CoOpeRace does not wait for a phase end, another tool, a witness or the budget; it only takes the stopped tools down (at most 30 s each, as always). "First" is the order in which CoOpeRace receives the tools' results. If several results are already waiting when CoOpeRace takes one (the tie rule), it handles them in the order of the phases (the first phase a tool is in), then in the order of the tools within that phase, and the first accepted verdict in that order decides. The answers after it are logged as `after CoOpeRace stopped it: ignored`.
+- **A verdict from a run that ended by a limit or a stop is no verdict.** A tool can print its verdict and then be killed by its `cpuTimeLimits` or `memoryLimits` entry, for example while it writes its witness. Outside the mode, CoOpeRace keeps such a verdict, because `components.component_status` keeps a specific result after a termination reason. In this mode, a run with any BenchExec termination reason (`cputime`, `memory`, `killed`, ...) gives no verdict. Its block says `Result: unknown`, followed by the line `CoOpeRace: <tool> <verdict> from a run that ended by terminationreason=<reason>: no verdict in the first-verdict mode`. The same holds for tools stopped by a phase's wall-time limit, by the run's budget or by a hang guard, as everywhere.
+- **No accepted verdict gives `unknown`.** This happens when the schedule ends without one, including when the budget stops it.
+- The result is announced by one line `CoOpeRace first verdict: <tool> <verdict> (mode first-verdict), cputime=<s>s walltime=<s>s memory=<bytes>B terminationreason=none, witness <file> delivered (passes the check)` (or `, no witness delivered`). The fields are those of the tool's `Measured:` line. Then `CoOpeRace result from: <tool>` and the verdict line follow as always. Without a verdict, the line is `CoOpeRace first verdict: none (mode first-verdict): no component gave an accepted verdict: the result is unknown`.
+
+The loader refuses a strategy with `"firstVerdict": true` that has more than one bracket in `answers`, a `witnesses` key (even an empty one) or `vetoWindows`. It also refuses a `firstVerdict` that is not `true` or `false`. `"firstVerdict": false`, or no key, is the mode of brackets described above, which is unchanged.
+
 ## What CoOpeRace refuses
 
 CoOpeRace checks the property file, the conf and the witness table before it starts any tool (`src/cooperace/properties.py`, `src/cooperace/config.py`, `src/cooperace/witnesses.py`) and stops with status 1, one line `CoOpeRace: error: ...` on stderr and no `CoOpeRace verdict:` line (so BenchExec records ERROR, not UNKNOWN, and the task scores 0), if:
 
 - the property file holds the formulas of none of the four properties, or the conf has no strategy for the property;
 - the conf is not a JSON object, has no `properties`, has another key beside it, or maps a name that is not one of the four properties;
-- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits`, `runCpuTimeBudget`, `ignoreIfCalls` and `vetoWindows`, or lacks one of the first three;
+- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits`, `runCpuTimeBudget`, `ignoreIfCalls`, `vetoWindows` and `firstVerdict`, or lacks one of the first three (in the first-verdict mode, one of the first two);
+- `firstVerdict` is not `true` or `false`, or is `true` and `answers` has more than one bracket, or the strategy has `witnesses` or `vetoWindows`;
 - `runCpuTimeBudget` is not a positive number;
 - `ignoreIfCalls` is not an object, has a key that is no entry of `answers`, or a value that is not a non-empty list of C identifiers;
 - `vetoWindows` is not an object, has a key that is not one entry `"Name:true"` or `"Name:false"` of `answers`, or a value that is not a non-empty list of tools each with an entry for the other verdict in a bracket above that entry's and a CPU-time limit;
