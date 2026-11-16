@@ -10,6 +10,10 @@ those its components declare.
     scripts/sv-comp/required-packages.py [--fm-tools-dir DIR] [--yaml | --why]
     scripts/sv-comp/required-packages.py [--fm-tools-dir DIR] --check [ENTRY] [--year 2027]
 
+The checkers of tools-checkers.txt beside tools.txt (WitnessLint) count as
+components here, with the first version of their DOI
+(download_tools.checker_entry_for).
+
 For every component of tools.txt, the components of the SV-COMP archive (not
 those of tools-pool.txt, which are not packed), the script reads its fm-tools
 entry, data/<name>.yml, from the checkout DIR or, without `--fm-tools-dir`,
@@ -175,6 +179,21 @@ def main() -> int:
         print(f"required-packages: error: {error}", file=sys.stderr)
         return 1
     versions, errors = component_versions(wanted, args.fm_tools_dir)
+    try:
+        checkers = download_tools.read_checkers_file(args.tools.parent / download_tools.CHECKERS_FILE.name)
+    except ValueError as error:
+        print(f"required-packages: error: {error}", file=sys.stderr)
+        return 1
+    for name, doi in checkers.items():
+        try:
+            entry = download_tools.checker_entry_for(download_tools.load_fm_tool_data(name, args.fm_tools_dir), doi)
+        except Exception as error:  # noqa: BLE001 - reported like a component's
+            errors.append(f"{name}: cannot read the fm-tools entry: {error}")
+            continue
+        if entry is None:
+            errors.append(f"{name}: fm-tools lists {doi} for no version (checker of tools-checkers.txt)")
+        else:
+            versions[name] = entry
     if errors:
         print("\n".join(f"required-packages: error: {e}" for e in errors), file=sys.stderr)
         return 1

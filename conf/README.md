@@ -222,6 +222,14 @@ The limit needs the `pids` controller in the cgroup in which BenchExec makes the
 - **No accepted verdict gives `unknown`.** This happens when the schedule ends without one, including when the budget stops it.
 - The result is announced by one line `CoOpeRace first verdict: <tool> <verdict> (mode first-verdict), cputime=<s>s walltime=<s>s memory=<bytes>B terminationreason=none, witness <file> delivered (passes the check)` (or `, no witness delivered`). The fields are those of the tool's `Measured:` line. Then `CoOpeRace result from: <tool>` and the verdict line follow as always. Without a verdict, the line is `CoOpeRace first verdict: none (mode first-verdict): no component gave an accepted verdict: the result is unknown`.
 
+**`"witnessLint": true`** (only with `"firstVerdict": true`; off by default) makes WitnessLint the check of a witness that the witness table requires: no-data-race `false`, and `true` and `false` in unreach-call and no-overflow. These are the cells where SV-COMP 2027 lints the witness before validating it. bench-defs' `witnesslint-validate-*-witnesses-v2.xml` excludes no-data-race and valid-memsafety Concurrency correctness witnesses, and `category-structure.yml` puts valid-memsafety Concurrency violation witnesses in demo mode. CoOpeRace runs the bundled WitnessLint 2.4 (`tools/witnesslint/`, from `tools-checkers.txt`) the way the competition does: `--expectViolationWitness` or `--expectCorrectnessWitness`, `--ignoreSelfLoops --expectedWitnessVersion 2 --witness <file> <program>`. It lints the file as CoOpeRace would deliver it, and BenchExec's tool-info module `witnesslint` maps the output to a status.
+
+- `done` means the witness counts.
+- `ERROR (invalid witness syntax)`, `(witness does not exist)`, `(unexpected witness type)` or `(unexpected witness version)` means it does not. The competition makes a correct verdict with any of these an error (0 points). A required witness that does not count makes the verdict not accepted, and the run goes on.
+- Anything else is a technical failure: the linter cannot start, crashes, prints an output the module maps to no such status, runs out of its CPU time (30 s, less what the budget leaves) or out of its memory (2 GiB, at most a fifth of the run's limit). Then the internal check decides, with the line `CoOpeRace: WARNING: WitnessLint failed technically on ...`.
+
+Before the first lint of a run, CoOpeRace lints a known-valid and a known-invalid witness (`tests/witnesslint/`). If the linter does not tell them apart, the internal check decides for the whole run, with the line `CoOpeRace: WARNING: WitnessLint is not used (...)`. So a linter that is broken in the competition's environment cannot turn every answer into `unknown`. `python3 -m src.cooperace.witnesslint` runs this self-test, and the competition-image check of `make svcomp` runs it too. Each lint costs about 0.2 to 0.4 s of CPU time, and it runs before CoOpeRace sees the answer.
+
 The loader refuses a strategy with `"firstVerdict": true` that has more than one bracket in `answers`, a `witnesses` key (even an empty one) or `vetoWindows`. It also refuses a `firstVerdict` that is not `true` or `false`. `"firstVerdict": false`, or no key, is the mode of brackets described above, which is unchanged.
 
 ## What CoOpeRace refuses
@@ -230,8 +238,9 @@ CoOpeRace checks the property file, the conf and the witness table before it sta
 
 - the property file holds the formulas of none of the four properties, or the conf has no strategy for the property;
 - the conf is not a JSON object, has no `properties`, has another key beside it, or maps a name that is not one of the four properties;
-- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits`, `runCpuTimeBudget`, `ignoreIfCalls`, `vetoWindows` and `firstVerdict`, or lacks one of the first three (in the first-verdict mode, one of the first two);
+- a strategy has a key other than `phases`, `answers`, `witnesses`, `cpuTimeLimits`, `memoryLimits`, `runCpuTimeBudget`, `ignoreIfCalls`, `vetoWindows`, `firstVerdict` and `witnessLint`, or lacks one of the first three (in the first-verdict mode, one of the first two);
 - `firstVerdict` is not `true` or `false`, or is `true` and `answers` has more than one bracket, or the strategy has `witnesses` or `vetoWindows`;
+- `witnessLint` is not `true` or `false`, or is `true` without `"firstVerdict": true`;
 - `runCpuTimeBudget` is not a positive number;
 - `ignoreIfCalls` is not an object, has a key that is no entry of `answers`, or a value that is not a non-empty list of C identifiers;
 - `vetoWindows` is not an object, has a key that is not one entry `"Name:true"` or `"Name:false"` of `answers`, or a value that is not a non-empty list of tools each with an entry for the other verdict in a bracket above that entry's and a CPU-time limit;

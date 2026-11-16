@@ -36,7 +36,11 @@ checked. A strategy is a JSON object with:
   "answers" is one bracket, the accepted entries, and the first accepted
   verdict a component gives is the result, with that component's own
   witness file (verdicts.Verdicts). The mode has no "witnesses" and no
-  "vetoWindows". false, or no key, is the mode of brackets.
+  "vetoWindows". false, or no key, is the mode of brackets;
+- "witnessLint", optional, only with "firstVerdict": true: WitnessLint, as
+  the competition runs it, decides whether a witness the witness table
+  requires counts (witnesslint.py), instead of witnesses.passes, which
+  decides only where the linter fails technically.
 
 load_strategies turns a conf into a map from property to Strategy, and load
 turns one strategy into a Strategy, refusing with ConfError whatever the
@@ -58,7 +62,7 @@ VERDICTS = ("true", "false")
 
 # The keys of a strategy, and the keys of a phase given as an object.
 STRATEGY_KEYS = ("phases", "answers", "witnesses", "cpuTimeLimits", "memoryLimits", "runCpuTimeBudget",
-                 "ignoreIfCalls", "vetoWindows", "firstVerdict")
+                 "ignoreIfCalls", "vetoWindows", "firstVerdict", "witnessLint")
 REQUIRED_KEYS = ("phases", "answers", "witnesses")
 # The keys a strategy in the first-verdict mode ("firstVerdict": true) needs,
 # and those it must not have: each would hold an answer or take a witness
@@ -89,7 +93,8 @@ class Step:
     none), within which the check of the component's witness stays.
     `first_verdict` is the strategy's first-verdict mode: then a verdict of
     a run that a limit or a stop ended is no verdict, and the component's
-    witness file is returned whether or not it passes the check."""
+    witness file is returned whether or not it passes the check.
+    `witness_lint` is the strategy's "witnessLint"."""
 
     component: str
     accept: str
@@ -97,6 +102,7 @@ class Step:
     cpu_time_limit: int | float | str | None = None
     run_cpu_time_budget: int | float | None = None
     first_verdict: bool = False
+    witness_lint: bool = False
 
 
 @dataclass(frozen=True)
@@ -147,6 +153,7 @@ class Strategy:
     ignore_if_calls: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
     veto_windows: Mapping[Entry, tuple[str, ...]] = field(default_factory=dict)
     first_verdict: bool = False
+    witness_lint: bool = False
 
     @property
     def tools(self) -> tuple[str, ...]:
@@ -183,7 +190,7 @@ class Strategy:
         both verdicts: which verdict counts is the executor's to decide from
         `answers`."""
         return Step(tool, "all", self.memory_limits.get(tool), self.cpu_time_limits.get(tool),
-                    self.run_cpu_time_budget, self.first_verdict)
+                    self.run_cpu_time_budget, self.first_verdict, self.witness_lint)
 
     def position(self, tool: str) -> tuple[int, int]:
         """The place of `tool` in `phases`: the index of the first phase it
@@ -358,6 +365,12 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     for key in FIRST_VERDICT_REQUIRED_KEYS if first_verdict else REQUIRED_KEYS:
         if key not in strategy:
             raise ConfError(f"the strategy has no {key!r}")
+    witness_lint = strategy.get("witnessLint", False)
+    if not isinstance(witness_lint, bool):
+        raise ConfError(f"witnessLint is {witness_lint!r}, expected true or false")
+    if witness_lint and not first_verdict:
+        raise ConfError("the strategy has witnessLint true without firstVerdict true; "
+                        "WitnessLint gates witnesses only in the first-verdict mode")
     if first_verdict:
         for key in FIRST_VERDICT_REFUSED_KEYS:
             if key in strategy:
@@ -401,7 +414,8 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     return Strategy(phases, answers, witnesses,
                     cpu_time_limits, _limits(strategy, "memoryLimits", tools),
                     budget, _ignore_if_calls(strategy.get("ignoreIfCalls", {}), answers),
-                    _veto_windows(strategy.get("vetoWindows", {}), answers, cpu_time_limits), first_verdict)
+                    _veto_windows(strategy.get("vetoWindows", {}), answers, cpu_time_limits), first_verdict,
+                    witness_lint)
 
 
 def _veto_windows(value: object, answers: tuple[frozenset[Entry], ...],
