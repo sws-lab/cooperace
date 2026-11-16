@@ -207,11 +207,14 @@ REGISTRY = {spec.name: spec for spec in (
                   witness=WitnessSpec("run", ("--out", "{dir}/witness.yml"), ("witness.yml",))),
     #Theta svcomp27 (8.10.1, 10.5281/zenodo.24128717): theta-start.sh runs theta.jar in its
     #working directory, Theta's directory, which writes witness.yml (and witness.graphml, never
-    #delivered) there for a true and for a false; the archive ships neither. Its portfolio runs
-    #each configuration in a child JVM whose heap (-Xmx) is the --memlimit that BenchExec's
-    #theta module passes from the run's memory limit (1420 MB without one), so it is given
-    #its own memory limit (gets_memory_limit). The portfolio's time slices are fixed (they
-    #assume the 900 s of the competition); a CPU-time limit of CoOpeRace's ends it early.
+    #delivered) there for a false and for a true of unreach-call and no-overflow (none for a
+    #true of no-data-race); the archive ships neither. BenchExec's theta module passes the
+    #run's memory limit as --memlimit, so CoOpeRace passes the component's (gets_memory_limit)
+    #and the command line has the competition's form. Observed on goblint (16 November 2026)
+    #with and without CoOpeRace: theta-start.sh starts the portfolio's JVM with -Xmx14210m and
+    #the portfolio runs each configuration in a child JVM with -Xmx1420m, whatever --memlimit
+    #says. The portfolio's time slices are fixed (they assume the 900 s of the competition); a
+    #CPU-time limit of CoOpeRace's ends it early.
     ComponentSpec("Theta", "benchexec.tools.theta", "theta",
                   witness=WitnessSpec("component", (), ("witness.yml",)), gets_memory_limit=True),
 )}

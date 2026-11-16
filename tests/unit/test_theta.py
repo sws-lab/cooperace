@@ -114,7 +114,7 @@ def test_without_a_memory_limit_of_its_own_theta_gets_the_run_s(tmp_path, monkey
 
 
 def test_without_any_memory_limit_theta_gets_no_memlimit(tmp_path, monkeypatch):
-    """Theta's child JVMs then get the 1420 MB heap of its default."""
+    """As BenchExec's theta module gives a run without a memory limit."""
     monkeypatch.setattr(components, "run_memory_limit", lambda: None)
     runner, _start = theta_runner(tmp_path, "no-data-race")
 
