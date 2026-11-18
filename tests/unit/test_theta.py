@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Theta svcomp27 (10.5281/zenodo.24128717) as a component: its registry
+"""Theta svcomp27 (10.5281/zenodo.24339979) as a component: its registry
 entry and options, its command line per property and data model with its
 memory limit (ComponentSpec.gets_memory_limit), the status that BenchExec's
 theta module gives its real output and which of those CoOpeRace accepts, and
 which of its witness files count.
 
-tests/unit/theta-output holds (as .out files) the output of Theta svcomp27, run alone with
+tests/unit/theta-output holds (as .out files) the output of Theta 8.10.1 (24128717), run alone with
 BenchExec 4e89886c's theta module in the competition image user:2027
 (5235ed22) at the pre-run's limits (3 GB, 1 core) on goblint, 16 November
 2026, from the line after BenchExec's header. tests/unit/witnesses/theta holds
@@ -79,12 +79,12 @@ def test_only_theta_is_given_its_memory_limit():
 
 
 def test_theta_s_options_are_those_of_version_svcomp27_of_its_fm_tools_entry():
-    """theta.yml of fm-tools main 75f310bc (16 November 2026): version svcomp27,
-    10.5281/zenodo.24128717, whose pre-run of 13 November covers the task set.
-    The version svcomp27-validator shares the DOI and adds --witness."""
+    """theta.yml at the head 4374fb51 of fm-tools !1499 (18 November 2026): version
+    svcomp27, 10.5281/zenodo.24339979 (Theta 8.12.1). The version svcomp27-validator
+    shares the DOI and adds --witness."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["theta"] == ComponentVersion("10.5281/zenodo.24128717", "svcomp27", THETA_OPTIONS)
+    assert versions["theta"] == ComponentVersion("10.5281/zenodo.24339979", "svcomp27", THETA_OPTIONS)
 
 
 # --- the command line -----------------------------------------------------------

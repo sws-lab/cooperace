@@ -74,24 +74,23 @@ def test_every_component_has_a_task_limit_and_sv_sanitizers_that_of_a_program():
 
 
 def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entries():
-    """The benchexec_toolinfo_options of version svcomp27 of sv-sanitizers.yml and deagle.yml
-    and of version 4.2.2-5072-g4453227651 of cpachecker.yml in fm-tools main 75f310bc
-    (16 November 2026), and, for the archives that fm-tools main no longer lists
-    (tools-unlisted.txt), of version svcomp27 of goblint.yml in fm-tools 9dd09a3f, of
-    dartagnan.yml in 5f26160a, of ugemcutter.yml in 6452480b, of ikos-conc.yml in dbda8837 and
-    of uautomizer.yml in b7ccdb13 (iekke's in test_iekke.py): each the newest
-    archive of its component with a pre-run on the current task set. Theta's are checked in
-    test_theta.py, SAF's in test_saf.py."""
+    """The benchexec_toolinfo_options of version svcomp27 of goblint.yml, dartagnan.yml,
+    sv-sanitizers.yml and ikos-conc.yml in fm-tools main 8b1578ae (18 November 2026), and, for
+    the archives that fm-tools main does not list (tools-unlisted.txt), of version svcomp27 of
+    deagle.yml at the head ee2243ea of fm-tools !1479, of ugemcutter.yml at the head eb7f59d2 of
+    !1490, of uautomizer.yml in b7ccdb13 and of version 4.2.2-5072-g4453227651 of cpachecker.yml
+    in 05bf3109 (iekke's in test_iekke.py). Theta's are checked in test_theta.py, SAF's in
+    test_saf.py."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
-    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24080342", "svcomp27",
+    assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24288102", "svcomp27",
                                                    ("--portfolio-conf", "conf/svcomp27/seq.txt"))
-    assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.24134559", "svcomp27", ())
+    assert versions["dartagnan"] == ComponentVersion("10.5281/zenodo.24326544", "svcomp27", ())
     assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.24133222", "svcomp27", ("--full-output",))
     assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.24117367", "svcomp27", ())
-    assert versions["deagle"] == ComponentVersion("10.5281/zenodo.24278298", "svcomp27", ())
-    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.24060016", "svcomp27", ("--full-output",))
-    assert versions["ikos-conc"] == ComponentVersion("10.5281/zenodo.23736684", "svcomp27", ())
+    assert versions["deagle"] == ComponentVersion("10.5281/zenodo.24328339", "svcomp27", ())
+    assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.24339861", "svcomp27", ("--full-output",))
+    assert versions["ikos-conc"] == ComponentVersion("10.5281/zenodo.24225248", "svcomp27", ())
     assert versions["cpachecker"] == ComponentVersion(
         "10.5281/zenodo.24218973", "4.2.2-5072-g4453227651",
         ("--svcomp27", "--heap", "10000M", "--benchmark", "--timelimit", "900 s"))
@@ -101,7 +100,7 @@ def test_every_exception_of_tools_unlisted_names_a_component_of_a_lock_file_with
     archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
     exceptions = download_tools.read_unlisted_file(ROOT / "tools-unlisted.txt")
 
-    assert set(exceptions) == {"goblint", "dartagnan", "ugemcutter", "ikos-conc", "uautomizer"}
+    assert set(exceptions) == {"deagle", "ugemcutter", "theta", "uautomizer", "cpachecker"}
     for name, (doi, _commit) in exceptions.items():
         assert {**archive, **pool}[name] == doi
 
@@ -109,7 +108,7 @@ def test_every_exception_of_tools_unlisted_names_a_component_of_a_lock_file_with
 def test_deagle_s_witness_file_is_the_one_its_wrapper_writes():
     """The wrapper of the installed Deagle names the file of every --yaml-witness
     it passes deagle_exe; CoOpeRace takes Deagle's witness from exactly these.
-    Deagle 4.1.0 (23488039) wrote error-witness.yml, 4.2.0 (24150501, 24278298) witness.yml."""
+    Deagle 4.1.0 (23488039) wrote error-witness.yml, 4.2.0 (24150501, 24278298, 24328339) witness.yml."""
     wrapper = ROOT / "tools" / REGISTRY["Deagle"].directory / "deagle"
     if not wrapper.is_file():
         pytest.skip("Deagle is not installed under tools/")
