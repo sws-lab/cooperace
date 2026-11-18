@@ -310,7 +310,23 @@ def _limits(strategy: dict, key: str, tools: tuple[str, ...]) -> dict:
         if key == "cpuTimeLimits" and not _is_positive_number(value):
             raise ConfError(f"cpuTimeLimits gives {name!r} the limit {value!r}, "
                             "which is not a positive number of seconds")
+        if key == "cpuTimeLimits" and value < 1:
+            raise ConfError(f"cpuTimeLimits gives {name!r} the limit {value!r}, which is below 1 s; a component's "
+                            "CPU-time limit is passed to BenchExec in whole seconds, so it would be 0")
     return dict(limits)
+
+
+def _refuse_memory_over_100(phases: tuple[Phase, ...], memory_limits: Mapping[str, int | float | str]) -> None:
+    """Raises ConfError for a phase whose components' memory limits given as
+    percentages add up to more than 100 % of the run's memory limit: they
+    run at the same time, inside that limit."""
+    for number, phase in enumerate(phases, start=1):
+        shares = {name: float(memory_limits[name][:-1]) for name in phase.tools
+                  if isinstance(memory_limits.get(name), str)}
+        if sum(shares.values()) > 100:
+            listed = ", ".join(f"{name} {memory_limits[name]}" for name in shares)
+            raise ConfError(f"phase {number} gives its components {sum(shares.values()):g}% of the run's memory "
+                            f"together ({listed}), more than 100%")
 
 
 def _refuse_tree_format(conf: dict, what: str) -> None:
@@ -341,7 +357,9 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     component of a phase without an entry; has a name in "witnesses" twice or
     without an entry; or has a key of "cpuTimeLimits" or "memoryLimits" that
     is in no phase, or a value there that is not a positive number (or, in
-    "memoryLimits", a percentage above 0 and at most 100); or has a
+    "memoryLimits", a percentage above 0 and at most 100), a CPU-time limit
+    below 1 s, or a phase whose components' memory percentages add up to
+    more than 100; or has a
     runCpuTimeBudget that is not a positive number; or has an
     "ignoreIfCalls" that is not an object, a key there that is no entry of
     answers, or a value that is not a non-empty list of C identifiers; or has
@@ -411,8 +429,10 @@ def load(strategy: dict, known: Container[str]) -> Strategy:
     if "runCpuTimeBudget" in strategy and not _is_positive_number(budget):
         raise ConfError(f"runCpuTimeBudget is {budget!r}, which is not a positive number of seconds")
     cpu_time_limits = _limits(strategy, "cpuTimeLimits", tools)
+    memory_limits = _limits(strategy, "memoryLimits", tools)
+    _refuse_memory_over_100(phases, memory_limits)
     return Strategy(phases, answers, witnesses,
-                    cpu_time_limits, _limits(strategy, "memoryLimits", tools),
+                    cpu_time_limits, memory_limits,
                     budget, _ignore_if_calls(strategy.get("ignoreIfCalls", {}), answers),
                     _veto_windows(strategy.get("vetoWindows", {}), answers, cpu_time_limits), first_verdict,
                     witness_lint)

@@ -223,10 +223,36 @@ def test_witnesses_may_be_empty_and_limits_may_be_absent(known):
 
 
 def test_load_keeps_the_limits_as_the_conf_gives_them(known):
-    strategy = config.load(with_changes(GOBLINT, memoryLimits={"Goblint": "12.5%"}, cpuTimeLimits={"Goblint": 0.5}),
+    strategy = config.load(with_changes(GOBLINT, memoryLimits={"Goblint": "12.5%"}, cpuTimeLimits={"Goblint": 1.5}),
                            known)
 
-    assert strategy.step("Goblint") == Step("Goblint", "all", "12.5%", 0.5)
+    assert strategy.step("Goblint") == Step("Goblint", "all", "12.5%", 1.5)
+
+
+@pytest.mark.parametrize("value", [0.5, 0.999])
+def test_a_cpu_time_limit_below_one_second_is_refused(known, value):
+    with pytest.raises(config.ConfError, match=rf"cpuTimeLimits gives 'Goblint' the limit {value}, which is below 1 s"):
+        config.load(with_changes(GOBLINT, cpuTimeLimits={"Goblint": value}), known)
+
+
+def test_a_cpu_time_limit_of_one_second_loads(known):
+    assert config.load(with_changes(GOBLINT, cpuTimeLimits={"Goblint": 1}), known).cpu_time_limits == {"Goblint": 1}
+
+
+def test_memory_shares_of_one_phase_above_100_percent_are_refused(known):
+    two = {"phases": [["Goblint", "Deagle"], ["Dartagnan"]], "answers": [["Goblint", "Deagle", "Dartagnan"]],
+           "witnesses": [], "memoryLimits": {"Goblint": "60%", "Deagle": "50.5%", "Dartagnan": "90%"}}
+
+    with pytest.raises(config.ConfError, match=r"phase 1 gives its components 110.5% of the run's memory together "
+                                        r"\(Goblint 60%, Deagle 50.5%\), more than 100%"):
+        config.load(two, known)
+
+
+def test_memory_shares_of_100_percent_in_a_phase_and_bytes_beside_them_load(known):
+    two = {"phases": [["Goblint", "Deagle"], ["Dartagnan", "Deagle"]], "answers": [["Goblint", "Deagle", "Dartagnan"]],
+           "witnesses": [], "memoryLimits": {"Goblint": "45%", "Deagle": "55%", "Dartagnan": 10**12}}
+
+    assert config.load(two, known).memory_limits["Deagle"] == "55%"
 
 
 def test_a_strategy_is_frozen(known):
