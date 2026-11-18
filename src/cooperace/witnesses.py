@@ -376,10 +376,14 @@ def names_specification(spec: str, formulas: tuple[str, ...]) -> bool:
 
 def text_passes(text: str, format_: WitnessFormat, formulas: tuple[str, ...]) -> bool:
     """`passes` of `text` for the WitnessFormat `format_` and the formulas
-    `formulas` of the verdict's specification."""
+    `formulas` of the verdict's specification. Text that PyYAML cannot load,
+    whatever it raises, does not pass: besides YAMLError, its constructors
+    raise ValueError for a timestamp out of range or an integer beyond
+    Python's int-str limit, and nesting raises RecursionError; a component's
+    witness is untrusted input, and its failing must not cost the verdict."""
     try:
         entries = yaml.load(text, Loader=_LOADER)
-    except (yaml.YAMLError, RecursionError):
+    except Exception:  # noqa: BLE001 - a witness that cannot be loaded does not pass
         return False
     if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
         return False

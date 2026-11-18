@@ -240,6 +240,19 @@ def test_a_valid_memtrack_witness_needs_format_2_3():
     assert witnesses.passes(violation(MEMTRACK, '"2.3"'), "valid-memsafety", "false", "valid-memtrack")
 
 
+@pytest.mark.parametrize("value", ["2026-13-45 10:40:38", "1" * 5000], ids=["timestamp-out-of-range",
+                                                                         "integer-beyond-str-limit"])
+def test_a_witness_that_yaml_cannot_construct_does_not_pass_in_process(tmp_path, value):
+    text = changed(LAMPORT, "creation_time: 2026-10-19T09:55:44Z", f"creation_time: {value}")
+    path = tmp_path / "witness.yml"
+    path.write_text(text)
+
+    assert path.stat().st_size <= witnesses.IN_PROCESS_BYTES
+    assert not witnesses.passes(text, "no-data-race", "false")
+    assert not witnesses.file_passes(str(path), "no-data-race", "false")
+    assert witnesses.passing_witness([str(path)], "no-data-race", "false") is None
+
+
 def test_which_verdicts_need_a_witness():
     needed = {(prop, verdict) for prop in witnesses.FORMULAS for verdict in ("true", "false")
               if witnesses.needs_witness(prop, verdict)}
