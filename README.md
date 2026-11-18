@@ -35,19 +35,20 @@ CoOpeRace's own files are under the MIT license (`LICENSE`). The SV-COMP archive
 own license files and third-party notices, which apply to it alone; CoOpeRace runs each as a separate
 program. One of them needs a notice here:
 
-- **IKOS-ConC** (`tools/ikos-conc/`, Zenodo 10.5281/zenodo.23736684, by Ronghui Ruan) is a
+- **IKOS-ConC** (`tools/ikos-conc/`, Zenodo 10.5281/zenodo.24225248, by Ronghui Ruan) is a
   Modification of NASA's IKOS (`tools/ikos-conc/MODIFICATIONS.txt`) and is distributed under the NASA
   Open Source Agreement 1.3 (`tools/ikos-conc/LICENSE.txt`):
   Copyright © 2011 United States Government as represented by the Administrator of the National
   Aeronautics and Space Administration. All Rights Reserved.
   Its source code is at <https://github.com/2393591260/ikos-conc>, revision
-  3d3b027d5a8669c45dc7b998f971aa5d57df141d (`tools/ikos-conc/BUILD-INFO.json`); the notices of the
-  libraries it bundles are in `tools/ikos-conc/licenses/`, with the corresponding source of the
-  Parma Polyhedra Library (GPL-3.0) in `tools/ikos-conc/licenses/ppl-source/`. Neither NASA nor the
-  authors of IKOS-ConC endorse CoOpeRace.
+  24358baa4b88209f105a1c17b0b8894dd8589de5 (`tools/ikos-conc/BUILD-INFO.json`), with the patch in
+  `tools/ikos-conc/source-patches/`; the notices of the libraries it bundles are in
+  `tools/ikos-conc/licenses/`, with the corresponding source of the Parma Polyhedra Library (GPL-3.0)
+  in `tools/ikos-conc/licenses/ppl-source/`. Neither NASA nor the authors of IKOS-ConC endorse
+  CoOpeRace.
 
-The archive of the conf variant `theta` (`make svcomp CONF_VARIANT=theta`; `conf/README.md`) also
-holds **Theta** svcomp27 (`tools/theta/`, Zenodo 10.5281/zenodo.24128717, Apache-2.0,
+The archive of a conf variant whose conf runs Theta (`make svcomp CONF_VARIANT=<name>`; `conf/README.md`)
+also holds **Theta** svcomp27 (`tools/theta/`, Zenodo 10.5281/zenodo.24339979, Apache-2.0,
 `tools/theta/LICENSE`), with the licences of its libraries and solvers in `tools/theta/LIB_LICENSES.md`.
 
 `THIRD-PARTY-SOURCES.md` lists every part of the bundled components that is under the GPL or LGPL

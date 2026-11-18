@@ -9,13 +9,14 @@ LGPL). The texts of the GPL version 2 and version 3 are also in `LICENSES/GPL-2.
 the archive is distributed; if one becomes unavailable, write to the maintainers of CoOpeRace
 (https://github.com/sws-lab/cooperace) for a copy.
 
-## IKOS-ConC (`tools/ikos-conc/`, Zenodo 10.5281/zenodo.23736684)
+## IKOS-ConC (`tools/ikos-conc/`, Zenodo 10.5281/zenodo.24225248)
 
 IKOS-ConC itself is under the NASA Open Source Agreement 1.3 (`tools/ikos-conc/LICENSE.txt`):
 Copyright © 2011 United States Government as represented by the Administrator of the National
 Aeronautics and Space Administration. All Rights Reserved. Its source:
-https://github.com/2393591260/ikos-conc, commit 3d3b027d5a8669c45dc7b998f971aa5d57df141d
-(`tools/ikos-conc/BUILD-INFO.json`), and the Zenodo record above.
+https://github.com/2393591260/ikos-conc, commit 24358baa4b88209f105a1c17b0b8894dd8589de5
+(`tools/ikos-conc/BUILD-INFO.json`) with the patch in `tools/ikos-conc/source-patches/`, and the
+Zenodo record above.
 
 - **Parma Polyhedra Library (PPL) 1.2**, Ubuntu package `libppl14` 1:1.2-8.1build5, GPL-3.0-or-later.
   Conveyed as the shared object `tools/ikos-conc/lib/libppl.so.14`, which `lib/libap_ppl.so`
@@ -29,6 +30,10 @@ https://github.com/2393591260/ikos-conc, commit 3d3b027d5a8669c45dc7b998f971aa5d
   `tools/ikos-conc/licenses/APRON-COPYING`, `APRON-PPL-COPYING`, `APRON-products-COPYING`.
   Source: https://github.com/antoinemine/apron. The archive does not record which APRON revision
   was built; ask IKOS-ConC's author for it.
+- Not under the GPL or LGPL: the Python 3.12.3 runtime in `tools/ikos-conc/libexec/` (PSF licence,
+  `licenses/python3.12-copyright`; its `readline` and `_gdbm` modules use the system's libraries,
+  which the archive does not hold), LLVM 14.0.6, Z3, Boost, oneTBB, ICU and libxml2, each with its
+  notice in `tools/ikos-conc/licenses/`.
 
 ## WitnessLint (`tools/witnesslint/`, Zenodo 10.5281/zenodo.24089806)
 
@@ -38,9 +43,9 @@ no part under the GPL or LGPL: its code is under the Apache License 2.0
 (`tools/witnesslint/LICENSE`, `tools/witnesslint/LICENSES/Apache-2.0.txt`), some files under
 BSD-2-Clause and CC0-1.0 (`tools/witnesslint/LICENSES/`).
 
-## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.24080342)
+## Goblint (`tools/goblint/`, Zenodo 10.5281/zenodo.24288102)
 
-Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit 9febbae9c.
+Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, commit 69e8eb70b.
 
 - **APRON**, LGPL-2.1 with a linking exception: the shared objects `tools/goblint/lib/libapron.so`,
   `libboxD.so`, `liboctD.so`, `libpolkaMPQ.so`. Licence: `tools/goblint/lib/LICENSE.APRON`.
@@ -48,21 +53,21 @@ Goblint is under the MIT license. Source: https://github.com/goblint/analyzer, c
 - The OCaml libraries linked statically into `tools/goblint/goblint` that are under the LGPL carry
   the OCaml static-linking exception.
 
-## ULTIMATE GemCutter (`tools/ugemcutter/`, Zenodo 10.5281/zenodo.24060016)
+## ULTIMATE GemCutter (`tools/ugemcutter/`, Zenodo 10.5281/zenodo.24339861)
 
 - **Ultimate**, LGPL-3.0 (`tools/ugemcutter/LICENSE`, `LICENSE.GPL.LESSER`, `LICENSE.GPL`).
-  Source: https://github.com/ultimate-pa/ultimate, commit 991986cc09 (version
-  0.3.2-dev-991986cc09).
+  Source: https://github.com/ultimate-pa/ultimate, commit c425bfe605 (version
+  0.3.2-dev-c425bfe605).
 - **LTL2BA** 1.x, GPL-2.0-or-later: `tools/ugemcutter/ltl2ba`. Licence: `ltl2ba-LICENSE` and
   `LICENSE.GPL` (version 3, which "or later" permits). Source: http://www.lsv.fr/~gastin/ltl2ba/.
 - Not under the GPL: cvc5 1.4.2 (BSD-3-Clause; built without its optional GPL libraries, per
   `cvc5 --show-config`), Z3 4.15.4 (MIT), Bitwuzla 0.9.1, Golem 0.9.1 (MIT), and MathSAT5, whose
   licence (`mathsat-LICENSE`) allows research and evaluation use only.
 
-## Dartagnan (`tools/dartagnan/`, Zenodo 10.5281/zenodo.24134559)
+## Dartagnan (`tools/dartagnan/`, Zenodo 10.5281/zenodo.24326544)
 
 Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon/Dat3M, commit
-38d5fe418 (version 4.5.0-alpha).
+76eef24c7 (version 4.5.0-alpha).
 
 - Its executable `dartagnan/target/dartagnan` is a native image built with Oracle GraalVM
   25.0.4+7.1. It contains the Java class library of JDK 25.0.4, GPL-2.0 with the Classpath
@@ -70,7 +75,7 @@ Dartagnan is under the MIT license. Source: https://github.com/hernanponcedeleon
   https://github.com/openjdk/jdk25u/releases/tag/jdk-25.0.4%2B7. The licences of the other
   dependencies in the image are in `tools/dartagnan/LICENSES/`.
 
-## Deagle (`tools/deagle/`, Zenodo 10.5281/zenodo.24278298)
+## Deagle (`tools/deagle/`, Zenodo 10.5281/zenodo.24328339)
 
 Deagle's `LICENSE` is BSD-4-Clause, with the terms of CBMC and MiniSat. Its archive also holds the
 GPL-3.0 text (`tools/deagle/COPYING`). Source: https://github.com/thufv/deagle (version 4.2.0;
@@ -80,12 +85,12 @@ GPL-3.0 text (`tools/deagle/COPYING`). Source: https://github.com/thufv/deagle (
 
 MIT; no bundled third-party code.
 
-## Theta (`tools/theta/`, Zenodo 10.5281/zenodo.24128717), in the archive of the conf variant theta only
+## Theta (`tools/theta/`, Zenodo 10.5281/zenodo.24339979), in the archives of the conf variants that run it
 
-The archive built with `CONF_VARIANT=theta` (`scripts/svcomp-dist.sh`) also holds Theta svcomp27
-(version 8.10.1), exactly as its Zenodo archive holds it; the default archive does not. Theta is
+The archive built with a `CONF_VARIANT` whose conf runs Theta (`scripts/svcomp-dist.sh`) also holds
+Theta svcomp27 (version 8.12.1), exactly as its Zenodo archive holds it; the default archive does not. Theta is
 under the Apache License 2.0 (`tools/theta/LICENSE`). Source: https://github.com/ftsrg/theta,
-release 8.10.1. `tools/theta/LIB_LICENSES.md` holds the licence texts of its libraries and solvers;
+release 8.12.1. `tools/theta/LIB_LICENSES.md` holds the licence texts of its libraries and solvers;
 those under the GPL or LGPL are:
 
 - **Yices 2** 2.6.4 with JavaSMT's JNI bindings, GPL-3.0, statically linking GNU MP (LGPL-3.0 or
@@ -104,9 +109,9 @@ those under the GPL or LGPL are:
   libraries per its `COPYING`), JavaSMT (Apache-2.0), and MathSAT5 5.6.19, whose licence
   (`tools/theta/solvers/mathsat/5.6.19/LICENSE.txt`) allows research and evaluation use only.
 
-## SAF (`tools/saf/`, Zenodo 10.5281/zenodo.24267653), in the archive of the conf variant saf only
+## SAF (`tools/saf/`, Zenodo 10.5281/zenodo.24267653), in the archives of the conf variants that run it
 
-The archive built with `CONF_VARIANT=saf` also holds SAF svcomp27 (version 0.1.0), exactly as its
+The archive built with a `CONF_VARIANT` whose conf runs SAF also holds SAF svcomp27 (version 0.1.0), exactly as its
 Zenodo archive holds it. SAF is under the MIT License (`tools/saf/LICENSE`, "Copyright (c) 2025
 SAF Contributors"; the record's licence is MIT too). Source:
 https://github.com/Static-Analyzer-Factory/static-analyzer-factory. Nothing in it is under the GPL
