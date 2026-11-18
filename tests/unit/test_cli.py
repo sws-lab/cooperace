@@ -468,6 +468,38 @@ def test_where_benchexec_cannot_make_its_container_nothing_starts_and_the_error_
     assert runner.work_dir is None
 
 
+# --- ignoreIfCalls -------------------------------------------------------------
+
+BARRIER_GUARDED = {"phases": [["Deagle"], ["Goblint"]], "answers": [["Deagle"], ["Goblint"]], "witnesses": [],
+                   "ignoreIfCalls": {"Deagle": ["pthread_barrier_wait"]}}
+
+
+@pytest.mark.parametrize("program, started", [
+    ("int main(void) { pthread_barrier_wait(&b); return 0; }\n", ("Goblint",)),
+    ("int main(void) { return 0; }\n", ("Deagle", "Goblint")),
+], ids=["calls", "does-not-call"])
+def test_run_drops_the_entries_ignore_if_calls_names_before_any_component_starts(
+        tmp_path, monkeypatch, capsys, program, started):
+    """The guard is applied to the strategy cli.run executes: Deagle's entry
+    is dropped for a task that calls pthread_barrier_wait, and kept for one
+    that does not."""
+    task = tmp_path / "task.c"
+    task.write_text(program)
+    runner = ComponentRunner(str(task), str(DATA_RACE), "ILP32", versions={})
+    monkeypatch.setattr(runner, "installation_problems", lambda names: [])
+    monkeypatch.setattr(runner, "container_problems", lambda: [])
+    monkeypatch.setattr(runner, "probe_versions", lambda names: None)
+    executed = []
+    monkeypatch.setattr(cli.strategy, "execute",
+                        lambda root, runner, group=None: executed.append(root.tools) or "unknown")
+
+    assert cli.run(data_race_conf(BARRIER_GUARDED), runner) == "unknown"
+
+    assert executed == [started]
+    ignored = "CoOpeRace: the task calls pthread_barrier_wait: Deagle:" in capsys.readouterr().out
+    assert ignored == ("Deagle" not in started)
+
+
 # --- an exception of CoOpeRace's own -------------------------------------------
 
 def test_an_unexpected_exception_ends_cooperace_with_its_traceback_and_no_verdict(
