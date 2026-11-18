@@ -90,7 +90,7 @@ def test_saf_s_tool_info_module_is_benchexec_s_saf_module_with_a_header():
     bench-defs' pin) with CoOpeRace's comment after the license header."""
     text = (ROOT / "src" / "cooperace" / "toolinfo" / "saf.py").read_text()
 
-    assert "SPDX-License-Identifier: Apache-2.0" in text
+    assert "SPDX-" + "License-Identifier: Apache-2.0" in text
     assert "Copied unchanged (below this comment) by CoOpeRace" in text
     assert 'cmd = [executable, "verify", "--property", task.property_file]' in text
 
