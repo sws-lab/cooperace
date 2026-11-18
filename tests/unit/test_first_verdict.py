@@ -287,6 +287,7 @@ STATUSES = [bresult.RESULT_TRUE_PROP, bresult.RESULT_FALSE_PROP, bresult.RESULT_
             bresult.RESULT_FALSE_FREE, bresult.RESULT_FALSE_MEMTRACK, bresult.RESULT_UNKNOWN, "ERROR (1)",
             "TIMEOUT", "OUT OF MEMORY"]
 SCENARIOS = 25
+MAX_SCENARIOS = 100
 # Seconds within which two ends count as at the same time, and within which the
 # result must be delivered after the decider's end.
 TIE = 0.03
@@ -415,8 +416,11 @@ FV_THETA = json.loads((ROOT / "conf" / "svcomp27-fv-theta.json").read_text())
 FV_VARIANTS = ["fv-theta", "saf", "fv-final-nosaf", "fv-final-saf", "fv-final-saf-readmit", "fv-final-saf-iekke",
                "fv-final-saf-readmit-iekke", "all9"]
 FV_CONFS = {variant: json.loads((ROOT / "conf" / f"svcomp27-{variant}.json").read_text()) for variant in FV_VARIANTS}
-# Its wall-time limits scaled to the scenarios' delays (1200 s becomes 1.2 s, 37 s 0.037 s)
-FV_THETA_WALL_SCALE = 0.001
+# Its wall-time limits scaled to the scenarios' delays (0.04 s to 0.96 s): the 37 s phases of the 15 s caps become
+# 0.12 s, so that their components sometimes end within them, and the long phases (450 s and more) 1.4 s and more,
+# which no delay reaches. (At 0.001, 37 s became 0.037 s, below every delay: every 15 s component was cut, only the
+# long phases could decide, and in confs with two of them a seed could give no definite verdict in all 25 scenarios.)
+FV_THETA_WALL_SCALE = 0.0032
 
 
 def scaled(conf_strategy, scale):
@@ -452,7 +456,10 @@ def test_random_scenarios_on_the_fv_theta_conf_deliver_the_first_accepted_verdic
 def check_scenarios(property_name, make_strategy, seed, lint, tmp_path, monkeypatch, capsys):
     """Runs SCENARIOS random behaviours of the components of the strategies
     `make_strategy(rng)` (with witnessLint if `lint`) through cli.run and checks the
-    mode's rules on each."""
+    mode's rules on each; if they include no scenario with a definite verdict
+    or none without one, more, up to MAX_SCENARIOS in all, until they do. (In
+    a conf whose verdicts all need a witness, such as the candidates' no-overflow
+    with seven components, few random behaviours give any accepted verdict.)"""
     task = tmp_path / "task.c"
     task.write_text("int main(void) { return 0; }\n")
     monkeypatch.chdir(tmp_path)
@@ -467,7 +474,9 @@ def check_scenarios(property_name, make_strategy, seed, lint, tmp_path, monkeypa
         monkeypatch.setattr(witnesslint, "_usable", None)
     counts = {"definite": 0, "unknown": 0, "late-rejected": 0}
 
-    for number in range(SCENARIOS):
+    number = -1
+    while (number := number + 1) < SCENARIOS or (
+            number < MAX_SCENARIOS and not (counts["definite"] and counts["unknown"])):
         conf_strategy = {**make_strategy(rng), **({"witnessLint": True} if lint else {})}
         conf = {"properties": {property_name: conf_strategy}}
         root = config.load(conf_strategy, REGISTRY)
