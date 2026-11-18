@@ -124,7 +124,7 @@ The rules for the competition's limits, the invariant of cooperace/D15 and the f
 
 - **A tool listed in consecutive phases keeps running across their boundary** and is not restarted. A tool may not be listed in two phases that are not consecutive.
 - **The next phase starts** when every tool of the current phase that is not in the next one has ended, or when the phase's wall-time limit passes. A tool has ended when it answered, gave up, reached its limit, or was stopped.
-- **A phase's wall-time limit** is a deadline in seconds counted from when the phase starts. When it passes, CoOpeRace stops every tool of the phase that is not also in the next phase, and the next phase starts; tools continuing into the next phase are not affected. In the last phase, it stops every tool still running. A phase without it runs until the run's own limits. It is needed because a CPU-time limit does not end a tool that waits without using CPU time.
+- **A phase's wall-time limit** is a deadline in seconds counted from when the phase starts. When it passes, CoOpeRace stops every tool of the phase that is not also in the next phase, and the next phase starts; tools continuing into the next phase are not affected. In the last phase, it stops every tool still running. A phase without it runs until the run's own limits. It is needed because a CPU-time limit does not end a tool that waits without using CPU time. A tool with a CPU-time limit also has BenchExec's wall-time limit of that limit plus 30 s, so a phase limit longer than that never ends it (see "Known limits").
 
 ## `answers`: whose verdict wins
 
@@ -298,3 +298,8 @@ CoOpeRace checks the property file, the conf and the witness table before it sta
 Every strategy of the conf is checked, not only the one for the task's property. CoOpeRace also stops this way, before any tool starts, if the executable of a tool that any strategy of the conf names is not under the `tools/` directory of CoOpeRace; a conf that names a tool that is not installed (for example ULTIMATE Automizer, which `scripts/download-tools.py` fetches only with `--pool`, since it is not in `tools.txt`) is refused as a whole, for every property. The same holds for a tool of any strategy whose `tools/<name>/.doi` is not the DOI that `tools-options.json` holds its options for.
 
 A conf given with `--conf` is a path relative to the working directory; without it, CoOpeRace reads `conf/svcomp27.json` from its own directory.
+
+## Known limits
+
+- **BenchExec's wall-time limit of a capped tool.** CoOpeRace gives `RunExecutor` a tool's CPU-time limit and no wall-time limit, so BenchExec ends the tool after that limit plus 30 s of wall time (`terminationreason=walltime`, `TIMEOUT`). A phase's `wallTimeLimit` above a tool's CPU-time limit plus 30 s is therefore never what ends that tool (GemCutter with 322 s: 352 s, not the 498 s of its phase), and a tool that gets less than about one core can end before its CPU-time limit.
+- **No wall-time budget of the run.** `runCpuTimeBudget` counts CPU time only. A run whose wall time reaches the competition's wall-time limit (990 s, at the 870 s budget a wall/CPU ratio above about 1.14) is ended by BenchExec without a verdict line. In the first-verdict mode no accepted verdict is lost by it, since the first one ends the run.

@@ -265,6 +265,12 @@ def test_a_conf_in_the_tree_format_is_refused_before_anything_runs(make_runner, 
 
 def test_an_exception_while_the_strategy_runs_stops_the_components_and_propagates(
         make_runner, tmp_path, run_dir, capsys):
+    """The contract for a failure of CoOpeRace's own, here a witness that
+    cannot be delivered: execute stops every component, removes the work
+    directory and propagates the exception, so that the command line ends
+    without a verdict line, which BenchExec reads as ERROR (no result).
+    README.md, "Known limits", states it for a failed delivery, a work
+    directory that cannot be made and a failed container check."""
     run, _ = stubbed_run(make_runner, tmp_path, "sequential",
                          Stub_A='echo "STUB-STATUS: true"\n')
 

@@ -112,6 +112,14 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
 [How to get tool combinations and their theoretical scores](/src/tool_combinations)  
 [How to create a tool configuration for CoOpeRace CLI](/conf)  
 
+## Known limits
+
+- **A failure of CoOpeRace's own ends the run without a verdict line.** A witness that cannot be delivered (the working directory is full or read-only), a work directory that cannot be made (`ComponentRunner.prepare`), and a failed check that BenchExec can make a component's container (`ComponentRunner.container_problems`, one attempt) end CoOpeRace with `CoOpeRace: error: ...` on stderr and no verdict line, which BenchExec's tool-info module reads as ERROR: the task gets no result (`tests/unit/test_execute.py`, `tests/unit/test_cli.py`).
+- **The task limit ends nothing.** A component that reaches its task limit (`pids.max`) is not killed: its `fork` and `pthread_create` fail, and a verdict it prints afterwards is accepted like any other. CoOpeRace does not see that the limit was reached.
+- **A component's log is read whole.** CoOpeRace gives `RunExecutor` no `maxLogfileSize` and reads a component's whole log into its own process, which takes about five times the log's size in memory; BenchExec shrinks the log of a tool run alone to 20 MB. The largest component logs seen are about 2 MB.
+- **Tool-info code runs in CoOpeRace's own process.** The tool-info modules of Deagle (`executable`) and Theta (`cmdline`) run the tool with `--version` or `version` to learn its version, outside any container, limit and timeout, before the components start (Theta's is a JVM started with `-Xmx14210m`). Only the version probe of the ULTIMATE tools is bounded (`ComponentRunner.probe_versions`, 60 s).
+- **The verdict line is printed without the print lock.** A component thread left behind after the run (`CoOpeRace: ... left behind`) could print its block after the verdict line while the interpreter shuts down, and BenchExec's module reads only the last line. This has not been seen.
+
 ## SV-COMP Smoketests in Docker
 
 1. Check the archive in the two environments in which fm-tools' CI checks it before it can be
