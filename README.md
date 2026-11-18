@@ -117,8 +117,14 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
 1. Check the archive in the two environments in which fm-tools' CI checks it before it can be
    registered (`ci/.gitlab-ci.yml` of fm-tools):
    ```bash
-   make svcomp FMTOOLS_ENTRY=<path or URL of fm-tools' data/cooperace.yml>
+   make svcomp CONF_VARIANT=<name> FMTOOLS_ENTRY=<path or URL of fm-tools' data/cooperace.yml>
    ```
+   `CONF_VARIANT` names the conf the archive runs, `conf/svcomp27-<name>.json` (`conf/README.md`). It
+   must be a submission conf, in the first-verdict mode in every property
+   ([`scripts/sv-comp/submission-conf.py`](scripts/sv-comp/submission-conf.py)); the build refuses
+   it unset, `default` (`conf/svcomp27.json`, the bracket mode) and any conf of the bracket mode unless
+   `ALLOW_BRACKET_CONF=1`, which builds an archive for comparison whose `VERSION` ends in
+   `bracket-conf` and which must never be submitted.
    `FMTOOLS_ENTRY` defaults to the file on fm-tools' branch `cooperace-2027`.
    [`scripts/sv-comp/fmtools-entry.py`](scripts/sv-comp/fmtools-entry.py) reads from it the version
    that the SV-COMP 2027 participation names as `tool_version`, as the CI does, and that version's

@@ -30,12 +30,18 @@
 # benchmarks page states, and ends VERSION with "witnesses-strict".
 #
 # CONF_VARIANT selects the conf the archive carries as conf/svcomp27.json, the
-# one ./cooperace runs by default: "default" (or unset) keeps
-# conf/svcomp27.json; another name NAME packs conf/svcomp27-NAME.json in its
-# place, adds to the archive's tools.txt, and packs, each component of
+# one ./cooperace runs by default: a name NAME packs conf/svcomp27-NAME.json in
+# its place, adds to the archive's tools.txt, and packs, each component of
 # tools-pool.txt that this conf runs and tools.txt lacks (Theta, for "theta"),
 # and ends VERSION with "conf-NAME". tools/ must hold those components at the
-# DOI of tools-pool.txt (scripts/download-tools.py --pool).
+# DOI of tools-pool.txt (scripts/download-tools.py --pool). "default" keeps
+# conf/svcomp27.json, the conf of the bracket mode.
+#
+# The packed conf must be a submission conf (scripts/sv-comp/submission-conf.py:
+# every property in the first-verdict mode, no vetoWindows), so CONF_VARIANT
+# unset or "default" is refused, as is a variant in the bracket mode.
+# ALLOW_BRACKET_CONF=1 builds such an archive, for comparison with the bracket
+# mode; its VERSION ends in "bracket-conf". Never submit such an archive.
 
 set -euo pipefail
 
@@ -54,6 +60,12 @@ case "${CONF_VARIANT}" in
   default) ;;
   *[!a-z0-9-]*|'') echo "CONF_VARIANT must be default or the NAME of a conf/svcomp27-NAME.json, not ${CONF_VARIANT}" >&2; exit 1 ;;
 esac
+if [ "${CONF_VARIANT}" = default ] && [ "${ALLOW_BRACKET_CONF:-}" != 1 ]; then
+  echo "Refusing to build: CONF_VARIANT is unset or default, which packs conf/svcomp27.json, a conf of the" >&2
+  echo "bracket mode. Set CONF_VARIANT to the NAME of the submission conf conf/svcomp27-NAME.json, or" >&2
+  echo "ALLOW_BRACKET_CONF=1 for an archive with the bracket conf, which is not submitted." >&2
+  exit 1
+fi
 
 TREE=HEAD
 if ! git diff --quiet HEAD --; then
@@ -121,6 +133,24 @@ PY
   cat "${DIST}/tools.txt" >&2
 fi
 
+# The packed conf must be a submission conf, unless ALLOW_BRACKET_CONF=1.
+BRACKET_CONF=0
+CONF_CHECK=0
+python3 -B scripts/sv-comp/submission-conf.py "${DIST}" || CONF_CHECK=$?
+if [ "${CONF_CHECK}" != 0 ]; then
+  if [ "${CONF_CHECK}" != 1 ]; then
+    echo "Refusing to build: the packed conf/svcomp27.json cannot be checked (above)." >&2
+    exit 1
+  fi
+  if [ "${ALLOW_BRACKET_CONF:-}" != 1 ]; then
+    echo "Refusing to build: the packed conf/svcomp27.json is no submission conf (above)." >&2
+    echo "ALLOW_BRACKET_CONF=1 builds it anyway, for an archive that is not submitted." >&2
+    exit 1
+  fi
+  BRACKET_CONF=1
+  echo "!!!!!!!! ALLOW_BRACKET_CONF=1: this archive runs a conf of the bracket mode. DO NOT SUBMIT IT. !!!!!!!!" >&2
+fi
+
 # tools.txt, the lock file of the components, has one "<name>: <doi>" line per
 # component. tools/ must hold exactly those DOIs, as download-tools.py records,
 # and tools-options.json the options of those DOIs.
@@ -154,6 +184,9 @@ done < "${DIST}/tools-checkers.txt"
 VERSION_TEXT="${FMTOOLS_VERSION} ${DESCRIBE}"
 if [ "${CONF_VARIANT}" != default ]; then
   VERSION_TEXT="${VERSION_TEXT} conf-${CONF_VARIANT}"
+fi
+if [ "${BRACKET_CONF}" = 1 ]; then
+  VERSION_TEXT="${VERSION_TEXT} bracket-conf"
 fi
 if [ "${WITNESS_MODE}" = strict ]; then
   cp "${DIST}/conf/witness-modes/strict.json" "${DIST}/conf/witnesses.json"

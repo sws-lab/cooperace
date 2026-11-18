@@ -14,12 +14,17 @@ FMTOOLS_ENTRY ?=
 # (scripts/svcomp-dist.sh, conf/README.md "The witness table").
 WITNESS_MODE ?= default
 export WITNESS_MODE
-# The conf packed as conf/svcomp27.json: default, or NAME for
-# conf/svcomp27-NAME.json with the components of tools-pool.txt it runs
-# (scripts/svcomp-dist.sh). The fm-tools entry (FMTOOLS_ENTRY) must then
-# list those components' required packages too.
-CONF_VARIANT ?= default
+# The conf packed as conf/svcomp27.json: NAME for conf/svcomp27-NAME.json
+# with the components of tools-pool.txt it runs (scripts/svcomp-dist.sh). The
+# fm-tools entry (FMTOOLS_ENTRY) must then list those components' required
+# packages too. It must be a submission conf (first-verdict mode in every
+# property); unset or "default" (conf/svcomp27.json) and any conf of the
+# bracket mode are refused unless ALLOW_BRACKET_CONF=1, for an archive that
+# is not submitted.
+CONF_VARIANT ?=
 export CONF_VARIANT
+ALLOW_BRACKET_CONF ?=
+export ALLOW_BRACKET_CONF
 # Further options of `docker run`, for example --cpuset-cpus 0-3.
 DOCKER_RUN_OPTIONS ?=
 
