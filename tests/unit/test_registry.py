@@ -67,9 +67,9 @@ def test_every_component_has_its_directory():
 
 
 def test_every_component_has_a_task_limit_and_sv_sanitizers_that_of_a_program():
-    # sv-sanitizers and SAF run the task's program, whose threads count as their tasks.
+    # sv-sanitizers, SAF and iekke run the task's program, whose threads count as their tasks.
     assert {name: spec.task_limit for name, spec in REGISTRY.items()} == {
-        name: PROGRAM_TASK_LIMIT if name in ("sv-sanitizers", "SAF") else TASK_LIMIT for name in REGISTRY}
+        name: PROGRAM_TASK_LIMIT if name in ("sv-sanitizers", "SAF", "iekke") else TASK_LIMIT for name in REGISTRY}
     assert (TASK_LIMIT, PROGRAM_TASK_LIMIT) == (1024, 2048)
 
 
