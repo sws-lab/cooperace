@@ -349,6 +349,16 @@ def test_an_unreadable_cpu_clock_disables_the_budget(capsys, monkeypatch):
 
     assert result == "true"
     assert runner.stopped == []
+    assert ("CoOpeRace: the CPU time of the run's cgroup cannot be read: its CPU-time budget of 1 s is not applied"
+            in capsys.readouterr().out.splitlines())
+
+
+def test_a_readable_cpu_clock_prints_no_line_about_the_budget(capsys, monkeypatch):
+    monkeypatch.setattr(strategy, "run_cpu_seconds", lambda: 0.0)
+    run(dict(OVERFLOW, runCpuTimeBudget=100), "no-overflow", Goblint=Script(0.01), GemCutter=Script(0.01, TRUE,
+        witness=True), Deagle=Script(0.01))
+
+    assert "cannot be read" not in capsys.readouterr().out
 
 
 # --- execute ------------------------------------------------------------------

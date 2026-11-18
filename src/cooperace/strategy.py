@@ -187,7 +187,12 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
 
     The component threads are daemon threads. When it ends, it waits for
     them at most JOIN_SECONDS in all, and names those still alive in a line
-    "CoOpeRace: ... left behind"."""
+    "CoOpeRace: ... left behind".
+
+    The run's CPU-time budget (root.run_cpu_time_budget) is applied only
+    while run_cpu_seconds can read the run's CPU time; if it cannot when the
+    strategy begins, a line "CoOpeRace: ..." says that the budget is not
+    applied, and the run then ends by the competition's own limit."""
     verdicts = Verdicts(root, runner.property_name)
     schedule = Schedule(verdicts)
     events = queue.Queue()
@@ -224,6 +229,9 @@ def run_strategy(root: Strategy, group: ComponentGroup, runner: StepRunner) -> O
             threads.append(thread)
 
     budget = root.run_cpu_time_budget
+    if budget is not None and run_cpu_seconds() is None:
+        say(f"CoOpeRace: the CPU time of the run's cgroup cannot be read: its CPU-time budget of {budget:g} s "
+            "is not applied")
 
     def over_budget() -> bool:
         """Whether the run has used up its CPU-time budget: then every
