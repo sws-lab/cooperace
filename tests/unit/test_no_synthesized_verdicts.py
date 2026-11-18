@@ -47,14 +47,17 @@ PROPERTIES = list(CONF["properties"])
 # phases take longer per scenario, so it gets fewer scenarios.
 CONFS = {"svcomp27": CONF, "svcomp27-theta": json.loads((ROOT / "conf" / "svcomp27-theta.json").read_text()),
          "svcomp27-fv-theta": json.loads((ROOT / "conf" / "svcomp27-fv-theta.json").read_text()),
-         "svcomp27-saf": json.loads((ROOT / "conf" / "svcomp27-saf.json").read_text())}
+         "svcomp27-saf": json.loads((ROOT / "conf" / "svcomp27-saf.json").read_text()),
+         #The candidates of the final submission and the packaging test conf all9 (conf/README.md)
+         **{f"svcomp27-{variant}": json.loads((ROOT / "conf" / f"svcomp27-{variant}.json").read_text())
+            for variant in ["fv-final-nosaf", "fv-final-saf", "fv-final-saf-readmit", "fv-final-saf-iekke",
+                            "fv-final-saf-readmit-iekke", "all9"]}}
 PROPERTY_FILES = {name: ROOT / "tests" / "properties" / f"{name}.prp" for name in PROPERTIES}
 
 # The scale of the conf's wall-time limits (45 s and 120 s become 0.45 s and 1.2 s)
 WALL_SCALE = 0.01
 SCENARIOS_PER_PROPERTY = 60
-SCENARIOS = {"svcomp27": SCENARIOS_PER_PROPERTY, "svcomp27-theta": SCENARIOS_PER_PROPERTY // 2,
-             "svcomp27-fv-theta": SCENARIOS_PER_PROPERTY // 2, "svcomp27-saf": SCENARIOS_PER_PROPERTY // 2}
+SCENARIOS = {name: SCENARIOS_PER_PROPERTY if name == "svcomp27" else SCENARIOS_PER_PROPERTY // 2 for name in CONFS}
 
 # Every status a component can end with that matters here: the verdicts of each property, verdicts
 # of other properties, and the statuses of a component without a verdict

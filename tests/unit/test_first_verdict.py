@@ -410,8 +410,11 @@ def test_random_scenarios_deliver_the_chronologically_first_accepted_verdict_wit
 
 # The first-verdict conf that scripts/svcomp-dist.sh packs with CONF_VARIANT=fv-theta
 FV_THETA = json.loads((ROOT / "conf" / "svcomp27-fv-theta.json").read_text())
-# The first-verdict confs of the repository, by variant: fv-theta and the test conf saf, fv-theta with SAF first
-FV_CONFS = {"fv-theta": FV_THETA, "saf": json.loads((ROOT / "conf" / "svcomp27-saf.json").read_text())}
+# The first-verdict confs of the repository, by variant: fv-theta, the test conf saf (fv-theta with SAF first), the
+# candidates of the final submission (conf/README.md) and the packaging test conf all9
+FV_VARIANTS = ["fv-theta", "saf", "fv-final-nosaf", "fv-final-saf", "fv-final-saf-readmit", "fv-final-saf-iekke",
+               "fv-final-saf-readmit-iekke", "all9"]
+FV_CONFS = {variant: json.loads((ROOT / "conf" / f"svcomp27-{variant}.json").read_text()) for variant in FV_VARIANTS}
 # Its wall-time limits scaled to the scenarios' delays (1200 s becomes 1.2 s, 37 s 0.037 s)
 FV_THETA_WALL_SCALE = 0.001
 

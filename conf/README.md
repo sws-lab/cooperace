@@ -96,6 +96,24 @@ Theta is given its memory limit as `--memlimit` (`ComponentSpec.gets_memory_limi
 
 A test conf for **iekke** 2.0 (Zenodo 10.5281/zenodo.24279954, `tools-pool.txt`), not a submission candidate; `make svcomp CONF_VARIANT=iekke` packs iekke with it. It is `conf/svcomp27-fv-theta.json` without Theta and with iekke alone first in every property (CPU-time limit 600 s, 90% of the run's memory, wall-time limit 900 s), in the first-verdict mode with `"witnessLint": true`. iekke's wrapper times itself: it reads its budget, in seconds of wall time from its start, from `DEAGLE_BUDGET` (870 by default, under the competition's 900 s), and CoOpeRace sets it to what is left of the run's `runCpuTimeBudget` when iekke starts, in whole seconds rounded up (`ComponentSpec.budget_variable`); its command line is the competition's. iekke's own CPU-time limit does not enter: started as the run's first component, iekke is told the run's whole budget, 870, although CoOpeRace's own start has used about 5 s of it, and its wrapper reads 870 exactly as its default, and so plans as in its competition run; started later, it is told the time the run really has (never 0 while any is left). Its CPU-time limit then ends it like any component, and in the first-verdict mode a verdict of a run that a limit ended is not accepted, so a conf entry of iekke with a cap behaves as the simulation assumes: as in the pre-run for that many seconds, then cut. No margin is subtracted: the run's budget of 870 of the 900 s already keeps CoOpeRace's own end out of the competition's limit. Its bug search stops starting bounds after 200 s and ends at 360 s whatever the budget, and keeps up to 120 s (15% of the budget) for its concrete runs, so a late start with less than about 500 s left leaves its proofs little or no time. The rules for the competition's limits, the invariant of cooperace/D15 and the first-verdict scenarios are tested on it in `tests/unit/test_iekke.py`.
 
+## The candidate confs of the final submission: `conf/svcomp27-fv-final-*.json`
+
+Five candidates, each built with `make svcomp CONF_VARIANT=<name>`, all in the first-verdict mode with `"witnessLint": true` in every property, one component per phase with its own CPU-time limit and 90% of the run's memory. They are derived by the exact optimizer's model from the pre-run table of 18 November 07:13 (reduced task list) and written by its emitter; the bundling session re-derives them on a newer table and replaces these files. Each packs Theta; the names say what else:
+
+| variant | schedule | packs besides the default components |
+|---|---|---|
+| `fv-final-nosaf` | the fv-theta schedule without sv-sanitizers' `false` in no-data-race | Theta |
+| `fv-final-saf` | `fv-final-nosaf` with SAF second in no-overflow (15 s) | Theta, SAF |
+| `fv-final-saf-readmit` | `fv-final-saf` with Dartagnan re-admitted in valid-memsafety and sv-sanitizers in no-overflow | Theta, SAF |
+| `fv-final-saf-iekke` | `fv-final-saf` with iekke inserted where it gains most: first in unreach-call (61 s) and valid-memsafety (15 s), before Theta in no-overflow (15 s), last in no-data-race (no cap of its own) | Theta, SAF, iekke |
+| `fv-final-saf-readmit-iekke` | `fv-final-saf-readmit` with iekke inserted where it gains most: first in unreach-call (61 s), before Theta in no-overflow (15 s), after Dartagnan in valid-memsafety (486 s), last in no-data-race | Theta, SAF, iekke |
+
+## The packaging test conf with all nine components: `conf/svcomp27-all9.json`
+
+Not a submission candidate: `fv-final-saf` with iekke where the conf study's edit of `fv-noesbmc` puts it (first in unreach-call with 61 s, in no-overflow and valid-memsafety with 15 s, last in no-data-race with 15 s), so that one archive (`CONF_VARIANT=all9`) packs and runs all nine components. With the budget rule above, its iekke caps mean what the simulation assumes: iekke plans with the run's time and is cut at its cap.
+
+The rules for the competition's limits, the invariant of cooperace/D15 and the first-verdict scenarios are tested on all six (`tests/unit/test_config.py`, `test_no_synthesized_verdicts.py`, `test_first_verdict.py`), and the components each adds in `tests/unit/test_registry.py`.
+
 ## `phases`: when each tool runs
 
 `phases` is a list of phases, run in order. A phase is a list of tool names, or an object `{"tools": [...], "wallTimeLimit": s}`.

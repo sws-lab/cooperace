@@ -140,7 +140,10 @@ def test_each_conf_variant_runs_components_of_the_lock_files_only_and_theta_s_ad
     """scripts/svcomp-dist.sh with CONF_VARIANT=NAME packs conf/svcomp27-NAME.json
     and adds the components of tools-pool.txt that it runs; every such conf
     runs only components of the two lock files. The variants theta and
-    fv-theta add Theta alone, saf adds Theta and SAF."""
+    fv-theta add Theta alone, saf adds Theta and SAF, as do the candidates
+    fv-final-saf and fv-final-saf-readmit; fv-final-nosaf adds Theta; the
+    candidates with iekke and the packaging test conf all9 add Theta, SAF
+    and iekke."""
     archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
     variants = sorted((ROOT / "conf").glob("svcomp27-*.json"))
     added = {}
@@ -154,6 +157,10 @@ def test_each_conf_variant_runs_components_of_the_lock_files_only_and_theta_s_ad
     assert added["svcomp27-theta.json"] == {"theta"}
     assert added["svcomp27-fv-theta.json"] == {"theta"}
     assert added["svcomp27-saf.json"] == {"theta", "saf"}
+    assert added["svcomp27-fv-final-nosaf.json"] == {"theta"}
+    assert added["svcomp27-fv-final-saf.json"] == added["svcomp27-fv-final-saf-readmit.json"] == {"theta", "saf"}
+    assert (added["svcomp27-fv-final-saf-iekke.json"] == added["svcomp27-fv-final-saf-readmit-iekke.json"]
+            == added["svcomp27-all9.json"] == {"theta", "saf", "iekke"})
 
 
 def test_read_component_versions_ignores_further_keys(tmp_path):
