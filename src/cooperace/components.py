@@ -220,9 +220,11 @@ REGISTRY = {spec.name: spec for spec in (
     #error-witness.graphml are never delivered. The wrapper reads its time budget, in wall-clock
     #seconds from its start, from DEAGLE_BUDGET (default 870 under the 900 s limit; read as
     #float(os.environ.get("DEAGLE_BUDGET", "870")), so "870" is its default exactly), and its
-    #memory from the tightest cgroup memory.max above it, which is the component's share
+    #memory from the tightest cgroup memory.max above it, which is the component's share. Its
+    #concrete guard compiles the task with a sanitizer and runs the program, whose threads count as
+    #its tasks (PROGRAM_TASK_LIMIT)
     ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ("witness.yml",)),
-                  budget_variable="DEAGLE_BUDGET"),
+                  task_limit=PROGRAM_TASK_LIMIT, budget_variable="DEAGLE_BUDGET"),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
     #IKOS-ConC svcomp27: bin/svcomp_witness.py writes a violation witness of format 2.2 to
     #--out (default witness.yml in its working directory) only for a confirmed race. The

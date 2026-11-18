@@ -29,8 +29,8 @@ import test_no_synthesized_verdicts as d15
 from src.cooperace import components, config, execution, strategy, witnesses
 from src.cooperace.components import (
     OPTIONS_FILE,
+    PROGRAM_TASK_LIMIT,
     REGISTRY,
-    TASK_LIMIT,
     ComponentRunner,
     ComponentVersion,
     WitnessSpec,
@@ -85,7 +85,8 @@ def iekke_runner(tmp_path, property_name, data_model="ILP32"):
 def test_iekke_s_entry():
     spec = REGISTRY["iekke"]
 
-    assert (spec.module, spec.directory, spec.task_limit) == ("benchexec.tools.iekke", "iekke", TASK_LIMIT)
+    #Its concrete guard runs the task's program, as sv-sanitizers and SAF do
+    assert (spec.module, spec.directory, spec.task_limit) == ("benchexec.tools.iekke", "iekke", PROGRAM_TASK_LIMIT)
     assert spec.witness == WitnessSpec("component", (), ("witness.yml",))
     assert (spec.budget_variable, spec.gets_memory_limit) == ("DEAGLE_BUDGET", False)
     assert spec.tool().name() == "iekke"
