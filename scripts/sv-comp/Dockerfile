@@ -41,7 +41,7 @@
 # fuse-overlayfs is in neither image. The archive is unpacked in a stage of
 # its own, so that neither image gets `unzip`.
 ARG CI_IMAGE=docker.io/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
-ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2027@sha256:3f5e65605151fdb737e2d849efb00d605d862caf0e372dfaeef8a0bbb10ae79f
+ARG COMPETITION_IMAGE=registry.gitlab.com/sosy-lab/benchmarking/competition-scripts/user:2027@sha256:5235ed22e8157783ba04e52b5576fe70045105f7f10a67c9221f9860ff637d3e
 
 FROM ${CI_IMAGE} AS unpacked
 RUN apt-get update \
