@@ -81,7 +81,7 @@ def test_the_default_witness_spec_and_the_components_with_their_own():
     assert DEFAULT_WITNESS == WitnessSpec("component", (), None)
     assert {name for name, spec in REGISTRY.items() if spec.witness != DEFAULT_WITNESS} == {
         "Goblint", "Dartagnan", "ULTIMATE Automizer", "ULTIMATE GemCutter", "ULTIMATE Taipan",
-        "Deagle", "sv-sanitizers", "iekke", "IKOS-ConC", "Theta"}
+        "Deagle", "sv-sanitizers", "iekke", "IKOS-ConC", "Theta", "SAF"}
     assert REGISTRY["Goblint"].witness.directory == "run"
     assert REGISTRY["Dartagnan"].witness.directory == "component"
     assert REGISTRY["Deagle"].witness == WitnessSpec("component", (), ("witness.yml",))
