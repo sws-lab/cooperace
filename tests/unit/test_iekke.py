@@ -76,8 +76,7 @@ def iekke_runner(tmp_path, property_name, data_model="ILP32"):
                              property_name=property_name)
     spec = REGISTRY["iekke"]
     runner.registry["iekke"] = components.ComponentSpec(
-        "iekke", spec.module, str(directory), spec.witness, budget_variable=spec.budget_variable,
-        budget_margin=spec.budget_margin)
+        "iekke", spec.module, str(directory), spec.witness, budget_variable=spec.budget_variable)
     return runner, str(wrapper)
 
 
@@ -88,7 +87,7 @@ def test_iekke_s_entry():
 
     assert (spec.module, spec.directory, spec.task_limit) == ("benchexec.tools.iekke", "iekke", TASK_LIMIT)
     assert spec.witness == WitnessSpec("component", (), ("witness.yml",))
-    assert (spec.budget_variable, spec.budget_margin, spec.gets_memory_limit) == ("DEAGLE_BUDGET", 30, False)
+    assert (spec.budget_variable, spec.gets_memory_limit) == ("DEAGLE_BUDGET", False)
     assert spec.tool().name() == "iekke"
 
 
@@ -123,14 +122,24 @@ def test_iekke_s_command_line_per_property_and_data_model(tmp_path, property_nam
     assert command.cwd == str(tmp_path / "iekke")
 
 
-@pytest.mark.parametrize(("budget", "value"), [(600, "570"), (870, "840"), (440.9, "410"), (31, "1"), (12, "0"),
-                                               (0, "0")])
-def test_iekke_gets_its_budget_less_the_margin_in_whole_seconds(tmp_path, budget, value):
+@pytest.mark.parametrize(("budget", "value"), [(870, "870"), (869.6, "870"), (470, "470"), (440.1, "441"),
+                                               (0.3, "1"), (0, "0")])
+def test_iekke_is_told_its_budget_in_whole_seconds_rounded_up(tmp_path, budget, value):
+    """No margin: a start with any time left is never told 0."""
     runner, _wrapper = iekke_runner(tmp_path, "unreach-call")
 
     command = runner.command(iekke_tool(), runner.registry["iekke"], "/w", None, budget)
 
     assert command.environments == {"newEnv": {"DEAGLE_BUDGET": value}}
+
+
+def test_the_wrapper_reads_870_as_its_own_default():
+    """A first start is told 870, which the wrapper reads exactly as it reads
+    no DEAGLE_BUDGET at all: float(os.environ.get("DEAGLE_BUDGET", "870"))."""
+    wrapper = ROOT / "tools" / "iekke" / "iekke"
+    if not wrapper.exists():
+        pytest.skip("tools/iekke is not installed")
+    assert 'BUDGET = float(os.environ.get("DEAGLE_BUDGET", "870"))' in wrapper.read_text().splitlines()
 
 
 def test_without_a_budget_iekke_s_environment_is_its_module_s(tmp_path):
@@ -148,27 +157,41 @@ def test_a_component_without_a_budget_variable_gets_no_budget(tmp_path):
     assert runner.command(iekke_tool(), unmarked, "/w", None, 600).environments == {}
 
 
-@pytest.mark.parametrize(("cpu", "run_budget", "used", "expected"), [
-    (600, 870, 0.0, 600),      # first in its property: its own limit
-    (600, 870, 400.0, 470),    # started late: what is left of the run's budget
-    (None, 870, 100.0, 770),   # no limit of its own
-    (600, None, 400.0, 600),   # no run budget
-    (600, 870, None, 600),     # the run's CPU time unknown
-    (600, 870, 900.0, 0),      # nothing left
-    (None, None, 10.0, None),  # nothing bounds it
+@pytest.mark.parametrize(("cpu", "run_budget", "used", "first", "expected"), [
+    (600, 870, 5.4, True, 870),       # first start: the whole budget, whatever CoOpeRace's own start used
+    (15, 870, 5.4, True, 870),        # its cap does not shape it: the cap ends the run instead
+    (61, 870, 400.0, False, 470),     # late start: what is left of the run's budget
+    (15, 870, 600.0, False, 270),     # late start with a cap shorter than the remainder
+    (600, 870, 869.7, False, 0.3),    # a tiny remainder (told 1, budget_seconds)
+    (None, 870, 100.0, False, 770),   # no limit of its own
+    (600, None, 400.0, False, None),  # no run budget: the wrapper keeps its default
+    (600, None, 0.0, True, None),
+    (600, 870, None, False, 870),     # the run's CPU time unknown
+    (600, 870, 900.0, False, 0),      # nothing left
 ])
-def test_component_time_budget(cpu, run_budget, used, expected):
+def test_component_time_budget(cpu, run_budget, used, first, expected):
     step = Step("iekke", "all", cpu_time_limit=cpu, run_cpu_time_budget=run_budget)
+    budget = components.component_time_budget(step, used, first)
 
-    assert components.component_time_budget(step, cpu, used) == expected
+    assert budget is None if expected is None else budget == pytest.approx(expected)
 
 
-def test_run_component_passes_what_is_left_of_the_run_s_budget(tmp_path, monkeypatch, capsys):
-    """run_component reads the run's CPU time when iekke starts: started
-    after 400 s, with its own limit of 600 s and the run's budget of 870 s,
-    iekke may run 470 s, and its wrapper is told 440."""
-    monkeypatch.setattr(components, "run_cpu_seconds", lambda: 400.0)
+@pytest.mark.parametrize(("cpu", "started", "used", "told", "line"), [
+    (15, 0, 5.4, "870", "Time budget of iekke: 870.0 s left of the run's 870 s (first component) (DEAGLE_BUDGET=870)"),
+    (61, 0, 5.4, "870", "Time budget of iekke: 870.0 s left of the run's 870 s (first component) (DEAGLE_BUDGET=870)"),
+    (600, 3, 400.0, "470", "Time budget of iekke: 470.0 s left of the run's 870 s (DEAGLE_BUDGET=470)"),
+    (15, 5, 600.0, "270", "Time budget of iekke: 270.0 s left of the run's 870 s (DEAGLE_BUDGET=270)"),
+    (600, 2, 869.7, "1", "Time budget of iekke: 0.3 s left of the run's 870 s (DEAGLE_BUDGET=1)"),
+])
+def test_run_component_tells_iekke_the_run_s_remaining_budget_whatever_its_cap(tmp_path, monkeypatch, capsys,
+                                                                                cpu, started, used, told, line):
+    """First start (cap 15 s or 61 s): the wrapper is told 870, its default,
+    as in the competition; late start (after `started` components): the rest
+    of the run's 870 s, also when its cap is shorter; a tiny remainder: 1,
+    never 0."""
+    monkeypatch.setattr(components, "run_cpu_seconds", lambda: used)
     runner, _wrapper = iekke_runner(tmp_path, "unreach-call")
+    runner.started = started
     seen = {}
     real_command = runner.command
 
@@ -179,16 +202,18 @@ def test_run_component_passes_what_is_left_of_the_run_s_budget(tmp_path, monkeyp
     monkeypatch.setattr(runner, "command", command)
     runner.work_dir = str(tmp_path)
     with pytest.raises(RuntimeError, match="stop here"):
-        runner.run_component(iekke_tool(), Step("iekke", "all", cpu_time_limit=600, run_cpu_time_budget=870), None)
+        runner.run_component(iekke_tool(), Step("iekke", "all", cpu_time_limit=cpu, run_cpu_time_budget=870), None)
 
-    assert seen["environments"] == {"newEnv": {"DEAGLE_BUDGET": "440"}}
-    assert "Time budget of iekke: 470 s (DEAGLE_BUDGET=440)" in capsys.readouterr().out
+    assert seen["environments"] == {"newEnv": {"DEAGLE_BUDGET": told}}
+    out = capsys.readouterr().out
+    assert line in out and f"CPU-time limit of iekke: {cpu} s" in out
+    assert runner.started == started + 1
 
 
 def test_other_components_announce_no_budget(capsys):
     step = Step("Deagle", "all", cpu_time_limit=15, run_cpu_time_budget=870)
 
-    assert components.announce_time_budget(REGISTRY["Deagle"], step, 15) is None
+    assert components.announce_time_budget(REGISTRY["Deagle"], step) is None
     assert capsys.readouterr().out == ""
 
 

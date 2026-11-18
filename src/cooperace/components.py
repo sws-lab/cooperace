@@ -134,11 +134,19 @@ class ComponentSpec:
     competition's options give.
 
     `budget_variable` names the environment variable from which the
-    component itself reads the seconds it may run, None for one that reads
-    none; `budget_margin` is the seconds the component's own default keeps
-    below the competition's limit. A component with a budget_variable is run
-    with it set to its time budget (component_time_budget) less the margin
-    (ComponentRunner.command); its command line is unchanged."""
+    component itself reads the seconds it may plan with, None for one that
+    reads none. A component with a budget_variable is run with it set to
+    the run's CPU-time budget if it is the run's first component, and else
+    to what is left of that budget when it starts (component_time_budget,
+    in whole seconds rounded up: budget_seconds), never to its own CPU-time
+    limit: its own default is the competition's budget (iekke: 870 under
+    900 s), so started first under the run's budget of 870 s it is told what
+    the competition told it, and started late it is told the time the run
+    really has. Its CPU-time limit then ends it, as it
+    ends any component, and a verdict of a run that a limit ended is not
+    accepted in the first-verdict mode. No margin is subtracted: the run's
+    budget (870 of 900 s) already keeps CoOpeRace's own end out of the
+    competition's limit. Its command line is unchanged."""
 
     name: str
     module: str
@@ -147,7 +155,6 @@ class ComponentSpec:
     task_limit: int | None = TASK_LIMIT
     gets_memory_limit: bool = False
     budget_variable: str | None = None
-    budget_margin: float = 0
 
     def tool(self) -> BaseTool2:
         """A new object of the tool-info module's class Tool. The module is
@@ -211,10 +218,11 @@ REGISTRY = {spec.name: spec for spec in (
     #unreach-call and no-overflow, none for valid-memsafety, for a no-data-race true or for a
     #false of its concrete (gcc sanitizer) run. witness-content.yml (an intermediate) and
     #error-witness.graphml are never delivered. The wrapper reads its time budget, in wall-clock
-    #seconds from its start, from DEAGLE_BUDGET (default 870 under the 900 s limit), and its
+    #seconds from its start, from DEAGLE_BUDGET (default 870 under the 900 s limit; read as
+    #float(os.environ.get("DEAGLE_BUDGET", "870")), so "870" is its default exactly), and its
     #memory from the tightest cgroup memory.max above it, which is the component's share
     ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ("witness.yml",)),
-                  budget_variable="DEAGLE_BUDGET", budget_margin=30),
+                  budget_variable="DEAGLE_BUDGET"),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
     #IKOS-ConC svcomp27: bin/svcomp_witness.py writes a violation witness of format 2.2 to
     #--out (default witness.yml in its working directory) only for a confirmed race. The
@@ -382,6 +390,9 @@ class ComponentRunner:
         #The tool-info object of each component, by name (tool_of)
         self.tools = {}
         self.tools_lock = threading.Lock()
+        #How many components run_component has started in this run (under tools_lock): the
+        #first one is told the run's whole time budget (component_time_budget)
+        self.started = 0
 
     def installation_problems(self, names: list[str]) -> list[str]:
         """One message for each component of `names` (conf names, keys of
@@ -568,8 +579,8 @@ class ComponentRunner:
           BenchExec 3.31, so gives the tool directory;
         - the environments are `actor.environment(executable)`, and, for a
           component with a `spec.budget_variable` and a `budget` in seconds
-          (component_time_budget; None: none), that variable set to the
-          budget less `spec.budget_margin`, in whole seconds and at least 0.
+          (component_time_budget; None: none), that variable set to
+          budget_seconds(budget).
 
         Raises what `actor.executable` raises, ToolNotFoundException if the
         executable is not there, and KeyError if `versions` has no entry for
@@ -587,9 +598,8 @@ class ComponentRunner:
         cwd = os.path.normpath(os.path.join(tool_location, actor.working_directory(executable)))
         environments = actor.environment(executable)
         if spec.budget_variable and budget is not None:
-            seconds = max(0, math.floor(budget - spec.budget_margin))
             environments = {**environments, "newEnv": {**environments.get("newEnv", {}),
-                                                       spec.budget_variable: str(seconds)}}
+                                                       spec.budget_variable: str(budget_seconds(budget))}}
         return ComponentCommand(cmdline, cwd, environments)
 
     def run_component(self, actor: BaseTool2, step: Step, group: ComponentGroup) -> Outcome:
@@ -631,7 +641,9 @@ class ComponentRunner:
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
         memory, cpu = announce_limits(step)
-        budget = announce_time_budget(spec, step, cpu)
+        with self.tools_lock:
+            first, self.started = self.started == 0, self.started + 1
+        budget = announce_time_budget(spec, step, first)
         command = self.command(actor, spec, witness_dir, memory, budget)
         tasks = announce_task_limit(step.component, spec.task_limit, execution.task_limit_supported)
         tool_result = execution.execute_run(
@@ -809,30 +821,50 @@ def announce_limits(step: Step) -> tuple[int | None, int | None]:
     return memory, cpu
 
 
-def component_time_budget(step: Step, cpu: int | None, used: float | None) -> float | None:
-    """The seconds a component of the config.Step `step` may run, given its
-    CPU-time limit `cpu` (component_cpu_time_limit; None: none) and the CPU
-    time `used` that the run has used when it starts (run_cpu_seconds; None:
-    unknown): the smaller of `cpu` and what is left of the run's
-    runCpuTimeBudget, at least 0, or None if neither bounds it."""
-    bounds = [] if cpu is None else [cpu]
-    if step.run_cpu_time_budget is not None:
-        bounds.append(step.run_cpu_time_budget - (used or 0.0))
-    return max(0.0, min(bounds)) if bounds else None
+def component_time_budget(step: Step, used: float | None, first: bool = False) -> float | None:
+    """The seconds a component of the config.Step `step` that reads its own
+    time budget (ComponentSpec.budget_variable) may plan with: None if the
+    run has no runCpuTimeBudget; the whole budget if the component is the
+    run's first (`first`); else what is left of it given the CPU time `used`
+    that the run has used when the component starts (run_cpu_seconds; None:
+    unknown, taken as 0), at least 0.
+
+    The first component is told the whole budget although CoOpeRace's own
+    start (about 5 s of CPU time in the competition image: installation and
+    version checks) has used some of it, so that it plans as in the
+    competition, where its run starts at 0 s; the run's budget, 870 of the
+    900 s, still ends it before the competition's limit. The component's own
+    CPU-time limit does not enter: it ends the component, but does not shape
+    its plan (see ComponentSpec)."""
+    if step.run_cpu_time_budget is None:
+        return None
+    if first:
+        return float(step.run_cpu_time_budget)
+    return max(0.0, step.run_cpu_time_budget - (used or 0.0))
 
 
-def announce_time_budget(spec: ComponentSpec, step: Step, cpu: int | None) -> float | None:
+def budget_seconds(budget: float) -> int:
+    """The time budget `budget` (component_time_budget) as the whole seconds
+    passed to the component: rounded up, so that a start with any time left
+    is never told 0."""
+    return max(0, math.ceil(budget))
+
+
+def announce_time_budget(spec: ComponentSpec, step: Step, first: bool = False) -> float | None:
     """For a component that reads its time budget (`spec.budget_variable`):
-    component_time_budget of `step` with the CPU-time limit `cpu` and the CPU
-    time the run has used now, printed as "Time budget of <component>: <n> s
-    (<variable>=<n - margin>)". None, and nothing printed, for any other
-    component or without a budget."""
+    component_time_budget of `step` with the CPU time the run has used now
+    and `first` (whether it is the run's first component), printed as "Time
+    budget of <component>: <x> s left of the run's <budget> s
+    (<variable>=<n>)", with "(first component)" after the budget for the
+    first. None, and nothing printed, for any other component or without a
+    run budget."""
     if not spec.budget_variable:
         return None
-    budget = component_time_budget(step, cpu, run_cpu_seconds())
+    budget = component_time_budget(step, run_cpu_seconds(), first)
     if budget is not None:
-        seconds = max(0, math.floor(budget - spec.budget_margin))
-        say_line(f"Time budget of {step.component}: {budget:.0f} s ({spec.budget_variable}={seconds})")
+        say_line(f"Time budget of {step.component}: {budget:.1f} s left of the run's "
+                 f"{step.run_cpu_time_budget:g} s{' (first component)' if first else ''} "
+                 f"({spec.budget_variable}={budget_seconds(budget)})")
     return budget
 
 
