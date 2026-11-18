@@ -1,4 +1,4 @@
-# Written by scripts/component-smoke.py select from the pre-run table of 16 November 2026 (ledger export-table, verified.parquet); one row per task; prerun_* are of the archive prerun_doi. The theta rows were selected with the registry and conf/svcomp27-theta.json of branch e10-theta.
+# Written by scripts/component-smoke.py select from the pre-run table of 16 November 2026 (ledger export-table, verified.parquet); one row per task; prerun_* are of the archive prerun_doi. The theta rows were selected with the registry and conf/svcomp27-theta.json of branch e10-theta. The saf rows were selected from tables-0713-noesbmc of 18 November 2026 (pre-run of 10.5281/zenodo.24267653) with conf/svcomp27-saf.json.
 component	property	role	task	expected	prerun_doi	prerun_status	prerun_cpu	prerun_mem
 goblint	no-data-race	true	c/weaver/popl20-simple-queue.wvr.yml	true	10.5281/zenodo.24080342	true	0.30	32825344
 goblint	no-data-race	non-answer	c/pthread-atomic-qualifier/atomic-qual-both-atomic.yml	true	10.5281/zenodo.24080342	EXCEPTION (Goblint_lib__Maingoblint.FrontendError)	0.19	33148928
@@ -118,3 +118,17 @@ theta	valid-memsafety	false	c/pthread-lit/sssc12-2.yml	false(valid-deref)	10.528
 theta	valid-memsafety	non-answer	c/goblint-regression/28-race_reach_28-funptr_racefree.yml	true	10.5281/zenodo.24128717	ERROR (frontend failed, after parsing finished)	3.27	120733696
 theta	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24128717	unknown	15.44	279203840
 theta	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24128717	false(valid-deref)	16.30	292847616
+saf	no-data-race	false	c/pthread-race-patterns/arg-reused-struct-race.yml	false	10.5281/zenodo.24267653	false(no-data-race)	1.63	33112064
+saf	no-data-race	non-answer	c/pthread-theta/unwind1-nondet.yml	true	10.5281/zenodo.24267653	unknown	0.08	10674176
+saf	no-data-race	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24267653	true	0.16	11350016
+saf	no-data-race	lp64	c/pthread-lp64/seq-truncation.yml	true	10.5281/zenodo.24267653	true	0.15	11280384
+saf	unreach-call	false	c/pthread/lazy01.yml	false	10.5281/zenodo.24267653	false(unreach-call)	0.32	19288064
+saf	unreach-call	non-answer	c/pthread-deagle/arithmetic_prog_bad.yml	false	10.5281/zenodo.24267653	unknown	0.08	10919936
+saf	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24267653	unknown	2.06	24715264
+saf	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24267653	false(unreach-call)	0.60	19255296
+saf	no-overflow	true	c/pthread-wmm/safe006_power.oepc-thin000_power.oepc.yml	true	10.5281/zenodo.24267653	true	0.30	12214272
+saf	no-overflow	false	c/pthread-overflow/cta-double-checked-scale.yml	false	10.5281/zenodo.24267653	false(no-overflow)	0.42	19652608
+saf	no-overflow	non-answer	c/pthread-divine/tls_destructor_worker.yml	true	10.5281/zenodo.24267653	unknown	0.30	29294592
+saf	valid-memsafety	non-answer	c/weaver/popl20-more-queue-add-2-nl.wvr.yml	true	10.5281/zenodo.24267653	unknown	0.12	11112448
+saf	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24267653	unknown	0.18	11595776
+saf	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24267653	unknown	0.19	11571200

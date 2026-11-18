@@ -9,7 +9,7 @@ about it: the files, options and output strings its registry entry
 (src/cooperace/components.py), its tool-info module and tools-options.json rely
 on. Reads the zip (or an unpacked directory); runs nothing from it.
 Usage: archive-static-check.py <component> <zip-or-dir> with <component> one of
-goblint, dartagnan, deagle, sv-sanitizers, ugemcutter, ikos-conc. Prints one
+goblint, dartagnan, deagle, sv-sanitizers, ugemcutter, ikos-conc, saf. Prints one
 line per check, "ok", "FAIL" or "warn", and exits 1 on a FAIL (a "warn" does
 not fail). scripts/component-smoke.py runs it on every archive it smokes."""
 import re
@@ -99,6 +99,17 @@ def main(component, path):
             text = read(script)
             for line in ("The program is definitely UNSAFE", "The program is SAFE"):
                 checks.append((f'{script}: prints "{line}" (toolinfo/ikos_conc.py)', line in text, "FAIL"))
+    elif component == "saf":
+        # toolinfo/saf.py runs bin/saf verify and needs bin/ and share/ side by side; SAF finds its
+        # stub header from its own path, and without it answers unknown on every task
+        has("share/saf/stubs/sv-comp-stubs.h")
+        if has("bin/saf"):
+            binary = read("bin/saf")
+            for text, what in (("witness.yml", "default --witness witness.yml (registry WitnessSpec)"),
+                               ("data-model", "takes --data-model (toolinfo/saf.py passes it)"),
+                               ("clang-21", "runs clang-21 (required_ubuntu_packages)")):
+                checks.append((f"bin/saf: {what}", text in binary, "FAIL"))
+        checks.append(("no witness.yml shipped in the archive", "witness.yml" not in names, "warn"))
     else:
         sys.exit(f"unknown component {component}")
 
@@ -109,7 +120,7 @@ def main(component, path):
     return 1 if failed else 0
 
 
-COMPONENTS = ("goblint", "dartagnan", "deagle", "sv-sanitizers", "ugemcutter", "ikos-conc")
+COMPONENTS = ("goblint", "dartagnan", "deagle", "sv-sanitizers", "ugemcutter", "ikos-conc", "saf")
 
 
 if __name__ == "__main__":
