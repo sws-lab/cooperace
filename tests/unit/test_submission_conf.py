@@ -58,6 +58,31 @@ def test_a_conf_without_a_strategy_for_a_property_is_no_submission_conf():
         "no strategy for valid-memsafety"]
 
 
+@pytest.mark.parametrize("phases", [
+    [{"tools": ["Deagle"], "wallTimeLimit": 37}, ["Goblint"]],
+    [{"tools": ["Deagle", "Goblint"], "wallTimeLimit": 37}, ["Goblint"]],   # Goblint's last phase has no limit
+])
+def test_a_component_without_a_limit_of_its_own_is_no_submission_conf(phases):
+    conf = json.loads((ROOT / "conf" / "svcomp27-fv-final-saf.json").read_text())
+    conf["properties"]["no-data-race"] = {"firstVerdict": True, "phases": phases, "answers": [["Deagle", "Goblint"]],
+                                          "cpuTimeLimits": {"Deagle": 15}, "runCpuTimeBudget": 870}
+
+    assert submission_conf().problems(config.load_strategies(conf, REGISTRY), FORMULAS) == [
+        "in the strategy for no-data-race, Goblint has neither a CPU-time limit nor a wallTimeLimit of the last "
+        "phase it is in"]
+
+
+def test_the_uncapped_iekke_of_the_iekke_candidates_ends_by_a_phase_wall_time_limit():
+    """iekke runs last and without a CPU-time limit in no-data-race, as the
+    conf was simulated: until the run's budget. Its phase has the wall-time
+    limit the emitter gives a cap, 1.5 times the run's budget plus 15 s."""
+    for variant in ("fv-final-saf-iekke", "fv-final-saf-readmit-iekke"):
+        conf = json.loads((ROOT / "conf" / f"svcomp27-{variant}.json").read_text())
+        loaded = config.load_strategies(conf, REGISTRY)["no-data-race"]
+        assert "iekke" not in loaded.cpu_time_limits
+        assert loaded.phases[-1] == config.Phase(("iekke",), 1.5 * loaded.run_cpu_time_budget + 15)
+
+
 @pytest.mark.parametrize("conf, status", [("svcomp27.json", 1), ("svcomp27-fv-final-saf.json", 0)])
 def test_the_script_exits_1_for_a_bracket_conf_and_0_for_a_submission_conf(conf, status):
     done = subprocess.run([sys.executable, str(SCRIPT), str(ROOT), str(ROOT / "conf" / conf)],

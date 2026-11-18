@@ -34,9 +34,12 @@
                     ],
                     "wallTimeLimit": 58
                 },
-                [
-                    "iekke"
-                ]
+                {
+                    "tools": [
+                        "iekke"
+                    ],
+                    "wallTimeLimit": 1320
+                }
             ],
             "cpuTimeLimits": {
                 "Deagle": 15,

@@ -107,8 +107,10 @@ Five candidates, each built with `make svcomp CONF_VARIANT=<name>`, all in the f
 | `fv-final-nosaf` | the fv-theta schedule without sv-sanitizers' `false` in no-data-race | Theta |
 | `fv-final-saf` | `fv-final-nosaf` with SAF second in no-overflow (15 s) | Theta, SAF |
 | `fv-final-saf-readmit` | `fv-final-saf` with Dartagnan re-admitted in valid-memsafety and sv-sanitizers in no-overflow | Theta, SAF |
-| `fv-final-saf-iekke` | `fv-final-saf` with iekke inserted where it gains most: first in unreach-call (61 s) and valid-memsafety (15 s), before Theta in no-overflow (15 s), last in no-data-race (no cap of its own) | Theta, SAF, iekke |
-| `fv-final-saf-readmit-iekke` | `fv-final-saf-readmit` with iekke inserted where it gains most: first in unreach-call (61 s), before Theta in no-overflow (15 s), after Dartagnan in valid-memsafety (486 s), last in no-data-race | Theta, SAF, iekke |
+| `fv-final-saf-iekke` | `fv-final-saf` with iekke inserted where it gains most: first in unreach-call (61 s) and valid-memsafety (15 s), before Theta in no-overflow (15 s), last in no-data-race (no cap of its own; its phase ends at the wall-time limit of 1320 s) | Theta, SAF, iekke |
+| `fv-final-saf-readmit-iekke` | `fv-final-saf-readmit` with iekke inserted where it gains most: first in unreach-call (61 s), before Theta in no-overflow (15 s), after Dartagnan in valid-memsafety (486 s), last in no-data-race (as in `fv-final-saf-iekke`) | Theta, SAF, iekke |
+
+The uncapped iekke of the two iekke candidates was simulated as running until the run's budget, the cap the optimizer gives a component without one (870 s). Its phase has the wall-time limit the emitter gives a cap, 1.5 times it plus 15 s: 1320 s, which no run reaches before the run's budget or the competition's wall-time limit ends it, so the simulated outcomes are unchanged; it bounds the phase should iekke not end by itself. A submission conf must bound every component by a CPU-time limit or a wall-time limit of its last phase (`scripts/sv-comp/submission-conf.py`).
 
 ## The packaging test conf with all nine components: `conf/svcomp27-all9.json`
 

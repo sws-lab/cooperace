@@ -15,7 +15,10 @@ each property of properties.FORMULAS and every strategy is in the
 first-verdict mode ("firstVerdict": true) without "vetoWindows": the first
 accepted verdict is delivered at once, with the deciding component's own
 witness. The bracket mode, in which an answer can wait for other components
-and a witness can come from another component, is not submitted.
+and a witness can come from another component, is not submitted. Every
+component must also be bounded by a limit of its own: a CPU-time limit, or
+a wallTimeLimit of the last phase it is in, so that a component that does
+not end by itself is not left to the run's CPU-time budget alone.
 
 Prints nothing and exits 0 for a submission conf; prints one line per
 problem on stderr and exits 1 otherwise, and exits 2 for a conf that cannot
@@ -35,6 +38,11 @@ def problems(strategies, formulas):
             found.append(f"the strategy for {name} is not in the first-verdict mode (\"firstVerdict\": true)")
         if strategy.veto_windows:
             found.append(f"the strategy for {name} has vetoWindows")
+        for tool in strategy.tools:
+            last = strategy.phases[strategy.phases_of(tool)[-1]]
+            if tool not in strategy.cpu_time_limits and last.wall_time_limit is None:
+                found.append(f"in the strategy for {name}, {tool} has neither a CPU-time limit nor a "
+                             "wallTimeLimit of the last phase it is in")
     return found
 
 
