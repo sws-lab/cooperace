@@ -204,11 +204,14 @@ def test_saf_s_witness_counts_for_its_property_and_verdict_only(name):
             assert not witnesses.passes(path.read_text(), prop, verdict)
 
 
-def test_saf_s_no_overflow_violation_witness_of_format_2_0_does_not_pass():
+def test_saf_s_no_overflow_violation_witness_of_format_2_0_does_not_pass_the_internal_check():
     """SAF writes its no-overflow violation_sequence in format 2.0; the
     witness table (conf/witnesses.json) requires 2.2 for a false of
-    no-overflow, so such a false is not delivered (observed on
-    pthread-overflow/cta-double-checked-scale, 18 November 2026)."""
+    no-overflow, so the internal check refuses it (observed on
+    pthread-overflow/cta-double-checked-scale, 18 November 2026). Under
+    "witnessLint": true WitnessLint 2.4 decides instead; it gives "done" for
+    such a witness, so there SAF's false is delivered, as the pre-run scored
+    it (observed on pthread-overflow/order-count-before-value)."""
     path = WITNESSES / "cta-double-checked-scale.no-overflow.false.yml"
 
     assert "format_version: '2.0'" in path.read_text()
@@ -218,7 +221,8 @@ def test_saf_s_no_overflow_violation_witness_of_format_2_0_does_not_pass():
 def test_a_graphml_witness_that_saf_writes_as_witness_yml_does_not_pass():
     """On some no-data-race tasks SAF writes a GraphML witness into
     witness.yml (pthread/singleton-b; the pre-run's "witness-version
-    mismatch"); no GraphML witness counts."""
+    mismatch"); no GraphML witness counts. WitnessLint 2.4 gives it "ERROR
+    (unexpected witness version)", so the gate refuses it too."""
     path = WITNESSES / "singleton-b.no-data-race.false.graphml-as-yml"
 
     assert path.read_text().startswith("<?xml")
