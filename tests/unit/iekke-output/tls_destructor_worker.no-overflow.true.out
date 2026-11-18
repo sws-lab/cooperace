@@ -1,0 +1,88 @@
+memory cap per bound: 2317 MB
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+try unwind=2 rounds=2 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=3 rounds=4 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=4 rounds=3 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=8 rounds=3 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=8 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=16 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=32 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=8 rounds=7 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=16 rounds=9 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=32 rounds=13 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=32 rounds=21 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=64 rounds=4 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=256 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=1024 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=4096 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=16384 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+proof try memory-model --unwind 2, all interleavings (482s left)
+  -> proved: every loop fully unrolled, every interleaving
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/pthread-divine/tls_destructor_worker.i
+Converting
+Type-checking tls_destructor_worker
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+file <builtin-library-pthread_create> line 15: warning: pointer parameter types differ between declaration and definition "pthread_create"
+old definition in module tls_destructor_worker file /home/cwd/sv-benchmarks/c/pthread-divine/tls_destructor_worker.i line 405
+signed int (pthread_t *, const pthread_attr_t *, void * (*)(void *), void *)
+new definition in module <built-in-library> file <builtin-library-pthread_create> line 15
+signed int (pthread_t *thread, const pthread_attr_t *attr, void * (*start_routine)(void *), void *arg)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+file <builtin-library-__spawned_thread> line 26 function __spawned_thread: replacing function pointer by 1 possible targets
+file <builtin-library-pthread_key_create> line 26 function __CPROVER_run_thread_key_dtors: replacing function pointer by 2 possible targets
+Generic Property Instrumentation
+Spin-loop reduction: 1 loop(s)
+Running with 8 object bits, 24 offset bits (default)
+Starting Bounded Model Checking
+aborting path on assume(false) at file <builtin-library-pthread_key_create> line 26 function __CPROVER_run_thread_key_dtors thread 1
+Unwinding loop __CPROVER_run_thread_key_dtors.0 iteration 1 file <builtin-library-pthread_key_create> line 21 function __CPROVER_run_thread_key_dtors thread 1
+aborting path on assume(false) at file <builtin-library-pthread_key_create> line 26 function __CPROVER_run_thread_key_dtors thread 1
+Unwinding loop __CPROVER_run_thread_key_dtors.0 iteration 1 file <builtin-library-pthread_key_create> line 21 function __CPROVER_run_thread_key_dtors thread 1
+points-to sets of shared pointers converged after 1 seeded symex pass(es)
+Unwinding successfully
+BDD prune: removed 0 shared accesses with a contradictory guard in 7.1442e-05s
+Start removing dummy accesses: 248 steps before removal
+main::1::key!0@1#3 is dummy and removed
+main::1::tid!0@1#3 is dummy and removed
+main::1::key!0@1#5 is dummy and removed
+worker::1::key$object#1 is dummy and removed
+244 steps after removal
+Runtime Symex: 0.0095186s
+no --rounds given for a concurrent program: falling back to the memory-model encoding, which is known to report violations on race-free programs in this build. Pass --rounds N (e.g. 3) for the round-robin encoding this tool is validated with.
+Adding SC constraints
+Shared __CPROVER_threads_exited: 2R/2W
+Shared __CPROVER_next_thread_id: 1R/2W
+Shared __CPROVER_thread_return_values: 1R/2W
+Shared __CPROVER_thread_key_dtors: 3R/2W
+Shared worker::1::key$object: 1R/1W
+Shared main::1::key!0@1: 2R/2W
+Shared main::1::tid!0@1: 1R/2W
+size of program expression: 350 steps
+no slicing due to threads
+Generated 0 VCC(s), 0 remaining after simplification
+Runtime Postprocess Equation: 0.000681217s
+VERIFICATION SUCCESSFUL
+
+SUCCESSFUL

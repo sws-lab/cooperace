@@ -79,7 +79,7 @@ def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entr
     (16 November 2026), and, for the archives that fm-tools main no longer lists
     (tools-unlisted.txt), of version svcomp27 of goblint.yml in fm-tools 9dd09a3f, of
     dartagnan.yml in 5f26160a, of ugemcutter.yml in 6452480b, of ikos-conc.yml in dbda8837 and
-    of uautomizer.yml in b7ccdb13, and of version 2.0 of iekke.yml in 554cc768: each the newest
+    of uautomizer.yml in b7ccdb13 (iekke's in test_iekke.py): each the newest
     archive of its component with a pre-run on the current task set. Theta's are checked in
     test_theta.py, SAF's in test_saf.py."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
@@ -90,7 +90,6 @@ def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entr
     assert versions["uautomizer"] == ComponentVersion("10.5281/zenodo.24133222", "svcomp27", ("--full-output",))
     assert versions["sv-sanitizers"] == ComponentVersion("10.5281/zenodo.24117367", "svcomp27", ())
     assert versions["deagle"] == ComponentVersion("10.5281/zenodo.24278298", "svcomp27", ())
-    assert versions["iekke"] == ComponentVersion("10.5281/zenodo.24187653", "2.0", ())
     assert versions["ugemcutter"] == ComponentVersion("10.5281/zenodo.24060016", "svcomp27", ("--full-output",))
     assert versions["ikos-conc"] == ComponentVersion("10.5281/zenodo.23736684", "svcomp27", ())
     assert versions["cpachecker"] == ComponentVersion(
@@ -102,7 +101,7 @@ def test_every_exception_of_tools_unlisted_names_a_component_of_a_lock_file_with
     archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
     exceptions = download_tools.read_unlisted_file(ROOT / "tools-unlisted.txt")
 
-    assert set(exceptions) == {"goblint", "dartagnan", "ugemcutter", "ikos-conc", "uautomizer", "iekke"}
+    assert set(exceptions) == {"goblint", "dartagnan", "ugemcutter", "ikos-conc", "uautomizer"}
     for name, (doi, _commit) in exceptions.items():
         assert {**archive, **pool}[name] == doi
 

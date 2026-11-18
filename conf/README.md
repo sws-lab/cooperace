@@ -91,6 +91,11 @@ Theta is given its memory limit as `--memlimit` (`ComponentSpec.gets_memory_limi
 
 `make svcomp CONF_VARIANT=saf` builds an archive that runs `conf/svcomp27-saf.json` and packs Theta and **SAF** svcomp27 (Zenodo 10.5281/zenodo.24267653, `tools-pool.txt`); VERSION ends in `conf-saf`. It is a test conf for SAF, not a submission candidate: `conf/svcomp27-fv-theta.json` with a first phase in every property in which SAF runs alone, with 90% of the run's memory, a CPU-time limit of 200 s and a wall-time limit of 300 s, and SAF first in the `answers` bracket. SAF's own budget is 850 s of wall time, which it is not told, so the CPU-time limit ends it by a kill. The same tests run on it as on `fv-theta`.
 
+
+## The first-verdict test conf with iekke: `conf/svcomp27-iekke.json`
+
+A test conf for **iekke** 2.0 (Zenodo 10.5281/zenodo.24279954, `tools-pool.txt`), not a submission candidate; `make svcomp CONF_VARIANT=iekke` packs iekke with it. It is `conf/svcomp27-fv-theta.json` without Theta and with iekke alone first in every property (CPU-time limit 600 s, 90% of the run's memory, wall-time limit 900 s), in the first-verdict mode with `"witnessLint": true`. iekke's wrapper times itself: it reads its budget, in seconds of wall time from its start, from `DEAGLE_BUDGET` (870 by default, under the competition's 900 s), and CoOpeRace sets it to the smaller of iekke's CPU-time limit and what is left of the run's `runCpuTimeBudget`, less those 30 s (`ComponentSpec.budget_variable`); its command line is the competition's. Its bug search stops starting bounds after 200 s and ends at 360 s whatever the budget, and keeps up to 120 s (15% of the budget) for its concrete runs, so a budget below about 500 s leaves its proofs little or no time. The rules for the competition's limits, the invariant of cooperace/D15 and the first-verdict scenarios are tested on it in `tests/unit/test_iekke.py`.
+
 ## `phases`: when each tool runs
 
 `phases` is a list of phases, run in order. A phase is a list of tool names, or an object `{"tools": [...], "wallTimeLimit": s}`.

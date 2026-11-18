@@ -35,6 +35,7 @@ path = [
     "tests/Race.set",
     "tests/table-generator.xml",
     "tests/bench-defs/**",
+    "tests/unit/iekke-output/**",
     "tests/integration/README.md",
     "tests/integration/manifest.json",
     "tests/integration/conf/**",

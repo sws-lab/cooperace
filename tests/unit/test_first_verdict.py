@@ -486,7 +486,7 @@ def check_scenarios(property_name, make_strategy, seed, lint, tmp_path, monkeypa
         runner.installation_problems = lambda _names: []
         runner.container_problems = lambda: []
         runner.probe_versions = lambda _names: None
-        runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(
+        runner.command = lambda actor, spec, witness_dir, memory=None, budget=None: ComponentCommand(
             ["component"], str(tmp_path), {})
         delivered_at = []
 
@@ -567,7 +567,7 @@ def test_a_verdict_of_a_run_ended_by_a_limit_counts_outside_the_mode_but_not_in_
         runner.installation_problems = lambda _names: []
         runner.container_problems = lambda: []
         runner.probe_versions = lambda _names: None
-        runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(
+        runner.command = lambda actor, spec, witness_dir, memory=None, budget=None: ComponentCommand(
             ["component"], str(tmp_path), {})
         results.append(cli.run({"properties": {"no-data-race": conf_strategy}}, runner, ComponentGroup()))
 
@@ -607,7 +607,7 @@ def test_a_linter_that_fails_its_self_test_leaves_the_decision_to_the_internal_c
     runner.installation_problems = lambda _names: []
     runner.container_problems = lambda: []
     runner.probe_versions = lambda _names: None
-    runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(
+    runner.command = lambda actor, spec, witness_dir, memory=None, budget=None: ComponentCommand(
         ["component"], str(tmp_path), {})
     conf = {"properties": {"unreach-call": {"firstVerdict": True, "witnessLint": True, "phases": [["Goblint"]],
                                             "answers": [["Goblint"]]}}}

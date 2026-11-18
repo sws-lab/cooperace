@@ -14,7 +14,7 @@
 # 2026 on the whole task set) is the archive fm-tools main registers since 40b030b2; the
 # conf variant saf (conf/svcomp27-saf.json) runs it.
 uautomizer: 10.5281/zenodo.24133222
-iekke: 10.5281/zenodo.24187653
+iekke: 10.5281/zenodo.24279954
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
 cpachecker: 10.5281/zenodo.24218973

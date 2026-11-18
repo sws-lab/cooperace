@@ -1,0 +1,104 @@
+memory cap per bound: 2317 MB
+STATIC RACE CHECK: UNKNOWN (possible race on words: file /home/cwd/sv-benchmarks/c/pthread-ilp32-twins/header-words-ilp32.c line 25 function main / file /home/cwd/sv-benchmarks/c/pthread-ilp32-twins/header-words-ilp32.c line 17 function clear_header)
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+suggested loop limits: clear_header.0:2
+try unwind=3 rounds=3 --unwindset clear_header.0:2 (60s for this bound, 570s left)
+  -> safe at this bound
+try unwind=2 rounds=2 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=3 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=4 rounds=3 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=8 rounds=3 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=8 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=16 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=32 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=8 rounds=7 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=16 rounds=9 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=32 rounds=13 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=32 rounds=21 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=64 rounds=4 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=256 rounds=3 (190s for this bound, 567s left)
+  -> safe at this bound
+try unwind=1024 rounds=3 (190s for this bound, 567s left)
+  -> safe at this bound
+try unwind=4096 rounds=3 (190s for this bound, 567s left)
+  -> safe at this bound
+try unwind=16384 rounds=3 (190s for this bound, 567s left)
+  -> safe at this bound
+proof try memory-model --unwind 2, all interleavings (180s left)
+  -> proved: every loop fully unrolled, every interleaving
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/pthread-ilp32-twins/header-words-ilp32.c
+Converting
+Type-checking header-words-ilp32
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+file <builtin-library-__spawned_thread> line 26 function __spawned_thread: replacing function pointer by 1 possible targets
+Generic Property Instrumentation
+Spin-loop reduction: 1 loop(s)
+Running with 8 object bits, 24 offset bits (default)
+Starting Bounded Model Checking
+Unwinding loop clear_header.0 iteration 1 file /home/cwd/sv-benchmarks/c/pthread-ilp32-twins/header-words-ilp32.c line 16 function clear_header thread 1
+**** WARNING: no body for function __CPROVER_run_thread_key_dtors
+Unwinding loop clear_header.0 iteration 1 file /home/cwd/sv-benchmarks/c/pthread-ilp32-twins/header-words-ilp32.c line 16 function clear_header thread 1
+points-to sets of shared pointers converged after 1 seeded symex pass(es)
+Unwinding successfully
+BDD prune: removed 0 shared accesses with a contradictory guard in 4.6081e-05s
+Start removing dummy accesses: 155 steps before removal
+main::1::t!0@1#3 is dummy and removed
+154 steps after removal
+Handling datarace with no aid
+The number of races before filter: 1
+The number of races after filter: 1
+The number of race categories before filter: 1
+The number of race categories after filter: 1
+	13(1) - 17(1) words
+Races between line 13 - line 17:
+	words#1[[0]] words#2[[0]] with condition true
+Runtime Symex: 0.0124363s
+no --rounds given for a concurrent program: falling back to the memory-model encoding, which is known to report violations on race-free programs in this build. Pass --rounds N (e.g. 3) for the round-robin encoding this tool is validated with.
+Adding SC constraints
+Shared __CPROVER_threads_exited: 2R/2W
+Shared __CPROVER_next_thread_id: 1R/2W
+Shared __CPROVER_thread_return_values: 1R/2W
+Shared main::1::t!0@1: 1R/2W
+size of program expression: 276 steps
+no slicing due to threads
+Generated 0 VCC(s), 0 remaining after simplification
+Runtime Postprocess Equation: 0.000933254s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.0018583s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 0.000573773s
+Solving with Glucose Syrup with simplifier
+2138 variables, 5026 clauses
+decisions: 172 total, 0 from the POR fallback tier, 0 landing on a POR variable; conflicts: 72, propagations: 6826; CS-first: on
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 0.00343658s
+Runtime decision procedure: 0.005445s
+
+** Results:
+[nodatarace.assertion.0] No data races on variable words between line 13 and line 17: SUCCESS
+
+** 0 of 1 failed (1 iterations)
+VERIFICATION SUCCESSFUL
+
+SUCCESSFUL

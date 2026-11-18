@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -62,7 +63,7 @@ from benchexec.tools.template import BaseTool2, ToolNotFoundException
 
 from . import TOOL_DIR
 from .config import Step
-from .processes import PRINT_LOCK, ComponentGroup, run_memory_limit
+from .processes import PRINT_LOCK, ComponentGroup, run_cpu_seconds, run_memory_limit
 from .properties import FORMULAS, NO_DATA_RACE, NO_OVERFLOW, UNREACH_CALL, VALID_MEMSAFETY
 from .strategy import NO_OUTCOME, Outcome
 from .witnesses import DELIVERED_NAME, needs_witness, passing_witness, subproperty_of
@@ -130,7 +131,14 @@ class ComponentSpec:
     tool the run's (ComponentRunner.command): for a component whose tool-info
     module passes it on and that sizes itself from it. Every other module is
     given empty ResourceLimits, so that its command line stays the one the
-    competition's options give."""
+    competition's options give.
+
+    `budget_variable` names the environment variable from which the
+    component itself reads the seconds it may run, None for one that reads
+    none; `budget_margin` is the seconds the component's own default keeps
+    below the competition's limit. A component with a budget_variable is run
+    with it set to its time budget (component_time_budget) less the margin
+    (ComponentRunner.command); its command line is unchanged."""
 
     name: str
     module: str
@@ -138,6 +146,8 @@ class ComponentSpec:
     witness: WitnessSpec = DEFAULT_WITNESS
     task_limit: int | None = TASK_LIMIT
     gets_memory_limit: bool = False
+    budget_variable: str | None = None
+    budget_margin: float = 0
 
     def tool(self) -> BaseTool2:
         """A new object of the tool-info module's class Tool. The module is
@@ -195,10 +205,16 @@ REGISTRY = {spec.name: spec for spec in (
     #It runs the task's program, whose threads count as its tasks (TASK_LIMIT).
     ComponentSpec("sv-sanitizers", "benchexec.tools.sv-sanitizers", "sv-sanitizers",
                   witness=WitnessSpec("component", (), ("witness.yml",)), task_limit=PROGRAM_TASK_LIMIT),
-    #Version 2.0 (24013886) writes only error-witness.graphml, which never counts (witnesses.py);
-    #24187653 also writes witness.yml, which is not named here: iekke decides in no conf, and
-    #whether it should is cooperace/D10
-    ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ())),
+    #iekke 2.0 (10.5281/zenodo.24279954): its wrapper iekke writes witness.yml into its working
+    #directory, iekke's directory: a violation_sequence 2.2 for a false of no-data-race,
+    #unreach-call and no-overflow, an invariant_set 2.1 with content [] for a true of
+    #unreach-call and no-overflow, none for valid-memsafety, for a no-data-race true or for a
+    #false of its concrete (gcc sanitizer) run. witness-content.yml (an intermediate) and
+    #error-witness.graphml are never delivered. The wrapper reads its time budget, in wall-clock
+    #seconds from its start, from DEAGLE_BUDGET (default 870 under the 900 s limit), and its
+    #memory from the tightest cgroup memory.max above it, which is the component's share
+    ComponentSpec("iekke", "benchexec.tools.iekke", "iekke", witness=WitnessSpec("component", (), ("witness.yml",)),
+                  budget_variable="DEAGLE_BUDGET", budget_margin=30),
     ComponentSpec("RacerF", "benchexec.tools.racerf", "racerf"),
     #IKOS-ConC svcomp27: bin/svcomp_witness.py writes a violation witness of format 2.2 to
     #--out (default witness.yml in its working directory) only for a confirmed race. The
@@ -525,7 +541,7 @@ class ComponentRunner:
             actor.version = lambda executable: UNKNOWN_VERSION
 
     def command(self, actor: BaseTool2, spec: ComponentSpec, witness_dir: str,
-                memory: int | None = None) -> ComponentCommand:
+                memory: int | None = None, budget: float | None = None) -> ComponentCommand:
         """The ComponentCommand that starts the component `actor`, the
         tool-info object of the registry entry `spec`, on the task, with the
         witness directory `witness_dir` of its run, as BenchExec would start it
@@ -550,7 +566,10 @@ class ComponentRunner:
           directory it runs in, which SV-COMP makes the tool's directory. The
           default, os.curdir, which every module of REGISTRY keeps in
           BenchExec 3.31, so gives the tool directory;
-        - the environments are `actor.environment(executable)`.
+        - the environments are `actor.environment(executable)`, and, for a
+          component with a `spec.budget_variable` and a `budget` in seconds
+          (component_time_budget; None: none), that variable set to the
+          budget less `spec.budget_margin`, in whole seconds and at least 0.
 
         Raises what `actor.executable` raises, ToolNotFoundException if the
         executable is not there, and KeyError if `versions` has no entry for
@@ -566,7 +585,12 @@ class ComponentRunner:
             actor, executable, options, [self.file], None, self.property_file,
             {"data_model": self.data_model, "language": "C"}, limits)
         cwd = os.path.normpath(os.path.join(tool_location, actor.working_directory(executable)))
-        return ComponentCommand(cmdline, cwd, actor.environment(executable))
+        environments = actor.environment(executable)
+        if spec.budget_variable and budget is not None:
+            seconds = max(0, math.floor(budget - spec.budget_margin))
+            environments = {**environments, "newEnv": {**environments.get("newEnv", {}),
+                                                       spec.budget_variable: str(seconds)}}
+        return ComponentCommand(cmdline, cwd, environments)
 
     def run_component(self, actor: BaseTool2, step: Step, group: ComponentGroup) -> Outcome:
         """Runs the component `actor` of the config.Step `step` on the task in
@@ -607,7 +631,8 @@ class ComponentRunner:
         #A directory of this run, in which the component's witnesses end up
         witness_dir = tempfile.mkdtemp(prefix=actor.name().replace(" ", "_") + "-", dir=self.work_dir)
         memory, cpu = announce_limits(step)
-        command = self.command(actor, spec, witness_dir, memory)
+        budget = announce_time_budget(spec, step, cpu)
+        command = self.command(actor, spec, witness_dir, memory, budget)
         tasks = announce_task_limit(step.component, spec.task_limit, execution.task_limit_supported)
         tool_result = execution.execute_run(
             command.cmdline, command.cwd, command.environments, group,
@@ -782,6 +807,33 @@ def announce_limits(step: Step) -> tuple[int | None, int | None]:
         with PRINT_LOCK:
             print("\n".join(lines), flush=True)
     return memory, cpu
+
+
+def component_time_budget(step: Step, cpu: int | None, used: float | None) -> float | None:
+    """The seconds a component of the config.Step `step` may run, given its
+    CPU-time limit `cpu` (component_cpu_time_limit; None: none) and the CPU
+    time `used` that the run has used when it starts (run_cpu_seconds; None:
+    unknown): the smaller of `cpu` and what is left of the run's
+    runCpuTimeBudget, at least 0, or None if neither bounds it."""
+    bounds = [] if cpu is None else [cpu]
+    if step.run_cpu_time_budget is not None:
+        bounds.append(step.run_cpu_time_budget - (used or 0.0))
+    return max(0.0, min(bounds)) if bounds else None
+
+
+def announce_time_budget(spec: ComponentSpec, step: Step, cpu: int | None) -> float | None:
+    """For a component that reads its time budget (`spec.budget_variable`):
+    component_time_budget of `step` with the CPU-time limit `cpu` and the CPU
+    time the run has used now, printed as "Time budget of <component>: <n> s
+    (<variable>=<n - margin>)". None, and nothing printed, for any other
+    component or without a budget."""
+    if not spec.budget_variable:
+        return None
+    budget = component_time_budget(step, cpu, run_cpu_seconds())
+    if budget is not None:
+        seconds = max(0, math.floor(budget - spec.budget_margin))
+        say_line(f"Time budget of {step.component}: {budget:.0f} s ({spec.budget_variable}={seconds})")
+    return budget
 
 
 def announce_task_limit(component: str, limit: int | None, supported) -> int | None:

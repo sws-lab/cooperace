@@ -1,0 +1,19 @@
+- entry_type: 'violation_sequence'
+  metadata:
+    format_version: '2.2'
+    uuid: 'eef5f5a2-3663-443c-a367-5a3d8c96f1bf'
+    creation_time: '2026-11-18T08:03:25Z'
+    producer:
+      name: 'Iëkke'
+      version: '2.0'
+    task:
+      input_files:
+      - 'order-flag-before-result.c'
+      input_file_hashes:
+        '/home/cwd/sv-benchmarks/c/pthread-overflow/order-flag-before-result.c': '1d1966313eda8ee225d33882279cdb60bf8b842420f68d35f809e78ab3b8210d'
+      specification: 'CHECK( init(main()), LTL(G ! overflow) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content:
+  - segment: [{waypoint: {type: 'function_return', action: 'follow', location: {file_name: 'order-flag-before-result.c', line: 36}, constraint: {value: '\result == 1', format: 'ext_c_expression'}, thread_id: 0}}]
+  - segment: [{waypoint: {type: 'target', action: 'follow', location: {file_name: 'order-flag-before-result.c', line: 42}, thread_id: 0}}]

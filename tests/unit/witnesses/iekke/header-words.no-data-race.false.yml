@@ -1,0 +1,19 @@
+- entry_type: 'violation_sequence'
+  metadata:
+    format_version: '2.2'
+    uuid: '422c290c-a2ab-4985-9159-7f3cb51b2593'
+    creation_time: '2026-11-18T08:03:01Z'
+    producer:
+      name: 'Iëkke'
+      version: '2.0'
+    task:
+      input_files:
+      - 'header-words.c'
+      input_file_hashes:
+        '/home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c': '675ea14d4f2760b3318c22295d31bb76d3806e52283777e48d0beb5179b48bba'
+      specification: 'CHECK( init(main()), LTL(G ! data-race) )'
+      data_model: 'LP64'
+      language: 'C'
+  content:
+  - segment: [{waypoint: {type: 'function_enter', action: 'follow', location: {file_name: 'header-words.c', line: 24}, thread_id: 0}}]
+  - segment: [{waypoint: {type: 'target', action: 'follow', location: {file_name: 'header-words.c', line: 25}, thread_id: 0}}, {waypoint: {type: 'target', action: 'follow', location: {file_name: 'header-words.c', line: 17}, thread_id: 1}}]
