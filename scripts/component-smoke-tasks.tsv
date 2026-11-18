@@ -1,0 +1,120 @@
+# Written by scripts/component-smoke.py select from the pre-run table of 16 November 2026 (ledger export-table, verified.parquet); one row per task; prerun_* are of the archive prerun_doi. The theta rows were selected with the registry and conf/svcomp27-theta.json of branch e10-theta.
+component	property	role	task	expected	prerun_doi	prerun_status	prerun_cpu	prerun_mem
+goblint	no-data-race	true	c/weaver/popl20-simple-queue.wvr.yml	true	10.5281/zenodo.24080342	true	0.30	32825344
+goblint	no-data-race	non-answer	c/pthread-atomic-qualifier/atomic-qual-both-atomic.yml	true	10.5281/zenodo.24080342	EXCEPTION (Goblint_lib__Maingoblint.FrontendError)	0.19	33148928
+goblint	no-data-race	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24080342	true	0.24	33943552
+goblint	no-data-race	lp64	c/pthread-lp64/seq-truncation.yml	true	10.5281/zenodo.24080342	true	0.27	34062336
+goblint	unreach-call	true	c/goblint-regression/28-race_reach_22-deref_read_racefree.yml	true	10.5281/zenodo.24080342	true	0.30	34697216
+goblint	unreach-call	non-answer	c/pthread-complex/elimination_backoff_stack.yml	false	10.5281/zenodo.24080342	EXCEPTION (Goblint_lib__Maingoblint.FrontendError)	0.19	33976320
+goblint	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24080342	true	0.45	33947648
+goblint	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24080342	unknown	1.61	34820096
+goblint	no-overflow	true	c/pthread-ext/48_ticket_lock_low_contention_vs.yml	true	10.5281/zenodo.24080342	true	0.30	33894400
+goblint	no-overflow	non-answer	c/pthread-complex/elimination_backoff_stack.yml	true	10.5281/zenodo.24080342	EXCEPTION (Goblint_lib__Maingoblint.FrontendError)	0.21	33882112
+goblint	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24080342	unknown	1.21	34836480
+goblint	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24080342	unknown	1.65	34758656
+goblint	valid-memsafety	true	c/goblint-regression/13-privatized_68-pfscan_protected_loop_minimal_interval_true.yml	true	10.5281/zenodo.24080342	true	0.33	33189888
+goblint	valid-memsafety	non-answer	c/pthread-complex/elimination_backoff_stack.yml	true	10.5281/zenodo.24080342	EXCEPTION (Goblint_lib__Maingoblint.FrontendError)	0.20	33914880
+goblint	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24080342	true	1.30	34250752
+goblint	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24080342	unknown	1.31	34349056
+dartagnan	no-data-race	true	c/weaver/chl-match-subst.wvr.yml	true	10.5281/zenodo.24134559	true	0.32	69738496
+dartagnan	no-data-race	false	c/pthread-lit/fkp2014.yml	false	10.5281/zenodo.24134559	false(no-data-race)	0.30	35721216
+dartagnan	no-data-race	non-answer	c/pthread/sigma.yml	false	10.5281/zenodo.24134559	ERROR	0.13	22437888
+dartagnan	no-data-race	ilp32	c/pthread-ilp32-twins/header-words-ilp32.yml	true	10.5281/zenodo.24134559	true	0.18	28725248
+dartagnan	no-data-race	lp64	c/pthread-lp64/header-words.yml	false	10.5281/zenodo.24134559	false(no-data-race)	0.18	29704192
+dartagnan	unreach-call	true	c/weaver/parallel-ticket-4.wvr.yml	true	10.5281/zenodo.24134559	true	0.31	49369088
+dartagnan	unreach-call	false	c/pthread-theta/unwind1-nondet.yml	false	10.5281/zenodo.24134559	false(unreach-call)	0.31	33292288
+dartagnan	unreach-call	non-answer	c/pthread-atomic-qualifier/atomic-qual-cast.yml	true	10.5281/zenodo.24134559	ERROR	0.14	22233088
+dartagnan	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24134559	true	0.21	31883264
+dartagnan	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24134559	false(unreach-call)	0.19	32804864
+sv-sanitizers	unreach-call	true	c/pthread-atomic-qualifier/atomic-qual-cast.yml	true	10.5281/zenodo.24117367	true	0.40	26071040
+sv-sanitizers	unreach-call	false	c/pthread-divine/tls_destructor_worker.yml	false	10.5281/zenodo.24117367	false(unreach-call)	0.33	26021888
+sv-sanitizers	unreach-call	non-answer	c/libvsync/rec_ticketlock.yml	true	10.5281/zenodo.24117367	ERROR (static reach_error)	0.13	14008320
+sv-sanitizers	valid-memsafety	false	c/pthread-join-result/dangling-local.yml	false(valid-deref)	10.5281/zenodo.24117367	false(valid-deref)	0.34	26148864
+sv-sanitizers	valid-memsafety	non-answer	c/ldv-linux-3.14-races/linux-3.14--drivers--media--platform--marvell-ccic--cafe_ccic.ko.cil-1.yml	true	10.5281/zenodo.24117367	ERROR (compile)	0.20	26574848
+deagle	no-overflow	true	c/pthread-wmm/safe028_rmo.yml	true	10.5281/zenodo.24278298	true	0.30	13742080
+deagle	no-overflow	false	c/pthread-overflow/order-init-after-create.yml	false	10.5281/zenodo.24278298	false(no-overflow)	0.38	13295616
+deagle	no-overflow	non-answer	c/pthread-divine/tls_destructor_worker.yml	true	10.5281/zenodo.24278298	unknown	0.10	9658368
+deagle	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24278298	false(no-overflow)	0.45	14020608
+deagle	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24278298	true	0.51	14135296
+deagle	valid-memsafety	true	c/goblint-regression/04-mutex_46-escape_nr.yml	true	10.5281/zenodo.24278298	true	0.39	13586432
+deagle	valid-memsafety	false	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24278298	false(valid-deref)	0.53	14213120
+deagle	valid-memsafety	non-answer	c/pthread-divine/tls_destructor_worker.yml	true	10.5281/zenodo.24278298	unknown	0.10	9814016
+deagle	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24278298	true	0.56	13991936
+deagle	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24278298	false(valid-deref)	0.53	14213120
+ugemcutter	unreach-call	true	c/pthread-barrier/unreach-unreachable-capacity-input-modulo.yml	true	10.5281/zenodo.24060016	true	13.02	237740032
+ugemcutter	unreach-call	false	c/goblint-regression/13-privatized_18-first-reads_unknown_2_neg.yml	false	10.5281/zenodo.24060016	false(unreach-call)	12.91	245415936
+ugemcutter	unreach-call	non-answer	c/pthread-once/unreach-unreachable-function-pointer-init.yml	true	10.5281/zenodo.24060016	unknown	20.91	190259200
+ugemcutter	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24060016	true	16.79	248549376
+ugemcutter	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24060016	false(unreach-call)	16.15	245018624
+ugemcutter	no-overflow	true	c/goblint-regression/06-symbeq_11-equ_nr.yml	true	10.5281/zenodo.24060016	true	13.16	222941184
+ugemcutter	no-overflow	false	c/pthread-join-result/count-scale.yml	false	10.5281/zenodo.24060016	false(no-overflow)	13.92	255152128
+ugemcutter	no-overflow	non-answer	c/goblint-regression/09-regions_22-nocollapse.yml	true	10.5281/zenodo.24060016	unknown	20.48	198344704
+ugemcutter	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24060016	false(no-overflow)	14.70	243699712
+ugemcutter	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24060016	true	21.71	261718016
+ugemcutter	valid-memsafety	true	c/goblint-regression/04-mutex_28-base_nr.yml	true	10.5281/zenodo.24060016	true	14.33	249667584
+ugemcutter	valid-memsafety	false	c/pthread-array-bounds/global-histogram.yml	false(valid-deref)	10.5281/zenodo.24060016	false(valid-deref)	15.31	257519616
+ugemcutter	valid-memsafety	non-answer	c/pthread-complex/elimination_backoff_stack.yml	true	10.5281/zenodo.24060016	unknown	21.00	196599808
+ugemcutter	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24060016	true	30.69	272510976
+ugemcutter	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24060016	false(valid-deref)	19.98	262553600
+ikos-conc	no-data-race	true	c/weaver/chl-node-symm.wvr.yml	true	10.5281/zenodo.23736684	true	0.36	100249600
+ikos-conc	no-data-race	false	c/pthread-barrier/norace-race-after-barrier.yml	false	10.5281/zenodo.23736684	false(no-data-race)	0.83	97755136
+ikos-conc	no-data-race	non-answer	c/pthread-race-challenges/thread-local-value-race.yml	false	10.5281/zenodo.23736684	unknown	0.41	97898496
+ikos-conc	no-data-race	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.23736684	true	0.54	98037760
+ikos-conc	no-data-race	lp64	c/pthread-lp64/seq-truncation.yml	true	10.5281/zenodo.23736684	true	0.47	97792000
+iekke	no-data-race	true	c/goblint-regression/28-race_reach_08-cond_racefree.yml	true	10.5281/zenodo.24187653	true	0.30	17707008
+iekke	no-data-race	false	c/goblint-regression/05-lval_ls_05-glob_idx_rc.yml	false	10.5281/zenodo.24187653	false(no-data-race)	0.39	16277504
+iekke	no-data-race	non-answer	c/pthread-once/norace-safe-init-function-pointer-joined.yml	true	10.5281/zenodo.24187653	unknown	3.12	17379328
+iekke	no-data-race	ilp32	c/pthread-ilp32-twins/header-words-ilp32.yml	true	10.5281/zenodo.24187653	true	4.71	26370048
+iekke	no-data-race	lp64	c/pthread-lp64/header-words.yml	false	10.5281/zenodo.24187653	false(no-data-race)	1.02	17854464
+iekke	unreach-call	true	c/pthread-once/unreach-unreachable-single-init.yml	true	10.5281/zenodo.24187653	true	1.90	17371136
+iekke	unreach-call	false	c/pthread-wmm/rfi006_power.oepc.yml	false	10.5281/zenodo.24187653	false(unreach-call)	0.36	17678336
+iekke	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24187653	true	5.49	40157184
+iekke	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24187653	false(unreach-call)	0.58	17965056
+iekke	no-overflow	true	c/pthread-divine/tls_destructor_worker.yml	true	10.5281/zenodo.24187653	true	2.35	25800704
+iekke	no-overflow	false	c/pthread-overflow/order-flag-before-result.yml	false	10.5281/zenodo.24187653	false(no-overflow)	0.50	16855040
+iekke	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24187653	false(no-overflow)	0.62	17575936
+iekke	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24187653	true	7.49	55660544
+iekke	valid-memsafety	true	c/pthread/bigshot_s.yml	true	10.5281/zenodo.24187653	true	2.87	17928192
+iekke	valid-memsafety	false	c/pthread/bigshot_s2.yml	false(valid-deref)	10.5281/zenodo.24187653	false(valid-deref)	0.40	17682432
+iekke	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24187653	true	19.40	95043584
+iekke	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24187653	false(valid-deref)	0.93	20729856
+cpachecker	no-data-race	true	c/weaver/test-semi1.wvr.yml	true	10.5281/zenodo.24218973	true	6.16	158580736
+cpachecker	no-data-race	false	c/pthread-atomic-qualifier/atomic-qual-control-struct-whole.yml	false	10.5281/zenodo.24218973	false(no-data-race)	7.07	164474880
+cpachecker	no-data-race	non-answer	c/pthread-protocols/sequencer-round-robin.yml	true	10.5281/zenodo.24218973	ERROR (parsing failed)	3.51	86310912
+cpachecker	no-data-race	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24218973	true	7.78	172601344
+cpachecker	no-data-race	lp64	c/pthread-lp64/seq-truncation.yml	true	10.5281/zenodo.24218973	true	7.95	157499392
+cpachecker	unreach-call	true	c/weaver/security.wvr.yml	true	10.5281/zenodo.24218973	true	7.74	165769216
+cpachecker	unreach-call	false	c/goblint-regression/28-race_reach_45-escape_racing.yml	false	10.5281/zenodo.24218973	false(unreach-call)	9.15	192270336
+cpachecker	unreach-call	non-answer	c/pthread-protocols/rw-checkpoint.yml	true	10.5281/zenodo.24218973	ERROR (parsing failed)	3.76	85135360
+cpachecker	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24218973	true	10.41	182992896
+cpachecker	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24218973	false(unreach-call)	10.64	181870592
+cpachecker	no-overflow	true	c/weaver/test-semi1.wvr.yml	true	10.5281/zenodo.24218973	true	8.54	187514880
+cpachecker	no-overflow	false	c/pthread-overflow/cta-reserve-split-lock.yml	false	10.5281/zenodo.24218973	false(no-overflow)	10.85	222629888
+cpachecker	no-overflow	non-answer	c/pthread-overflow/cta-cas-retry-no-recheck.yml	false	10.5281/zenodo.24218973	ERROR (parsing failed)	3.65	85405696
+cpachecker	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24218973	false(no-overflow)	12.86	291614720
+cpachecker	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24218973	true	19.71	533983232
+cpachecker	valid-memsafety	true	c/goblint-regression/04-mutex_22-deref_read.yml	true	10.5281/zenodo.24218973	true	10.50	177479680
+cpachecker	valid-memsafety	false	c/weaver-mutants/chl-nzb-file-subst-v3.wvr.yml	false(valid-deref)	10.5281/zenodo.24218973	false(valid-deref)	7.18	152170496
+cpachecker	valid-memsafety	non-answer	c/pthread-complex/workstealqueue_mutex-2.yml	true	10.5281/zenodo.24218973	ERROR (parsing failed)	4.04	84979712
+cpachecker	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24218973	ERROR	8.16	168030208
+cpachecker	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24218973	ERROR	9.22	160522240
+theta	no-data-race	true	c/weaver/mult-flipped-dist.wvr.yml	true	10.5281/zenodo.24128717	true	6.57	180916224
+theta	no-data-race	false	c/pthread-nondet/nondet-loop-bound-1.yml	false	10.5281/zenodo.24128717	false(no-data-race)	10.43	219783168
+theta	no-data-race	non-answer	c/pthread-race-challenges/atomic-gcc.yml	true	10.5281/zenodo.24128717	ERROR (frontend failed, before parsing finished)	3.64	98234368
+theta	no-data-race	ilp32	c/pthread-ilp32-twins/header-words-ilp32.yml	true	10.5281/zenodo.24128717	true	17.75	265650176
+theta	no-data-race	lp64	c/pthread-lp64/header-words.yml	false	10.5281/zenodo.24128717	false(no-data-race)	15.30	293552128
+theta	unreach-call	true	c/weaver/chl-sre-subst.wvr.yml	true	10.5281/zenodo.24128717	true	8.09	197611520
+theta	unreach-call	false	c/pthread-theta/unwind1-nondet.yml	false	10.5281/zenodo.24128717	false(unreach-call)	10.03	229629952
+theta	unreach-call	non-answer	c/pthread-barrier/unreach-reachable-process-shared-wait.yml	false	10.5281/zenodo.24128717	ERROR (frontend failed, after parsing finished)	3.80	93016064
+theta	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24128717	true	16.75	231727104
+theta	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24128717	false(unreach-call)	15.26	241885184
+theta	no-overflow	true	c/weaver/test-semi1.wvr.yml	true	10.5281/zenodo.24128717	true	8.45	219254784
+theta	no-overflow	false	c/pthread-overflow/order-init-after-create.yml	false	10.5281/zenodo.24128717	false(no-overflow)	13.14	243060736
+theta	no-overflow	non-answer	c/goblint-regression/28-race_reach_20-callback_racefree.yml	true	10.5281/zenodo.24128717	ERROR (frontend failed, after parsing finished)	4.42	118898688
+theta	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24128717	false(no-overflow)	16.52	245374976
+theta	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24128717	true	14.07	246280192
+theta	valid-memsafety	true	c/pthread-divine/tls_basic.yml	true	10.5281/zenodo.24128717	true	9.77	219467776
+theta	valid-memsafety	false	c/pthread-lit/sssc12-2.yml	false(valid-deref)	10.5281/zenodo.24128717	false(valid-deref)	12.41	235270144
+theta	valid-memsafety	non-answer	c/goblint-regression/28-race_reach_28-funptr_racefree.yml	true	10.5281/zenodo.24128717	ERROR (frontend failed, after parsing finished)	3.27	120733696
+theta	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24128717	unknown	15.44	279203840
+theta	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24128717	false(valid-deref)	16.30	292847616
