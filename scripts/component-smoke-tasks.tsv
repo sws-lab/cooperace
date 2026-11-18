@@ -1,4 +1,4 @@
-# Written by scripts/component-smoke.py select from the pre-run table of 16 November 2026 (ledger export-table, verified.parquet); one row per task; prerun_* are of the archive prerun_doi. The theta rows were selected with the registry and conf/svcomp27-theta.json of branch e10-theta. The saf rows were selected from tables-0713-noesbmc of 18 November 2026 (pre-run of 10.5281/zenodo.24267653) with conf/svcomp27-saf.json.
+# Written by scripts/component-smoke.py select from the pre-run table of 16 November 2026 (ledger export-table, verified.parquet); one row per task; prerun_* are of the archive prerun_doi. The theta rows were selected with the registry and conf/svcomp27-theta.json of branch e10-theta. The saf rows were selected from tables-0713-noesbmc of 18 November 2026 (pre-run of 10.5281/zenodo.24267653) with conf/svcomp27-saf.json. The rows of deagle in no-data-race and unreach-call and of dartagnan in no-overflow were selected from tables-1120-noesbmc of 18 November 2026 (pre-runs of 10.5281/zenodo.24278298 and 24318586) with conf/svcomp27-fv-final-saf.json; their true and false rows are tasks where that component decides in that conf's simulation.
 component	property	role	task	expected	prerun_doi	prerun_status	prerun_cpu	prerun_mem
 goblint	no-data-race	true	c/weaver/popl20-simple-queue.wvr.yml	true	10.5281/zenodo.24080342	true	0.30	32825344
 goblint	no-data-race	non-answer	c/pthread-atomic-qualifier/atomic-qual-both-atomic.yml	true	10.5281/zenodo.24080342	EXCEPTION (Goblint_lib__Maingoblint.FrontendError)	0.19	33148928
@@ -26,6 +26,11 @@ dartagnan	unreach-call	false	c/pthread-theta/unwind1-nondet.yml	false	10.5281/ze
 dartagnan	unreach-call	non-answer	c/pthread-atomic-qualifier/atomic-qual-cast.yml	true	10.5281/zenodo.24134559	ERROR	0.14	22233088
 dartagnan	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24134559	true	0.21	31883264
 dartagnan	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24134559	false(unreach-call)	0.19	32804864
+dartagnan	no-overflow	true	c/pthread-theta/unwind3-1.yml	true	10.5281/zenodo.24318586	true	0.74	42938368
+dartagnan	no-overflow	false	c/pthread-overflow/nthreads-join-results.yml	false	10.5281/zenodo.24318586	false(no-overflow)	6.76	115216384
+dartagnan	no-overflow	non-answer	c/pthread-recursive-mutex/interest-overflow.yml	false	10.5281/zenodo.24318586	ERROR	0.21	34709504
+dartagnan	no-overflow	ilp32	c/pthread-ilp32-twins/long-accumulator-ilp32.yml	false	10.5281/zenodo.24318586	false(no-overflow)	0.23	44834816
+dartagnan	no-overflow	lp64	c/pthread-lp64/long-accumulator.yml	true	10.5281/zenodo.24318586	true	0.24	42061824
 sv-sanitizers	unreach-call	true	c/pthread-atomic-qualifier/atomic-qual-cast.yml	true	10.5281/zenodo.24117367	true	0.40	26071040
 sv-sanitizers	unreach-call	false	c/pthread-divine/tls_destructor_worker.yml	false	10.5281/zenodo.24117367	false(unreach-call)	0.33	26021888
 sv-sanitizers	unreach-call	non-answer	c/libvsync/rec_ticketlock.yml	true	10.5281/zenodo.24117367	ERROR (static reach_error)	0.13	14008320
@@ -41,6 +46,16 @@ deagle	valid-memsafety	false	c/pthread-lp64/malloc-long-array.yml	false(valid-de
 deagle	valid-memsafety	non-answer	c/pthread-divine/tls_destructor_worker.yml	true	10.5281/zenodo.24278298	unknown	0.10	9814016
 deagle	valid-memsafety	ilp32	c/pthread-ilp32-twins/malloc-long-array-ilp32.yml	true	10.5281/zenodo.24278298	true	0.56	13991936
 deagle	valid-memsafety	lp64	c/pthread-lp64/malloc-long-array.yml	false(valid-deref)	10.5281/zenodo.24278298	false(valid-deref)	0.53	14213120
+deagle	no-data-race	true	c/goblint-regression/06-symbeq_23-idxsense_nr.yml	true	10.5281/zenodo.24278298	true	0.31	12718080
+deagle	no-data-race	false	c/goblint-regression/05-lval_ls_07-glob_fld_rc.yml	false	10.5281/zenodo.24278298	false(no-data-race)	0.34	12722176
+deagle	no-data-race	non-answer	c/pthread-divine/tls_destructor_worker.yml	true	10.5281/zenodo.24278298	unknown	0.10	9748480
+deagle	no-data-race	ilp32	c/pthread-ilp32-twins/header-words-ilp32.yml	true	10.5281/zenodo.24278298	true	0.44	14012416
+deagle	no-data-race	lp64	c/pthread-lp64/header-words.yml	false	10.5281/zenodo.24278298	false(no-data-race)	0.45	14258176
+deagle	unreach-call	true	c/pthread-wmm/safe037.yml	true	10.5281/zenodo.24278298	true	0.31	13213696
+deagle	unreach-call	false	c/goblint-regression/36-apron_41-threadenter-no-locals_unknown_1_neg.yml	false	10.5281/zenodo.24278298	false(unreach-call)	0.33	12587008
+deagle	unreach-call	non-answer	c/pthread-divine/tls_destructor_worker.yml	false	10.5281/zenodo.24278298	unknown	0.11	9682944
+deagle	unreach-call	ilp32	c/pthread-ilp32-twins/seq-truncation-ilp32.yml	true	10.5281/zenodo.24278298	true	0.52	14143488
+deagle	unreach-call	lp64	c/pthread-lp64/seq-truncation.yml	false	10.5281/zenodo.24278298	false(unreach-call)	0.41	14209024
 ugemcutter	unreach-call	true	c/pthread-barrier/unreach-unreachable-capacity-input-modulo.yml	true	10.5281/zenodo.24060016	true	13.02	237740032
 ugemcutter	unreach-call	false	c/goblint-regression/13-privatized_18-first-reads_unknown_2_neg.yml	false	10.5281/zenodo.24060016	false(unreach-call)	12.91	245415936
 ugemcutter	unreach-call	non-answer	c/pthread-once/unreach-unreachable-function-pointer-init.yml	true	10.5281/zenodo.24060016	unknown	20.91	190259200

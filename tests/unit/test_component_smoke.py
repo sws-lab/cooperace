@@ -265,7 +265,11 @@ def test_the_task_file_names_known_components_and_properties():
     for row in rows:
         assert row["property"] in cs.PROPERTIES and row["task"].startswith("c/") and row["task"].endswith(".yml")
         spec = cs.registry_entry(sys_modules_components(), row["component"])
-        assert row["property"] in cs.conf_properties(CONF, spec.name)
+        # a property in which the default conf or a conf variant runs the component
+        assert any(row["property"] in cs.conf_properties(conf, spec.name) for conf in [CONF, *VARIANT_CONFS])
+
+
+VARIANT_CONFS = [json.loads(path.read_text()) for path in sorted((ROOT / "conf").glob("svcomp27-*.json"))]
 
 
 def sys_modules_components():
