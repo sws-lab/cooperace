@@ -1,23 +1,19 @@
 # The components of CoOpeRace's registry that are not in the SV-COMP archive:
-# one "<fm-tools name>: <doi>" line each. ULTIMATE Automizer, iekke and
-# CPAchecker are in their SV-COMP 2027 versions, each the newest archive that
-# has a pre-run on the current task set. The others are in the version each
-# ran in the Verification track of SV-COMP 2026: for nacpa (2.1.1) and RacerF
-# (svcomp26) that is also the version fm-tools registers for SV-COMP 2027,
-# while ULTIMATE Taipan (svcomp26) has a newer 2027 version that this file
-# does not name. scripts/download-tools.py --pool
+# one "<fm-tools name>: <doi>" line each. iekke, Theta and SAF are in the
+# SV-COMP 2027 archives fm-tools registers on 18 November 2026 (Theta's in
+# fm-tools !1499). ULTIMATE Automizer and CPAchecker are in earlier SV-COMP 2027
+# archives, which no conf variant runs. The others are in the version each
+# ran in the Verification track of SV-COMP 2026: nacpa (2.1.1), RacerF
+# (svcomp26) and ULTIMATE Taipan (svcomp26), each of which has a newer 2027
+# version that this file does not name. scripts/download-tools.py --pool
 # installs them into tools/; scripts/svcomp-dist.sh packs only tools.txt,
 # and, for a conf variant (CONF_VARIANT), also the components of this file that
-# its conf names. Theta svcomp27 (24128717, pre-run 13 November 2026) is the
-# archive fm-tools main 75f310bc registers; the conf variant theta
-# (conf/svcomp27-theta.json) runs it. SAF svcomp27 (24267653, pre-run 17 November
-# 2026 on the whole task set) is the archive fm-tools main registers since 40b030b2; the
-# conf variant saf (conf/svcomp27-saf.json) runs it.
+# its conf names.
 uautomizer: 10.5281/zenodo.24133222
 iekke: 10.5281/zenodo.24279954
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
 cpachecker: 10.5281/zenodo.24218973
 racerf: 10.5281/zenodo.17589798
-theta: 10.5281/zenodo.24128717
+theta: 10.5281/zenodo.24339979
 saf: 10.5281/zenodo.24267653

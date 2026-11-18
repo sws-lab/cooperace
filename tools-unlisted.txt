@@ -1,21 +1,21 @@
-# Components of tools.txt and tools-pool.txt whose DOI fm-tools main no longer
-# lists, one "<name>: <doi> <fm-tools commit>" line each (scripts/download-tools.py).
-# CoOpeRace bundles, for each component, the newest archive that the organizers
-# have run in a pre-run on the current task set. Where fm-tools has since
-# registered a newer archive that has no pre-run yet, the bundled DOI is gone
-# from fm-tools main; its version and options are read from the commit named
-# here, the last commit of fm-tools main whose entry lists it. Checked on
-# 16 November 2026 against fm-tools main 75f310bc:
+# Components of tools.txt and tools-pool.txt whose DOI fm-tools main does not
+# list, one "<name>: <doi> <fm-tools commit>" line each (scripts/download-tools.py):
+# the version and options are read from the entry at that commit, which must be
+# in the history of the fm-tools checkout given (or is read from gitlab.com).
+# Checked on 18 November 2026 against fm-tools main 8b1578ae.
 #
-# Goblint 24080342 (svcomp27-0-g9febbae9c, pre-run 9 November); fm-tools 75f310bc registers 24288102
-goblint: 10.5281/zenodo.24080342 9dd09a3f
-# Dartagnan 24134559 (4.5.0-alpha, pre-run 12 November); fm-tools 715a5c3d registers 24261782
-dartagnan: 10.5281/zenodo.24134559 5f26160a
-# ULTIMATE GemCutter 24060016 (0.3.2-dev-991986cc09, pre-run 10 November); fm-tools aa0b5593
-# registered 24133237, which never ran, and 4a8ff986 registers 24202456
-ugemcutter: 10.5281/zenodo.24060016 6452480b
-# IKOS-ConC 23736684 (pre-run 30 October); fm-tools 140bd795 registers 24225248
-ikos-conc: 10.5281/zenodo.23736684 dbda8837
-# ULTIMATE Automizer 24133222 (pool; 0.3.2-dev-f60e54cd9f, pre-run 12 November); fm-tools 4a8ff986
-# registers 24202446
+# Three archives are proposed in open merge requests of fm-tools; the commit is
+# the head of the merge request. Once the merge request is merged, fm-tools main
+# lists the DOI and the line is to be removed.
+# Deagle 24328339 (svcomp27): fm-tools !1479; main registers 24303894
+deagle: 10.5281/zenodo.24328339 ee2243ea
+# ULTIMATE GemCutter 24339861 (svcomp27, 0.3.2-dev-c425bfe605): fm-tools !1490; main registers 24202456
+ugemcutter: 10.5281/zenodo.24339861 eb7f59d2
+# Theta 24339979 (svcomp27, 8.12.1): fm-tools !1499; main registers 24322775
+theta: 10.5281/zenodo.24339979 4374fb51
+#
+# Pool components that no conf variant runs, in archives fm-tools main has replaced:
+# ULTIMATE Automizer 24133222 (0.3.2-dev-f60e54cd9f); fm-tools 4a8ff986 registers 24202446
 uautomizer: 10.5281/zenodo.24133222 b7ccdb13
+# CPAchecker 24218973 (4.2.2-5072-g4453227651); fm-tools 7c536b9e registers 24339049 (4.3)
+cpachecker: 10.5281/zenodo.24218973 05bf3109

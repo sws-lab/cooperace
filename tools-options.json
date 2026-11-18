@@ -1,6 +1,6 @@
 {
   "goblint": {
-    "doi": "10.5281/zenodo.24080342",
+    "doi": "10.5281/zenodo.24288102",
     "version": "svcomp27",
     "options": [
       "--portfolio-conf",
@@ -8,7 +8,7 @@
     ]
   },
   "dartagnan": {
-    "doi": "10.5281/zenodo.24134559",
+    "doi": "10.5281/zenodo.24326544",
     "version": "svcomp27",
     "options": []
   },
@@ -18,19 +18,19 @@
     "options": []
   },
   "deagle": {
-    "doi": "10.5281/zenodo.24278298",
+    "doi": "10.5281/zenodo.24328339",
     "version": "svcomp27",
     "options": []
   },
   "ugemcutter": {
-    "doi": "10.5281/zenodo.24060016",
+    "doi": "10.5281/zenodo.24339861",
     "version": "svcomp27",
     "options": [
       "--full-output"
     ]
   },
   "ikos-conc": {
-    "doi": "10.5281/zenodo.23736684",
+    "doi": "10.5281/zenodo.24225248",
     "version": "svcomp27",
     "options": []
   },
@@ -76,7 +76,7 @@
     "options": []
   },
   "theta": {
-    "doi": "10.5281/zenodo.24128717",
+    "doi": "10.5281/zenodo.24339979",
     "version": "svcomp27",
     "options": [
       "--svcomp",

@@ -1,6 +1,6 @@
-goblint: 10.5281/zenodo.24080342
-dartagnan: 10.5281/zenodo.24134559
+goblint: 10.5281/zenodo.24288102
+dartagnan: 10.5281/zenodo.24326544
 sv-sanitizers: 10.5281/zenodo.24117367
-deagle: 10.5281/zenodo.24278298
-ugemcutter: 10.5281/zenodo.24060016
-ikos-conc: 10.5281/zenodo.23736684
+deagle: 10.5281/zenodo.24328339
+ugemcutter: 10.5281/zenodo.24339861
+ikos-conc: 10.5281/zenodo.24225248
