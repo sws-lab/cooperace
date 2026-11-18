@@ -105,7 +105,8 @@ if [ "${CONF_VARIANT}" != default ]; then
   # The components of tools-pool.txt that the variant's conf runs and tools.txt
   # lacks, as "<name>: <doi>" lines, by the registry of the archive's own code.
   git show "${TREE}:tools-pool.txt" > "${DIST}/.tools-pool.txt"
-  python3 - "${DIST}" "${DIST}/conf/svcomp27.json" "${DIST}/.tools-pool.txt" >> "${DIST}/tools.txt" <<'PY'
+  # -B: importing the archive's own code must not leave __pycache__ in it
+  python3 -B - "${DIST}" "${DIST}/conf/svcomp27.json" "${DIST}/.tools-pool.txt" >> "${DIST}/tools.txt" <<'PY'
 import json
 import sys
 
@@ -198,6 +199,14 @@ if [ "${WITNESS_MODE}" = strict ]; then
 fi
 echo "${VERSION_TEXT}" > "${DIST}/VERSION"
 find "${DIST}" -name '.DS_Store' -delete
+# CoOpeRace's own part of the archive holds the committed files only: no byte
+# code that a Python run on the build machine left behind.
+STRAY="$(find "${DIST}" -path "${DIST}/tools" -prune -o \( -name __pycache__ -o -name '*.pyc' \) -print)"
+if [ -n "${STRAY}" ]; then
+  echo "Refusing to build: ${DIST} holds byte code:" >&2
+  echo "${STRAY}" >&2
+  exit 1
+fi
 
 # The same commit gives the same zip: every file gets the commit's time, and
 # the entries are sorted.
