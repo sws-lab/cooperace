@@ -133,7 +133,8 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    it unset, `default` (`conf/svcomp27.json`, the bracket mode) and any conf of the bracket mode unless
    `ALLOW_BRACKET_CONF=1`, which builds an archive for comparison whose `VERSION` ends in
    `bracket-conf` and which must never be submitted.
-   `FMTOOLS_ENTRY` defaults to the file on fm-tools' branch `cooperace-2027`.
+   Without `FMTOOLS_ENTRY`, the file on fm-tools' branch `cooperace-2027` is read, which fm-tools no
+   longer has, so give the entry.
    [`scripts/sv-comp/fmtools-entry.py`](scripts/sv-comp/fmtools-entry.py) reads from it the version
    that the SV-COMP 2027 participation names as `tool_version`, as the CI does, and that version's
    `required_ubuntu_packages`; it fails if the version has `full_container_images`, for which the CI

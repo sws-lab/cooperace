@@ -141,12 +141,13 @@ CHECK_MARGIN_SECONDS = 5.0
 
 # The address space in bytes the process of such a check may take at most,
 # and the share of the run's memory limit (processes.run_memory_limit) it may
-# take at most; a file whose check needs more does not pass. The check takes
-# about 29 times the file's size (593 MB for 21 MB), outside every component's
-# memory limit and inside the run's, beside components that may hold most of
-# it (80% for GemCutter in no-overflow): so a large witness does not end the
-# whole run by its memory limit. At the pre-run's 3 GB, 300 MB cover a witness
-# of about 7 MB; at the competition's 15 GB, 1 GiB about 30 MB.
+# take at most; a file whose check needs more does not pass. The check runs
+# outside every component's memory limit and inside the run's, which a
+# component may hold most of (90% in the confs of the first-verdict mode): so
+# a large witness does not end the whole run by its memory limit. In the
+# competition image (Python 3.14.4 with libyaml), 300 MB, the limit at the
+# pre-run's 3 GB, pass a witness of 3.1 MB and not one of 7.3 MB; 1 GiB, the
+# limit at the competition's 15 GB, pass 15.7 MB and not 31.5 MB.
 CHECK_MEMORY_BYTES = 1 << 30
 CHECK_MEMORY_SHARE = 0.1
 

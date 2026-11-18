@@ -6,8 +6,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Copied unchanged (below this comment) by CoOpeRace from benchexec/tools/ikos-conc.py of
-# BenchExec d22b08f7, the revision that SV-COMP 2027's bench-defs (56b0da5) pin; the bundled
-# wheel (BenchExec 3.35) has no ikos-conc module.
+# BenchExec d22b08f7, the revision that SV-COMP 2027's bench-defs pinned at 56b0da5 when it was
+# copied; the bundled wheel (BenchExec 3.35) has no ikos-conc module.
 from benchexec import result
 from benchexec.tools.sv_benchmarks_util import ILP32, LP64, get_data_model_from_task
 from benchexec.tools.template import BaseTool2

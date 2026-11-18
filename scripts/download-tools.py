@@ -13,10 +13,11 @@ and <doi> is the DOI of one of the versions that entry lists. There are two,
 both tracked:
 
 - tools.txt names the components of the SV-COMP archive;
-  scripts/svcomp-dist.sh packs exactly these. They are always installed.
+  scripts/svcomp-dist.sh packs these. They are always installed.
 - tools-pool.txt names the further components that CoOpeRace's registry can
-  run (src/cooperace/components.py, REGISTRY) and that are not in the
-  archive. They are installed only with `--pool`.
+  run (src/cooperace/components.py, REGISTRY). The archive holds those of
+  them that its conf variant runs (svcomp-dist.sh, CONF_VARIANT), and no
+  other. They are installed only with `--pool`.
 
 The script installs exactly those archives, and never chooses a version
 itself. Of the versions an fm-tools entry lists with a DOI, the one taken is

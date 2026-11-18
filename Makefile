@@ -7,8 +7,9 @@ DOCKER := DOCKER_BUILDKIT=1 DOCKER_DEFAULT_PLATFORM=linux/amd64 docker
 SVCOMP_CI_IMAGE := cooperace-smoketest
 SVCOMP_COMPETITION_IMAGE := cooperace-smoketest-competition
 SVCOMP_YEAR := 2027
-# CoOpeRace's fm-tools entry, a path or a URL; the default is the file on
-# fm-tools' branch cooperace-2027 (scripts/sv-comp/fmtools-entry.py).
+# CoOpeRace's fm-tools entry, a path or a URL. Without it,
+# scripts/sv-comp/fmtools-entry.py reads the file on fm-tools' branch
+# cooperace-2027, which fm-tools no longer has, so give the entry.
 FMTOOLS_ENTRY ?=
 # The witness table packed as conf/witnesses.json: default or strict
 # (scripts/svcomp-dist.sh, conf/README.md "The witness table").

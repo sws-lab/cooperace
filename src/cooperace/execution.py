@@ -7,6 +7,11 @@ in its container (execute_run), which is how CoOpeRace runs every component:
 stop() kills the container with every process in it, the component's
 directory is an overlay (container_dir_modes), and the memory, CPU-time and
 task limits are limits of the run's cgroup, for all its processes together.
+execute_run gives RunExecutor no wall-time limit, so for a run with a
+CPU-time limit BenchExec sets one of that limit plus 30 s
+(_WALLTIME_LIMIT_DEFAULT_OVERHEAD), which ends the run with
+terminationreason "walltime"; a phase's wallTimeLimit longer than that never
+ends such a component.
 
 The container needs user namespaces and the limits cgroups v2, which a
 process has inside the container of runexec or benchexec, as in the

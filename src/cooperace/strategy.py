@@ -13,8 +13,10 @@ of its own nested in the run's, and decides with a verdicts.Schedule which
 components start and which are stopped (ComponentGroup.stop, which calls
 execution.ExecutorRun.stop for a component under RunExecutor). It enforces
 each phase's wall-time limit itself; a component's CPU-time and memory limits
-are those of its own run (config.Strategy.step), set when it starts. What the
-run prints follows from verdicts.Verdicts.result.
+are those of its own run (config.Strategy.step), set when it starts, and a
+component with a CPU-time limit also gets BenchExec's wall-time limit of that
+limit plus 30 s (execution.py). What the run prints follows from
+verdicts.Verdicts.result.
 
 It knows nothing about components: it is given a StepRunner, which
 components.ComponentRunner is and the unit tests fake.
@@ -43,16 +45,17 @@ from .witnesses import needs_witness, subproperty_of
 # "false" or "unknown" from run_step; run_strategy also returns
 # verdicts.CONTRADICTION), the name of the component that gave it, as its
 # tool-info module names it (None for "unknown"), that component's witness
-# files from this run (at most one, which witnesses.passing_witness accepted
-# for the verdict), and the result that execute returns for it, which the
+# files from this run (at most one: the file that counts for the verdict, by
+# WitnessLint where the strategy has "witnessLint" and the witness table
+# requires a witness, else by witnesses.passing_witness), and the result that execute returns for it, which the
 # command line prints after "CoOpeRace verdict: " (for run_step the
 # StepRunner's to choose: components.reported_result, for example
 # "false(valid-deref)"; for a contradiction "ERROR (contradiction: ...)").
 # Only in the first-verdict mode (config.Step.first_verdict) does run_step
 # fill the last two: `measured`, the fields "cputime=... walltime=...
 # memory=... terminationreason=..." of the component's run as its block
-# prints them, and `witness_passes`, whether a witness file it wrote passes
-# the check (None: it wrote none). Elsewhere both are None.
+# prints them, and `witness_passes`, whether a witness file it wrote counts,
+# as for `witness_files` (None: it wrote none). Elsewhere both are None.
 Outcome = namedtuple("Outcome", "verdict component witness_files result measured witness_passes",
                      defaults=(None, None))
 NO_OUTCOME = Outcome("unknown", None, [], "unknown")

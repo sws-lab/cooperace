@@ -8,8 +8,8 @@ line, working directory and environment from its BenchExec tool-info module
 files, and the block of protocol lines it prints (print_component_run).
 ComponentRunner is the strategy.StepRunner the strategy runs steps with; it
 runs each component under BenchExec's RunExecutor (execution.py). With
-execution.py (and the tool-info modules of toolinfo/), the only module of the
-package that imports BenchExec.
+execution.py, witnesslint.py and the tool-info modules of toolinfo/, the only
+modules of the package that import BenchExec.
 
 The standard output is read by programs, so its lines are a protocol: for
 each component run, "---<name> logs---", its output, "---end of <name>
@@ -102,13 +102,15 @@ _ULTIMATE_WITNESS = WitnessSpec("run", ("--witness-dir", "{dir}"), ("witness.yml
 # of its cgroup. Measured on goblint at 1 and 2 cores (pids.peak of each
 # component's cgroup, E8 reproduction): GemCutter at most 48 tasks, Dartagnan
 # 12, Deagle 8, Goblint 7, IKOS-ConC 5; a JVM's own threads grow with the
-# cores it sees, to a few hundred on a large machine. sv-sanitizers runs the
-# task's program, whose threads count as its tasks: some programs create
-# threads without bound (pthread-lp64-twins/sssc12-2-lp64 reached 13,540
-# tasks in one run of E7), pthread-lit/sssc12 reached 402, and
+# cores it sees, to a few hundred on a large machine. sv-sanitizers, SAF and
+# iekke run the task's program, whose threads count as their tasks
+# (PROGRAM_TASK_LIMIT): some programs create threads without bound
+# (pthread-lp64-twins/sssc12-2-lp64 reached 13,540 tasks in one run of
+# sv-sanitizers in E7), pthread-lit/sssc12 reached 402, and
 # goblint-regression/28-race_reach_84, which creates 30,000 short-lived
 # threads, 165. The limits of the components that run at the same time add up
-# to at most 4096 tasks in every phase of conf/svcomp27.json, so that within a
+# to at most 4096 tasks in every phase of every conf in conf/ (a test checks
+# it), so that within a
 # run limited to 5000 tasks (README.md, "Running CoOpeRace by hand")
 # CoOpeRace itself keeps 900 even when every component reaches its limit.
 TASK_LIMIT = 1024
@@ -171,7 +173,7 @@ REGISTRY = {spec.name: spec for spec in (
     # Goblint prints "SV-COMP result: ..." only when run through the portfolio
     # its fm-tools options name (--portfolio-conf conf/svcomp27/seq.txt, a path
     # relative to Goblint's directory, the working directory of its run).
-    #Witness: witness.yaml.path; the svcomp26 configuration writes no graphml witness.
+    #Witness: witness.yaml.path; the svcomp27 portfolio writes no graphml witness.
     #Goblint 24080342 (svcomp27-0-g9febbae9c), like 24040934 and 23770235 before it, writes its default
     #correctness witness:
     #an invariant_set of format 2.0, or, where an invariant uses a ghost variable,
@@ -192,8 +194,8 @@ REGISTRY = {spec.name: spec for spec in (
     #Deagle's directory is collected, so it never counts
     ComponentSpec("Deagle", "benchexec.tools.deagle", "deagle",
                   witness=WitnessSpec("component", (), ("witness.yml",))),
-    #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its working directory,
-    #which must be Dartagnan's directory, and has no option for another one.
+    #Dartagnan-SVCOMP.sh sets DAT3M_OUTPUT to output/ in its own directory, Dartagnan's,
+    #which is also the working directory of its run, and has no option for another one.
     #Version svcomp27 writes output/witness.yml; svcomp26 writes only output/witness.graphml
     #Its tool-info module is BenchExec e7b7d4a4's, which reads Dartagnan svcomp27's race report and
     #passes the task's data model (--data-model=ILP32 or LP64), and gives ERROR, never a plain
@@ -610,18 +612,19 @@ class ComponentRunner:
         block. Returns the Outcome of its verdict if `step.accept` accepts the
         verdict and `group` was not stopped, and NO_OUTCOME otherwise. The
         Outcome's witness_files hold the one file the component wrote during
-        this run that witnesses.passing_witness accepts for the verdict on
-        `property_name`, with the sub-property its result names
-        (witnesses.subproperty_of), or none if no file passes; the verdict is
-        returned either way.
+        this run that counts for the verdict on `property_name`, or none if no
+        file counts; the verdict is returned either way. A file counts if
+        witnesses.passing_witness accepts it, with the sub-property its
+        result names (witnesses.subproperty_of), except in the first-verdict
+        mode with `step.witness_lint` for a verdict whose witness the witness
+        table requires: then linted_witness decides.
 
         In the first-verdict mode (`step.first_verdict`), a verdict of a run
         that RunExecutor ended for a limit or a stop (a termination reason,
         such as "cputime" or "memory") is no verdict: NO_OUTCOME, after the
         block (with result "unknown") and a line that says so. The
-        Outcome's witness_files are as outside the mode (the component's own
-        file that passes the check, or none), and the Outcome has `measured`
-        and `witness_passes`.
+        Outcome's witness_files are the component's own file that counts, or
+        none, and the Outcome has `measured` and `witness_passes`.
 
         The component's entry in the registry is looked up by the conf's name
         of the component, `step.component`, which config.load has checked is
@@ -902,8 +905,9 @@ def component_status(actor: BaseTool2, cmdline: list[str], tool_result: subproce
     "SEGMENTATION FAULT", "KILLED" or "KILLED BY SIGNAL <n>" for the signal
     that ended it, or "ERROR (<code>)" for an error with a non-zero exit code.
     Unlike BenchExec, which writes a specific result found after a limit as
-    "TIMEOUT (true)", a specific result is kept, so a verdict a component
-    printed before its limit ended it is still accepted."""
+    "TIMEOUT (true)", a specific result is kept, so outside the first-verdict
+    mode a verdict a component printed before its limit ended it is still
+    accepted; in that mode run_component refuses it."""
     returncode = tool_result.returncode
     if returncode < 0:
         exit_code = butil.ProcessExitCode.create(signal=-returncode)
@@ -951,13 +955,17 @@ TERMINATION_STATUSES = {
 
 def output_lines(output: str) -> list[str]:
     r"""The lines of a component's output `output`, each with its line
-    separator, as benchexec.model.Run.set_result reads them from the run's log
-    with readlines() for the RunOutput it gives the tool-info module: split
-    after each "\n" only, and a last line without one kept as it is. Leading
-    and trailing blank lines are kept. RunOutput gives a module each line
-    without its separator. execution.execute_run reads the run's log in text
-    mode, which turns "\r\n" and "\r" into "\n", as BenchExec's reading of
-    the log does."""
+    separator, split as benchexec.model.Run.set_result splits the run's log
+    with readlines() for the RunOutput it gives the tool-info module: after
+    each "\n" only, and a last line without one kept as it is. Leading and
+    trailing blank lines are kept. RunOutput gives a module each line without
+    its separator. execution.execute_run reads the run's log in text mode,
+    which turns "\r\n" and "\r" into "\n", as BenchExec's reading of the
+    log does. Two differences remain: BenchExec reads the log with
+    errors="ignore" and CoOpeRace with errors="replace", so a byte that is
+    not UTF-8 is dropped there and a replacement character here; and
+    BenchExec first shrinks a log above its maxLogfileSize (20 MB by
+    default) by removing lines from the middle, which CoOpeRace does not."""
     lines = output.split("\n")
     return [line + "\n" for line in lines[:-1]] + ([lines[-1]] if lines[-1] else [])
 
@@ -966,9 +974,10 @@ def output_lines(output: str) -> list[str]:
 #are a component's verdict "true" or "false" on each property (a key of
 #properties.FORMULAS). Any other status, among them a violation of another
 #property such as "false(unreach-call)" on a no-data-race task, is no verdict.
-#BenchExec's RESULT_FALSE_PROP, plain "false", is what Dartagnan's tool-info
-#module (benchexec/tools/dartagnan.py, the same in BenchExec 3.31 to 3.35)
-#returns for a FAIL without a line that names the violation. BenchExec's
+#BenchExec's RESULT_FALSE_PROP, plain "false", is what a tool-info module
+#returns for a violation it cannot name, as SAF's (toolinfo/saf.py) for a line
+#"false"; CoOpeRace's copy of Dartagnan's module (toolinfo/dartagnan.py) gives
+#ERROR where BenchExec's gives a plain "false". BenchExec's
 #get_result_category scores it as the property's "false" on a task whose
 #expected verdict has no sub-property, but on a valid-memsafety task, whose
 #expected "false" names one (valid-deref, valid-free or valid-memtrack), it

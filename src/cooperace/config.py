@@ -92,9 +92,12 @@ class Step:
     None. `run_cpu_time_budget` is the strategy's runCpuTimeBudget (None:
     none), within which the check of the component's witness stays.
     `first_verdict` is the strategy's first-verdict mode: then a verdict of
-    a run that a limit or a stop ended is no verdict, and the component's
-    witness file is returned whether or not it passes the check.
-    `witness_lint` is the strategy's "witnessLint"."""
+    a run that a limit or a stop ended is no verdict. `witness_lint` is the
+    strategy's "witnessLint": then WitnessLint decides whether a witness the
+    witness table requires counts, and the internal check
+    (witnesses.passing_witness) only where the linter fails technically or
+    fails its self-test. In either mode only a witness file that counts is
+    returned."""
 
     component: str
     accept: str

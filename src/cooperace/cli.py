@@ -8,12 +8,12 @@ installation, runs the conf's strategy for the property on the task, and
 prints "CoOpeRace verdict: <result>" as the last line of standard output,
 which BenchExec's tool-info module for CoOpeRace reads. <result> is what
 strategy.run_strategy decides: "unknown", "true", the "false" of the
-component the verdict is taken from (components.reported_result: for
-no-data-race plain "false", the line that module (BenchExec 3.31 to 3.35)
-maps to false(no-data-race), and for the other properties the status with
-its property, as "false(unreach-call)", "false(no-overflow)" or, for
-valid-memsafety, "false(valid-deref)", "false(valid-free)" or
-"false(valid-memtrack)"), or "ERROR (contradiction: <name> <verdict>, ...)"
+component the verdict is taken from (components.reported_result: the
+status with its property, as "false(no-data-race)", "false(unreach-call)",
+"false(no-overflow)" or, for valid-memsafety, "false(valid-deref)",
+"false(valid-free)" or "false(valid-memtrack)", which that module passes
+through as the result since sosy-lab/benchexec#1337; the module of the
+bundled BenchExec 3.35 would not), or "ERROR (contradiction: <name> <verdict>, ...)"
 when components of the deciding bracket contradict each other, which
 BenchExec scores as an error.
 

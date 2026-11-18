@@ -10,10 +10,14 @@
 #   FMTOOLS_VERSION=svcomp27 scripts/svcomp-dist.sh
 #
 # The archive holds the tracked files cooperace, src/, conf/, lib/, LICENSE, the
-# GPL texts of LICENSES/, README.md, THIRD-PARTY-SOURCES.md, tools.txt and tools-options.json, the smoke-test script and the
-# two files it runs on, exactly as committed, and the components that
-# tools.txt names, copied from tools/<name> with their record .doi. The
-# components of tools-pool.txt are not packed. The file VERSION in it holds
+# GPL texts of LICENSES/, README.md, THIRD-PARTY-SOURCES.md, tools.txt,
+# tools-options.json and tools-checkers.txt, the smoke-test script and the two
+# files it runs on, and the witnesses of the linter's self-test
+# (tests/witnesslint), as committed except where CONF_VARIANT and WITNESS_MODE
+# replace conf/svcomp27.json, tools.txt and conf/witnesses.json (below); the
+# components that tools.txt names, copied from tools/<name> with their record
+# .doi; and the checkers of tools-checkers.txt (WitnessLint). The components
+# of tools-pool.txt are packed only where CONF_VARIANT runs them. The file VERSION in it holds
 # the fm-tools version name (FMTOOLS_VERSION, or the first argument) and
 # `git describe --always --dirty`, which `cooperace --version` prints.
 #

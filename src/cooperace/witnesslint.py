@@ -18,7 +18,7 @@ lint uses its determine_result on the linter's output, so that the statuses
 are the competition's.
 
 lint runs the linter of LINTER_DIR (tools/witnesslint, the archive that
-download-tools.py installs from tools.txt) in a Python process of its own,
+download-tools.py installs from tools-checkers.txt) in a Python process of its own,
 one at a time with the other checks of witnesses.py, its address space
 limited to lint_memory_bytes, its CPU time and wall time to lint_seconds (at
 most LINT_SECONDS, and no more than the run's CPU-time budget has left). It

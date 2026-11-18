@@ -8,13 +8,17 @@ first verdict it accepts.
 
 The modules, each importing only modules listed after it: cli (the command
 line), components (the registry of components, running one and reading its
-result and witness), execution (running a component under BenchExec's
-RunExecutor; with components, the only modules that import BenchExec),
-strategy (running the tree), config (the conf as a tree of steps per
-property), witnesses (which witness file counts for a verdict, by the
-witness table conf/witnesses.json), properties
-(the properties and their recognition in a property file), processes
-(stopping the components that run together, and the run's memory limit).
+result and witness), witnesslint (WitnessLint as the gate of a witness),
+execution (running a component under BenchExec's RunExecutor), strategy
+(running a strategy's phases), verdicts (which answer decides, and which
+components keep running), config (the conf, one strategy per property),
+witnesses (which witness file counts for a verdict, by the witness table
+conf/witnesses.json), properties (the properties and their recognition in a
+property file), processes (stopping the components that run together, and
+the run's memory limit and CPU time); and toolinfo (the tool-info modules
+that the bundled BenchExec lacks, which components imports by name).
+components, witnesslint, execution and toolinfo are the only ones that import
+BenchExec.
 
 CoOpeRace runs from any working directory. TOOL_DIR, the directory that holds
 the launcher `cooperace`, is where it finds everything of its own: the
