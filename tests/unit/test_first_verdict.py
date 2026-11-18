@@ -410,6 +410,8 @@ def test_random_scenarios_deliver_the_chronologically_first_accepted_verdict_wit
 
 # The first-verdict conf that scripts/svcomp-dist.sh packs with CONF_VARIANT=fv-theta
 FV_THETA = json.loads((ROOT / "conf" / "svcomp27-fv-theta.json").read_text())
+# The first-verdict confs of the repository, by variant: fv-theta and the test conf saf, fv-theta with SAF first
+FV_CONFS = {"fv-theta": FV_THETA, "saf": json.loads((ROOT / "conf" / "svcomp27-saf.json").read_text())}
 # Its wall-time limits scaled to the scenarios' delays (1200 s becomes 1.2 s, 37 s 0.037 s)
 FV_THETA_WALL_SCALE = 0.001
 
@@ -422,22 +424,26 @@ def scaled(conf_strategy, scale):
     return {**conf_strategy, "phases": phases}
 
 
-def test_the_fv_theta_conf_is_in_the_mode_in_every_property():
-    strategies = config.load_strategies(FV_THETA, REGISTRY)
+@pytest.mark.parametrize("variant", list(FV_CONFS))
+def test_the_fv_theta_conf_is_in_the_mode_in_every_property(variant):
+    strategies = config.load_strategies(FV_CONFS[variant], REGISTRY)
 
     assert set(strategies) == set(PROPERTY_FILES)
     assert all(loaded.first_verdict for loaded in strategies.values())
     assert all(len(loaded.answers) == 1 for loaded in strategies.values())
 
 
+@pytest.mark.parametrize("variant", list(FV_CONFS))
 @pytest.mark.parametrize("lint", [False, True], ids=["internal-check", "witnesslint"])
 @pytest.mark.parametrize("property_name", list(PROPERTY_FILES))
 def test_random_scenarios_on_the_fv_theta_conf_deliver_the_first_accepted_verdict_with_its_own_witness(
-        property_name, lint, tmp_path, monkeypatch, capsys, fast):
-    conf_strategy = {key: value for key, value in FV_THETA["properties"][property_name].items() if key != "witnessLint"}
+        property_name, lint, variant, tmp_path, monkeypatch, capsys, fast):
+    properties = FV_CONFS[variant]["properties"]
+    conf_strategy = {key: value for key, value in properties[property_name].items() if key != "witnessLint"}
     conf_strategy = scaled(conf_strategy, FV_THETA_WALL_SCALE)
-    check_scenarios(property_name, lambda _rng: conf_strategy, f"fv-theta {property_name}" + (" lint" if lint else ""),
-                    lint, tmp_path, monkeypatch, capsys)
+    #The seed of fv-theta is kept, so that its scenarios are those of before
+    seed = ("fv-theta" if variant == "fv-theta" else f"fv-{variant}") + f" {property_name}" + (" lint" if lint else "")
+    check_scenarios(property_name, lambda _rng: conf_strategy, seed, lint, tmp_path, monkeypatch, capsys)
 
 
 def check_scenarios(property_name, make_strategy, seed, lint, tmp_path, monkeypatch, capsys):

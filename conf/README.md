@@ -87,6 +87,10 @@ Theta is given its memory limit as `--memlimit` (`ComponentSpec.gets_memory_limi
 
 `make svcomp CONF_VARIANT=fv-theta` builds an archive that runs `conf/svcomp27-fv-theta.json` as its `conf/svcomp27.json`, packs Theta as the variant `theta` does, and ends VERSION in `conf-fv-theta`. Every property is in the first-verdict mode with `"witnessLint": true` (both described below): the six components and Theta run one per phase, each with its own CPU-time limit and 90% of the run's memory, and the first accepted verdict is delivered at once with the deciding component's own witness. The schedule is the derivation of 16 November from the pre-run table of that evening (no-data-race: Deagle, Goblint, Dartagnan, Theta, IKOS-ConC, sv-sanitizers; unreach-call: Deagle, sv-sanitizers, Theta, Goblint, ULTIMATE GemCutter; no-overflow: Deagle, Dartagnan, ULTIMATE GemCutter, Goblint, Theta; valid-memsafety: sv-sanitizers, ULTIMATE GemCutter, Goblint, Theta, Deagle). The rules for the competition's limits and the invariant of cooperace/D15 are tested on it as on the other two confs, and the first-verdict scenarios run on its strategies (`tests/unit/test_first_verdict.py`).
 
+## The test conf with SAF: `conf/svcomp27-saf.json`
+
+`make svcomp CONF_VARIANT=saf` builds an archive that runs `conf/svcomp27-saf.json` and packs Theta and **SAF** svcomp27 (Zenodo 10.5281/zenodo.24267653, `tools-pool.txt`); VERSION ends in `conf-saf`. It is a test conf for SAF, not a submission candidate: `conf/svcomp27-fv-theta.json` with a first phase in every property in which SAF runs alone, with 90% of the run's memory, a CPU-time limit of 200 s and a wall-time limit of 300 s, and SAF first in the `answers` bracket. SAF's own budget is 850 s of wall time, which it is not told, so the CPU-time limit ends it by a kill. The same tests run on it as on `fv-theta`.
+
 ## `phases`: when each tool runs
 
 `phases` is a list of phases, run in order. A phase is a list of tool names, or an object `{"tools": [...], "wallTimeLimit": s}`.

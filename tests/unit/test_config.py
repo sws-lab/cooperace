@@ -84,10 +84,11 @@ def with_changes(strategy, **changes):
 # --- the confs in the repository ---------------------------------------------
 
 # The SV-COMP 2027 confs: the default one and the variant scripts/svcomp-dist.sh
-# packs in its place with CONF_VARIANT=theta (Theta as a seventh component). The
-# rules for the competition's limits below hold for both.
+# packs in its place with CONF_VARIANT=theta (Theta as a seventh component),
+# fv-theta (first-verdict mode) or saf (the test conf with SAF first). The
+# rules for the competition's limits below hold for each.
 SVCOMP27_CONFS = [ROOT / "conf" / "svcomp27.json", ROOT / "conf" / "svcomp27-theta.json",
-                  ROOT / "conf" / "svcomp27-fv-theta.json"]
+                  ROOT / "conf" / "svcomp27-fv-theta.json", ROOT / "conf" / "svcomp27-saf.json"]
 
 def test_the_repository_has_the_confs_this_file_checks():
     names = {path.relative_to(ROOT).as_posix() for path in SHIPPED_CONFS}

@@ -140,8 +140,8 @@ def test_the_archive_lock_holds_the_components_of_the_default_conf_only():
 def test_each_conf_variant_runs_components_of_the_lock_files_only_and_theta_s_adds_theta():
     """scripts/svcomp-dist.sh with CONF_VARIANT=NAME packs conf/svcomp27-NAME.json
     and adds the components of tools-pool.txt that it runs; every such conf
-    runs only components of the two lock files. The variant theta adds Theta
-    alone."""
+    runs only components of the two lock files. The variants theta and
+    fv-theta add Theta alone, saf adds Theta and SAF."""
     archive, pool = download_tools.read_lock_files(ROOT / "tools.txt", ROOT / "tools-pool.txt")
     variants = sorted((ROOT / "conf").glob("svcomp27-*.json"))
     added = {}
@@ -154,6 +154,7 @@ def test_each_conf_variant_runs_components_of_the_lock_files_only_and_theta_s_ad
 
     assert added["svcomp27-theta.json"] == {"theta"}
     assert added["svcomp27-fv-theta.json"] == {"theta"}
+    assert added["svcomp27-saf.json"] == {"theta", "saf"}
 
 
 def test_read_component_versions_ignores_further_keys(tmp_path):
