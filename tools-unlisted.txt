@@ -19,5 +19,3 @@ ikos-conc: 10.5281/zenodo.23736684 dbda8837
 # ULTIMATE Automizer 24133222 (pool; 0.3.2-dev-f60e54cd9f, pre-run 12 November); fm-tools 4a8ff986
 # registers 24202446
 uautomizer: 10.5281/zenodo.24133222 b7ccdb13
-# iekke 24187653 (pool; 2.0, pre-run 13 November); fm-tools 7760f47e registers 24279954
-iekke: 10.5281/zenodo.24187653 554cc768

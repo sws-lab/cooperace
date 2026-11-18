@@ -89,13 +89,15 @@ def test_the_default_witness_spec_and_the_components_with_their_own():
 
 
 def test_a_component_that_writes_no_counting_witness_has_no_witness_file(tmp_path):
-    """iekke 2.0 writes only error-witness.graphml: its WitnessSpec names no
-    file, so no file of its run is collected or taken."""
+    """A WitnessSpec that names no file (as iekke's did for archives that
+    wrote only error-witness.graphml): no file of its run is collected or
+    taken."""
     write(tmp_path / "error-witness.graphml")
     write(tmp_path / "witness.yml")
+    none = WitnessSpec("component", (), ())
 
-    assert components.result_files_patterns(witness_of("iekke")) == []
-    assert components.witness_files_in(witness_of("iekke"), str(tmp_path)) == []
+    assert components.result_files_patterns(none) == []
+    assert components.witness_files_in(none, str(tmp_path)) == []
 
 
 def test_witness_files_under_matches_the_name_pattern(tmp_path):

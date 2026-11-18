@@ -146,7 +146,7 @@ def test_run_component_passes_the_step_s_memory_limit(tmp_path, monkeypatch):
     runner, _start = theta_runner(tmp_path, "no-data-race")
     seen = {}
 
-    def command(actor, spec, witness_dir, memory=None):
+    def command(actor, spec, witness_dir, memory=None, budget=None):
         seen["memory"] = memory
         raise RuntimeError("stop here")
 

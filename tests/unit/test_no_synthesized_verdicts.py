@@ -183,7 +183,7 @@ def test_a_definite_result_is_a_component_s_accepted_verdict_and_otherwise_unkno
         runner.installation_problems = lambda _names: []
         runner.container_problems = lambda: []
         runner.probe_versions = lambda _names: None
-        runner.command = lambda actor, spec, witness_dir, memory=None: ComponentCommand(
+        runner.command = lambda actor, spec, witness_dir, memory=None, budget=None: ComponentCommand(
             ["component"], str(tmp_path), {})
         fakes.start = time.monotonic()
 

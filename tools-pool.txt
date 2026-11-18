@@ -12,7 +12,7 @@
 # archive fm-tools main 75f310bc registers; the conf variant theta
 # (conf/svcomp27-theta.json) runs it.
 uautomizer: 10.5281/zenodo.24133222
-iekke: 10.5281/zenodo.24187653
+iekke: 10.5281/zenodo.24279954
 utaipan: 10.5281/zenodo.17735313
 nacpa: 10.5281/zenodo.17734971
 cpachecker: 10.5281/zenodo.24218973
