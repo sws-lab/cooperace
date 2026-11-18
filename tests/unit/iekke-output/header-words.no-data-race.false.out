@@ -1,0 +1,148 @@
+memory cap per bound: 2317 MB
+STATIC RACE CHECK: UNKNOWN (possible race on words: file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c line 25 function main / file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c line 17 function clear_header)
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+suggested loop limits: clear_header.0:3
+try unwind=3 rounds=3 --unwindset clear_header.0:3 (60s for this bound, 570s left)
+  -> violation at this bound
+  shorter witness: violation at rounds=2
+Context bound: 3 round(s); a safe result covers only the schedules within them (--infer-rounds computes a count that covers all)
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c
+Converting
+Type-checking header-words
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+file <builtin-library-__spawned_thread> line 26 function __spawned_thread: replacing function pointer by 1 possible targets
+Generic Property Instrumentation
+Running with 8 object bits, 56 offset bits (default)
+Starting Bounded Model Checking
+Unwinding loop clear_header.0 iteration 1 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c line 16 function clear_header thread 1
+Unwinding loop clear_header.0 iteration 2 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c line 16 function clear_header thread 1
+**** WARNING: no body for function __CPROVER_run_thread_key_dtors
+Unwinding loop clear_header.0 iteration 1 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c line 16 function clear_header thread 1
+Unwinding loop clear_header.0 iteration 2 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c line 16 function clear_header thread 1
+points-to sets of shared pointers converged after 1 seeded symex pass(es)
+Own-view reads: 2 shared reads read from the thread's own view
+Unwinding successfully
+BDD prune: removed 0 shared accesses with a contradictory guard in 3.9341e-05s
+Start removing dummy accesses: 143 steps before removal
+143 steps after removal
+Runtime Symex: 0.0104306s
+Adding Iekke constraints with 3 rounds
+lazy_po phase active-threads: 0ms, resident 16 MB
+lazy_po phase collect-events: 0ms, resident 16 MB
+lazy_po phase private-objects: 0ms, resident 16 MB
+lazy_po phase array-rf-plan: 0ms, resident 16 MB
+Value narrowing: 7 objects
+lazy_po phase base-writes: 3ms, resident 16 MB
+lazy_po phase base-reads: 0ms, resident 16 MB
+lazy_po phase private-reads: 0ms, resident 16 MB
+lazy_po phase array-read-from: 0ms, resident 16 MB
+lazy_po phase context-switch: 1ms, resident 16 MB
+lazy_po phase guards: 0ms, resident 16 MB
+Datarace Enabled 
+lazy_po phase datarace: 6ms, resident 16 MB
+lazy_po phase array-read-from (late): 1ms, resident 16 MB
+lazy_po phase pointer-alignment: 0ms, resident 16 MB
+lazy_po total: 14ms
+size of program expression: 839 steps
+no slicing due to threads
+Generated 0 VCC(s), 0 remaining after simplification
+Runtime Postprocess Equation: 0.0149624s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00574569s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 1.941e-05s
+Solving with Glucose Syrup with simplifier
+2019 variables, 4445 clauses
+decisions: 44 total, 0 from the POR fallback tier, 0 landing on a POR variable; conflicts: 18, propagations: 2280; CS-first: on
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.00645962s
+Runtime decision procedure: 0.0125286s
+Building error trace
+
+** Results:
+[.recursion] datarace: FAILURE
+Counterexample:
+
+State 19 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function __CPROVER_initialize line 13 thread 0
+----------------------------------------------------
+  words[0l]=0 (00000000 00000000 00000000 00000000)
+
+State 20 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function __CPROVER_initialize line 13 thread 0
+----------------------------------------------------
+  words[1l]=0 (00000000 00000000 00000000 00000000)
+
+State 21 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function __CPROVER_initialize line 13 thread 0
+----------------------------------------------------
+  words[2l]=0 (00000000 00000000 00000000 00000000)
+
+State 22 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function __CPROVER_initialize line 13 thread 0
+----------------------------------------------------
+  words[3l]=0 (00000000 00000000 00000000 00000000)
+
+State 29 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 24 thread 0
+----------------------------------------------------
+  thread=&t!0@1 (00000010 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 30 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 24 thread 0
+----------------------------------------------------
+  attr=((const pthread_attr_t *)NULL) (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 31 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 24 thread 0
+----------------------------------------------------
+  start_routine=clear_header (00000011 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 32 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 24 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 70 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function clear_header line 17 thread 1
+----------------------------------------------------
+  words[0l]=0 (00000000 00000000 00000000 00000000)
+
+State 71 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function clear_header line 16 thread 1
+----------------------------------------------------
+  i=1ul (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001)
+
+Racing write in thread 0
+  file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 25 thread 0
+
+State 75 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 25 thread 0
+----------------------------------------------------
+  words[1l]=5 (00000000 00000000 00000000 00000101)
+
+State 78 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 26 thread 0
+----------------------------------------------------
+  thread=1ul (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001)
+
+State 79 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function main line 26 thread 0
+----------------------------------------------------
+  value_ptr=((const void **)NULL) (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+Racing write in thread 1
+  file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function clear_header line 17 thread 1
+
+State 84 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function clear_header line 17 thread 1
+----------------------------------------------------
+  words[1l]=0 (00000000 00000000 00000000 00000000)
+
+State 85 file /home/cwd/sv-benchmarks/c/pthread-lp64/header-words.c function clear_header line 16 thread 1
+----------------------------------------------------
+  i=2ul (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000010)
+
+Violated property:
+  datarace
+
+
+VERIFICATION FAILED
+
+no-data-race: a data race, a nodatarace.assertion. FAILURE
+FAILED

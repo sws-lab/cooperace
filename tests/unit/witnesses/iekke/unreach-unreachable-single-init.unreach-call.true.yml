@@ -1,0 +1,17 @@
+- entry_type: 'invariant_set'
+  metadata:
+    format_version: '2.1'
+    uuid: 'f8179736-0fd0-499f-895b-218dc0f627c9'
+    creation_time: '2026-11-18T08:03:05Z'
+    producer:
+      name: 'Iëkke'
+      version: '2.0'
+    task:
+      input_files:
+      - 'unreach-unreachable-single-init.c'
+      input_file_hashes:
+        '/home/cwd/sv-benchmarks/c/pthread-once/unreach-unreachable-single-init.c': '01c8a37d5c4ad07618ee130ff454b7b9318cf2ad1515c860165cd49a702e7138'
+      specification: 'CHECK( init(main()), LTL(G ! call(reach_error())) )'
+      data_model: 'LP64'
+      language: 'C'
+  content: []

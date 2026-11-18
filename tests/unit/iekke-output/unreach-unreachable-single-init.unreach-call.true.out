@@ -1,0 +1,70 @@
+memory cap per bound: 2317 MB
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+try unwind=2 rounds=2 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=3 rounds=4 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=4 rounds=3 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=8 rounds=3 (190s for this bound, 570s left)
+  -> safe at this bound
+try unwind=8 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=16 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=32 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=8 rounds=7 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=16 rounds=9 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=32 rounds=13 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=32 rounds=21 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=64 rounds=4 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=256 rounds=3 (190s for this bound, 569s left)
+  -> safe at this bound
+try unwind=1024 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=4096 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+try unwind=16384 rounds=3 (190s for this bound, 568s left)
+  -> safe at this bound
+proof try memory-model --unwind 2, all interleavings (483s left)
+  -> proved: every loop fully unrolled, every interleaving
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/pthread-once/unreach-unreachable-single-init.c
+Converting
+Type-checking unreach-unreachable-single-init
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+file <builtin-library-pthread_once> line 23 function pthread_once: replacing function pointer by 1 possible targets
+Generic Property Instrumentation
+Spin-loop reduction: 0 loop(s)
+Running with 8 object bits, 56 offset bits (default)
+Starting Bounded Model Checking
+Unwinding successfully
+BDD prune: removed 0 shared accesses with a contradictory guard in 1.179e-05s
+Start removing dummy accesses: 71 steps before removal
+71 steps after removal
+Runtime Symex: 0.00120587s
+size of program expression: 71 steps
+simple slicing removed 0 assignments
+Generated 0 VCC(s), 0 remaining after simplification
+Runtime Postprocess Equation: 1.28e-05s
+
+** Results:
+/home/cwd/sv-benchmarks/c/pthread-once/unreach-unreachable-single-init.c function reach_error
+[reach_error.assertion.1] line 15 assertion 0: SUCCESS
+
+** 0 of 1 failed (1 iterations)
+VERIFICATION SUCCESSFUL
+
+SUCCESSFUL

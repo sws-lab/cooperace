@@ -1,0 +1,18 @@
+- entry_type: 'violation_sequence'
+  metadata:
+    format_version: '2.2'
+    uuid: '44ba1d49-7ef7-4e40-8585-3db8e496aaca'
+    creation_time: '2026-11-18T08:03:07Z'
+    producer:
+      name: 'Iëkke'
+      version: '2.0'
+    task:
+      input_files:
+      - 'rfi006_power.oepc.i'
+      input_file_hashes:
+        '/home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i': '35f6655b445fc5bf4a2ebfcafed490ee38fb52115875b19e3a717aa5f56b5e77'
+      specification: 'CHECK( init(main()), LTL(G ! call(reach_error())) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content:
+  - segment: [{waypoint: {type: 'target', action: 'follow', location: {file_name: 'rfi006_power.oepc.i', line: 19}, thread_id: 0}}]

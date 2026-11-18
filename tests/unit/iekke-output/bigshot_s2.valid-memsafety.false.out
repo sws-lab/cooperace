@@ -1,0 +1,120 @@
+memory cap per bound: 2317 MB
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+try unwind=2 rounds=2 (190s for this bound, 570s left)
+  -> violation at this bound
+Context bound: 2 round(s); a safe result covers only the schedules within them (--infer-rounds computes a count that covers all)
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i
+Converting
+Type-checking bigshot_s2
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 8 object bits, 24 offset bits (default)
+Starting Bounded Model Checking
+Unwinding loop strcpy.0 iteration 1 file <builtin-library-strcpy> line 32 function strcpy thread 0
+Not unwinding loop strcpy.0 iteration 2 file <builtin-library-strcpy> line 32 function strcpy thread 0
+aborting path on assume(false) at file <builtin-library-abort> line 7 function abort thread 0
+Unwinding incomplete: 1 loop/recursion bound(s) hit; a counterexample is still real, but a safe result here is not a proof
+BDD prune: removed 0 shared accesses with a contradictory guard in 3.8952e-05s
+Start removing dummy accesses: 160 steps before removal
+160 steps after removal
+Runtime Symex: 0.00328098s
+size of program expression: 160 steps
+simple slicing removed 2 assignments
+Generated 8 VCC(s), 6 remaining after simplification
+Runtime Postprocess Equation: 1.135e-05s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.000463661s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 0.000130793s
+Solving with Glucose Syrup with simplifier
+389 variables, 149 clauses
+decisions: 3 total, 0 from the POR fallback tier, 0 landing on a POR variable; conflicts: 0, propagations: 26; CS-first: on
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.000365899s
+Runtime decision procedure: 0.000950253s
+Building error trace
+
+** Results:
+function __CPROVER__start
+[__CPROVER__start.memory-leak.1] dynamically allocated memory never freed in TRUE ==> __CPROVER_memory_leak == NULL || __CPROVER_memory_leak == (const void *)v: UNKNOWN
+
+/home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main
+[main.pointer_dereference.1] line 1126 dereference failure: pointer NULL in v[0]: FAILURE
+[main.pointer_dereference.2] line 1126 dereference failure: pointer invalid in v[0]: SUCCESS
+[main.pointer_dereference.3] line 1126 dereference failure: deallocated dynamic object in v[0]: FAILURE
+[main.pointer_dereference.4] line 1126 dereference failure: dead object in v[0]: FAILURE
+[main.pointer_dereference.5] line 1126 dereference failure: pointer outside object bounds in v[0]: FAILURE
+[main.pointer_dereference.6] line 1126 dereference failure: invalid integer address in v[0]: SUCCESS
+
+/home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function thread2
+[thread2.precondition_instance.1] line 1116 strcpy src/dst overlap: UNKNOWN
+Counterexample:
+
+State 23 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1121 thread 0
+----------------------------------------------------
+  t1=0u (00000000 00000000 00000000 00000000)
+
+State 24 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1121 thread 0
+----------------------------------------------------
+  t2=0u (00000000 00000000 00000000 00000000)
+
+State 27 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1122 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000)
+
+State 31 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function thread1 line 1111 thread 0
+----------------------------------------------------
+  malloc_size=8u (00000000 00000000 00000000 00001000)
+
+State 42 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function thread1 line 1111 thread 0
+----------------------------------------------------
+  v=((char *)NULL) (00000000 00000000 00000000 00000000)
+
+State 46 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1124 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000)
+
+Violated property:
+  file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1126 thread 0
+  dereference failure: deallocated dynamic object in v[0]
+  !(POINTER_OBJECT(v) == POINTER_OBJECT(__CPROVER_deallocated))
+
+
+Violated property:
+  file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1126 thread 0
+  dereference failure: dead object in v[0]
+  !(POINTER_OBJECT(v) == POINTER_OBJECT(__CPROVER_dead_object))
+
+
+Violated property:
+  file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1126 thread 0
+  dereference failure: pointer outside object bounds in v[0]
+  POINTER_OFFSET(v) >= 0 && OBJECT_SIZE(v) >= (unsigned int)POINTER_OFFSET(v) + 1u
+
+
+State 54 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1126 thread 0
+----------------------------------------------------
+  expression=1 (00000000 00000000 00000000 00000001)
+
+State 60 file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function __CPROVER__start line 1119 thread 0
+----------------------------------------------------
+  OUTPUT return': 0 (00000000 00000000 00000000 00000000)
+
+Violated property:
+  file /home/cwd/sv-benchmarks/c/pthread/bigshot_s2.i function main line 1126 thread 0
+  dereference failure: pointer NULL in v[0]
+  !(POINTER_OBJECT(v) == POINTER_OBJECT(((char *)NULL)))
+
+
+VERIFICATION FAILED
+
+FAILED

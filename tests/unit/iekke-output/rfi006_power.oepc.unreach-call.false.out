@@ -1,0 +1,348 @@
+memory cap per bound: 2317 MB
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+try unwind=2 rounds=2 (190s for this bound, 570s left)
+  -> violation at this bound
+Context bound: 2 round(s); a safe result covers only the schedules within them (--infer-rounds computes a count that covers all)
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i
+Converting
+Type-checking rfi006_power.oepc
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+file <builtin-library-pthread_create> line 15: warning: pointer parameter types differ between declaration and definition "pthread_create"
+old definition in module rfi006_power.oepc file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i line 423
+signed int (pthread_t *, const pthread_attr_t *, void * (*)(void *), void *)
+new definition in module <built-in-library> file <builtin-library-pthread_create> line 15
+signed int (pthread_t *thread, const pthread_attr_t *attr, void * (*start_routine)(void *), void *arg)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+file <builtin-library-__spawned_thread> line 26 function __spawned_thread: replacing function pointer by 3 possible targets
+Generic Property Instrumentation
+Running with 8 object bits, 24 offset bits (default)
+Starting Bounded Model Checking
+aborting path on assume(false) at file <builtin-library-abort> line 7 function abort thread 0
+aborting path on assume(false) at file <builtin-library-abort> line 7 function abort thread 0
+**** WARNING: no body for function __CPROVER_run_thread_key_dtors
+aborting path on assume(false) at file <builtin-library-abort> line 7 function abort thread 0
+aborting path on assume(false) at file <builtin-library-abort> line 7 function abort thread 0
+points-to sets of shared pointers converged after 1 seeded symex pass(es)
+Own-view reads: 0 shared reads read from the thread's own view
+Unwinding successfully
+BDD prune: removed 0 shared accesses with a contradictory guard in 9.9842e-05s
+Start removing dummy accesses: 537 steps before removal
+537 steps after removal
+Runtime Symex: 0.018403s
+Adding Iekke constraints with 2 rounds
+lazy_po phase active-threads: 0ms, resident 16 MB
+lazy_po phase collect-events: 0ms, resident 16 MB
+lazy_po phase private-objects: 0ms, resident 16 MB
+lazy_po phase array-rf-plan: 0ms, resident 16 MB
+Value narrowing: 14 objects
+lazy_po phase base-writes: 5ms, resident 16 MB
+lazy_po phase base-reads: 0ms, resident 16 MB
+lazy_po phase private-reads: 0ms, resident 16 MB
+lazy_po phase array-read-from: 1ms, resident 17 MB
+lazy_po phase context-switch: 4ms, resident 18 MB
+lazy_po phase guards: 0ms, resident 19 MB
+lazy_po phase array-read-from (late): 2ms, resident 19 MB
+lazy_po phase pointer-alignment: 0ms, resident 19 MB
+lazy_po total: 15ms
+size of program expression: 2157 steps
+no slicing due to threads
+Generated 1 VCC(s), 1 remaining after simplification
+Runtime Postprocess Equation: 0.0158892s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00620542s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 3.7341e-05s
+Solving with Glucose Syrup with simplifier
+3922 variables, 8686 clauses
+decisions: 1 total, 0 from the POR fallback tier, 0 landing on a POR variable; conflicts: 0, propagations: 2850; CS-first: on
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.00385133s
+Runtime decision procedure: 0.010338s
+Building error trace
+
+** Results:
+/home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function reach_error
+[reach_error.assertion.1] line 18 assertion 0: FAILURE
+Counterexample:
+
+State 69 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 849 thread 0
+----------------------------------------------------
+  thread=&t1681!0@1 (00000011 00000000 00000000 00000000)
+
+State 70 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 849 thread 0
+----------------------------------------------------
+  attr=((const pthread_attr_t *)NULL) (00000000 00000000 00000000 00000000)
+
+State 71 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 849 thread 0
+----------------------------------------------------
+  start_routine=P0 (00000100 00000000 00000000 00000000)
+
+State 72 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 849 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000)
+
+State 97 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 851 thread 0
+----------------------------------------------------
+  thread=&t1682!0@1 (00000101 00000000 00000000 00000000)
+
+State 98 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 851 thread 0
+----------------------------------------------------
+  attr=((const pthread_attr_t *)NULL) (00000000 00000000 00000000 00000000)
+
+State 99 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 851 thread 0
+----------------------------------------------------
+  start_routine=P1 (00000110 00000000 00000000 00000000)
+
+State 100 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 851 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000)
+
+State 125 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 853 thread 0
+----------------------------------------------------
+  thread=&t1683!0@1 (00000111 00000000 00000000 00000000)
+
+State 126 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 853 thread 0
+----------------------------------------------------
+  attr=((const pthread_attr_t *)NULL) (00000000 00000000 00000000 00000000)
+
+State 127 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 853 thread 0
+----------------------------------------------------
+  start_routine=P2 (00001000 00000000 00000000 00000000)
+
+State 128 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 853 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000)
+
+State 165 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 761 thread 1
+----------------------------------------------------
+  weak$$choice0=FALSE (00000000)
+
+State 166 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 762 thread 1
+----------------------------------------------------
+  weak$$choice2=FALSE (00000000)
+
+State 167 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 763 thread 1
+----------------------------------------------------
+  x$flush_delayed=FALSE (00000000)
+
+State 168 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 764 thread 1
+----------------------------------------------------
+  x$mem_tmp=0 (00000000 00000000 00000000 00000000)
+
+State 169 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 765 thread 1
+----------------------------------------------------
+  weak$$choice1=TRUE (00000001)
+
+State 170 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 766 thread 1
+----------------------------------------------------
+  x=0 (00000000 00000000 00000000 00000000)
+
+State 171 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 767 thread 1
+----------------------------------------------------
+  x$w_buff0=0 (00000000 00000000 00000000 00000000)
+
+State 172 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 768 thread 1
+----------------------------------------------------
+  x$w_buff1=0 (00000000 00000000 00000000 00000000)
+
+State 173 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 769 thread 1
+----------------------------------------------------
+  x$w_buff0_used=FALSE (00000000)
+
+State 174 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 770 thread 1
+----------------------------------------------------
+  x$w_buff1_used=FALSE (00000000)
+
+State 175 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 771 thread 1
+----------------------------------------------------
+  x$r_buff0_thd1=FALSE (00000000)
+
+State 176 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 772 thread 1
+----------------------------------------------------
+  x$r_buff1_thd1=FALSE (00000000)
+
+State 177 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 773 thread 1
+----------------------------------------------------
+  __unbuffered_p0_EAX$read_delayed=TRUE (00000001)
+
+State 178 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 774 thread 1
+----------------------------------------------------
+  __unbuffered_p0_EAX$read_delayed_var=&x (00000010 00000000 00000000 00000000)
+
+State 179 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 775 thread 1
+----------------------------------------------------
+  __unbuffered_p0_EAX=0 (00000000 00000000 00000000 00000000)
+
+State 180 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 776 thread 1
+----------------------------------------------------
+  x=0 (00000000 00000000 00000000 00000000)
+
+State 181 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 777 thread 1
+----------------------------------------------------
+  x$flush_delayed=FALSE (00000000)
+
+State 182 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 780 thread 1
+----------------------------------------------------
+  y=1 (00000000 00000000 00000000 00000001)
+
+State 184 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P0 line 785 thread 1
+----------------------------------------------------
+  __unbuffered_cnt=1 (00000000 00000000 00000000 00000001)
+
+State 202 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 792 thread 2
+----------------------------------------------------
+  y=2 (00000000 00000000 00000000 00000010)
+
+State 203 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 795 thread 2
+----------------------------------------------------
+  __unbuffered_p1_EAX=2 (00000000 00000000 00000000 00000010)
+
+State 204 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 798 thread 2
+----------------------------------------------------
+  weak$$choice0=FALSE (00000000)
+
+State 205 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 799 thread 2
+----------------------------------------------------
+  weak$$choice2=FALSE (00000000)
+
+State 206 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 800 thread 2
+----------------------------------------------------
+  x$flush_delayed=FALSE (00000000)
+
+State 207 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 801 thread 2
+----------------------------------------------------
+  x$mem_tmp=0 (00000000 00000000 00000000 00000000)
+
+State 208 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 802 thread 2
+----------------------------------------------------
+  x=0 (00000000 00000000 00000000 00000000)
+
+State 209 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 803 thread 2
+----------------------------------------------------
+  x$w_buff0=0 (00000000 00000000 00000000 00000000)
+
+State 210 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 804 thread 2
+----------------------------------------------------
+  x$w_buff1=0 (00000000 00000000 00000000 00000000)
+
+State 211 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 805 thread 2
+----------------------------------------------------
+  x$w_buff0_used=FALSE (00000000)
+
+State 212 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 806 thread 2
+----------------------------------------------------
+  x$w_buff1_used=FALSE (00000000)
+
+State 213 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 807 thread 2
+----------------------------------------------------
+  x$r_buff0_thd2=FALSE (00000000)
+
+State 214 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 808 thread 2
+----------------------------------------------------
+  x$r_buff1_thd2=FALSE (00000000)
+
+State 215 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 809 thread 2
+----------------------------------------------------
+  __unbuffered_p1_EBX=0 (00000000 00000000 00000000 00000000)
+
+State 216 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 810 thread 2
+----------------------------------------------------
+  x=0 (00000000 00000000 00000000 00000000)
+
+State 217 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 811 thread 2
+----------------------------------------------------
+  x$flush_delayed=FALSE (00000000)
+
+State 219 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P1 line 816 thread 2
+----------------------------------------------------
+  __unbuffered_cnt=2 (00000000 00000000 00000000 00000010)
+
+State 237 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 823 thread 3
+----------------------------------------------------
+  x=1 (00000000 00000000 00000000 00000001)
+
+State 238 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 826 thread 3
+----------------------------------------------------
+  x=1 (00000000 00000000 00000000 00000001)
+
+State 239 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 827 thread 3
+----------------------------------------------------
+  x$w_buff0_used=FALSE (00000000)
+
+State 240 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 828 thread 3
+----------------------------------------------------
+  x$w_buff1_used=FALSE (00000000)
+
+State 241 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 829 thread 3
+----------------------------------------------------
+  x$r_buff0_thd3=FALSE (00000000)
+
+State 242 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 830 thread 3
+----------------------------------------------------
+  x$r_buff1_thd3=FALSE (00000000)
+
+State 244 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function P2 line 833 thread 3
+----------------------------------------------------
+  __unbuffered_cnt=3 (00000000 00000000 00000000 00000011)
+
+State 249 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 855 thread 0
+----------------------------------------------------
+  main$tmp_guard0=TRUE (00000001)
+
+State 252 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 857 thread 0
+----------------------------------------------------
+  cond=1 (00000000 00000000 00000000 00000001)
+
+State 255 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 859 thread 0
+----------------------------------------------------
+  x=1 (00000000 00000000 00000000 00000001)
+
+State 256 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 860 thread 0
+----------------------------------------------------
+  x$w_buff0_used=FALSE (00000000)
+
+State 257 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 861 thread 0
+----------------------------------------------------
+  x$w_buff1_used=FALSE (00000000)
+
+State 258 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 862 thread 0
+----------------------------------------------------
+  x$r_buff0_thd0=FALSE (00000000)
+
+State 259 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 863 thread 0
+----------------------------------------------------
+  x$r_buff1_thd0=FALSE (00000000)
+
+State 260 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 866 thread 0
+----------------------------------------------------
+  weak$$choice1=TRUE (00000001)
+
+State 261 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 867 thread 0
+----------------------------------------------------
+  __unbuffered_p0_EAX=1 (00000000 00000000 00000000 00000001)
+
+State 262 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 868 thread 0
+----------------------------------------------------
+  main$tmp_guard1=FALSE (00000000)
+
+State 265 file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function main line 870 thread 0
+----------------------------------------------------
+  expression=0 (00000000 00000000 00000000 00000000)
+
+Violated property:
+  file /home/cwd/sv-benchmarks/c/pthread-wmm/rfi006_power.oepc.i function reach_error line 18 thread 0
+  assertion 0
+  0 != 0
+
+
+VERIFICATION FAILED
+
+FAILED

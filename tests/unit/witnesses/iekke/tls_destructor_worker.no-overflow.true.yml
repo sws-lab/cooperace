@@ -1,0 +1,17 @@
+- entry_type: 'invariant_set'
+  metadata:
+    format_version: '2.1'
+    uuid: '39804739-c3b1-4f30-bc51-4354f5881b0c'
+    creation_time: '2026-11-18T08:03:21Z'
+    producer:
+      name: 'Iëkke'
+      version: '2.0'
+    task:
+      input_files:
+      - 'tls_destructor_worker.i'
+      input_file_hashes:
+        '/home/cwd/sv-benchmarks/c/pthread-divine/tls_destructor_worker.i': '4bcf267ade93c8a160c1a2ea61181b9bb47573d1eb9629f5ed6448297dff9140'
+      specification: 'CHECK( init(main()), LTL(G ! overflow) )'
+      data_model: 'ILP32'
+      language: 'C'
+  content: []

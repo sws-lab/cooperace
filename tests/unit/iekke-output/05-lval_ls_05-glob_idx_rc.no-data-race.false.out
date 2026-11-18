@@ -1,0 +1,150 @@
+memory cap per bound: 2317 MB
+STATIC RACE CHECK: UNKNOWN (possible race on data: file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c line 20 function main / file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c line 13 function t_fun)
+try unwind=4 rounds=2 --symmetric-instance 2 (30s for this bound, 570s left)
+  -> no verdict
+try unwind=2 rounds=2 (190s for this bound, 570s left)
+  -> violation at this bound
+Context bound: 2 round(s); a safe result covers only the schedules within them (--infer-rounds computes a count that covers all)
+Iëkke version 2.0 (based on Deagle 4.1.0) 64-bit x86_64 linux
+which contains:
+CBMC version 5.67.0 (184b8f32-dirty) 64-bit x86_64 linux
+Parsing /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c
+Converting
+Type-checking 05-lval_ls_05-glob_idx_rc
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Allocation sizes tagged with a type: 0
+Removal of function pointers and virtual functions
+file <builtin-library-__spawned_thread> line 26 function __spawned_thread: replacing function pointer by 1 possible targets
+Generic Property Instrumentation
+Running with 8 object bits, 24 offset bits (default)
+Starting Bounded Model Checking
+**** WARNING: no body for function __CPROVER_run_thread_key_dtors
+points-to sets of shared pointers converged after 1 seeded symex pass(es)
+Own-view reads: 0 shared reads read from the thread's own view
+Unwinding successfully
+BDD prune: removed 0 shared accesses with a contradictory guard in 2.425e-05s
+Start removing dummy accesses: 131 steps before removal
+131 steps after removal
+Runtime Symex: 0.00811691s
+Adding Iekke constraints with 2 rounds
+lazy_po phase active-threads: 0ms, resident 15 MB
+lazy_po phase collect-events: 0ms, resident 15 MB
+lazy_po phase private-objects: 0ms, resident 15 MB
+lazy_po phase array-rf-plan: 0ms, resident 15 MB
+Value narrowing: 13 objects
+lazy_po phase base-writes: 4ms, resident 15 MB
+lazy_po phase base-reads: 0ms, resident 15 MB
+lazy_po phase private-reads: 0ms, resident 15 MB
+lazy_po phase array-read-from: 0ms, resident 15 MB
+lazy_po phase context-switch: 3ms, resident 15 MB
+lazy_po phase guards: 0ms, resident 15 MB
+Datarace Enabled 
+lazy_po phase datarace: 4ms, resident 15 MB
+lazy_po phase array-read-from (late): 1ms, resident 15 MB
+lazy_po phase pointer-alignment: 0ms, resident 15 MB
+lazy_po total: 15ms
+size of program expression: 778 steps
+no slicing due to threads
+Generated 0 VCC(s), 0 remaining after simplification
+Runtime Postprocess Equation: 0.0160615s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00359794s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 2.8251e-05s
+Solving with Glucose Syrup with simplifier
+1383 variables, 3398 clauses
+decisions: 167 total, 0 from the POR fallback tier, 0 landing on a POR variable; conflicts: 5, propagations: 856; CS-first: on
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.00600422s
+Runtime decision procedure: 0.0125559s
+Building error trace
+
+** Results:
+[.recursion] datarace: FAILURE
+Counterexample:
+
+State 19 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[0]=0 (00000000 00000000 00000000 00000000)
+
+State 20 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[1]=0 (00000000 00000000 00000000 00000000)
+
+State 21 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[2]=0 (00000000 00000000 00000000 00000000)
+
+State 22 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[3]=0 (00000000 00000000 00000000 00000000)
+
+State 23 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[4]=0 (00000000 00000000 00000000 00000000)
+
+State 24 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[5]=0 (00000000 00000000 00000000 00000000)
+
+State 25 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[6]=0 (00000000 00000000 00000000 00000000)
+
+State 26 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[7]=0 (00000000 00000000 00000000 00000000)
+
+State 27 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[8]=0 (00000000 00000000 00000000 00000000)
+
+State 28 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER_initialize line 10 thread 0
+----------------------------------------------------
+  data[9]=0 (00000000 00000000 00000000 00000000)
+
+State 35 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function main line 19 thread 0
+----------------------------------------------------
+  thread=&id!0@1 (00000010 00000000 00000000 00000000)
+
+State 36 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function main line 19 thread 0
+----------------------------------------------------
+  attr=((const pthread_attr_t *)NULL) (00000000 00000000 00000000 00000000)
+
+State 37 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function main line 19 thread 0
+----------------------------------------------------
+  start_routine=t_fun (00000011 00000000 00000000 00000000)
+
+State 38 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function main line 19 thread 0
+----------------------------------------------------
+  arg=NULL (00000000 00000000 00000000 00000000)
+
+Racing write in thread 1
+  file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function t_fun line 13 thread 1
+
+State 74 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function t_fun line 13 thread 1
+----------------------------------------------------
+  data[4]=1 (00000000 00000000 00000000 00000001)
+
+Racing read in thread 0
+  file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function main line 20 thread 0
+
+State 79 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function main line 20 thread 0
+----------------------------------------------------
+  data[4]=2 (00000000 00000000 00000000 00000010)
+
+State 83 file /home/cwd/sv-benchmarks/c/goblint-regression/05-lval_ls_05-glob_idx_rc.c function __CPROVER__start line 17 thread 0
+----------------------------------------------------
+  OUTPUT return': 0 (00000000 00000000 00000000 00000000)
+
+Violated property:
+  datarace
+
+
+VERIFICATION FAILED
+
+no-data-race: a data race, a nodatarace.assertion. FAILURE
+FAILED
