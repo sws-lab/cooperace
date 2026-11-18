@@ -103,3 +103,19 @@ those under the GPL or LGPL are:
 - Not under the GPL: Z3 (MIT), Bitwuzla 0.9.1 (MIT), cvc5 (BSD-3-Clause, built without GPL
   libraries per its `COPYING`), JavaSMT (Apache-2.0), and MathSAT5 5.6.19, whose licence
   (`tools/theta/solvers/mathsat/5.6.19/LICENSE.txt`) allows research and evaluation use only.
+
+## iekke (`tools/iekke/`, Zenodo 10.5281/zenodo.24279954), in the archive of the conf variant iekke only
+
+The archive built with `CONF_VARIANT=iekke` also holds iekke 2.0, exactly as its Zenodo archive
+holds it; the default archive does not. No part of it is under the GPL or LGPL. Its
+`tools/iekke/License.txt` names Deagle's copyright (Fei He, Zhihang Sun and Hongyu Fan, Tsinghua
+University) and that of the iekke authors (University of Molise, GSSI, Stellenbosch University,
+University of Salerno, Diffblue), says "Except where otherwise noted, Deagle is distributed under
+the BSD 4-Clause License", and reproduces the BSD-4-Clause terms of Deagle and of CBMC (Daniel
+Kroening, Edmund Clarke) and the MIT terms of MiniSat; `iekke_exe` also contains Glucose (glucose-syrup),
+whose terms the file does not reproduce. Source: https://github.com/pac-lab00/Iekke (branch
+`narrow-spec`). As with Deagle, the BSD-4-Clause terms ask advertising materials that mention
+features or use of this software to display: "This product includes software developed by Fei He,
+Zhihang Sun, and Hongyu Fan, School of Software, Tsinghua University." and "This product includes
+software developed by Daniel Kroening, Edmund Clarke, Computer Science Department, University of
+Oxford, Computer Science Department, Carnegie Mellon University."
