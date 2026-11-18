@@ -189,6 +189,8 @@ CoOpeRace runs every component through BenchExec's `RunExecutor` in its containe
    python3 scripts/sv-comp/required-packages.py --fm-tools-dir <fm-tools> --yaml  # the block for data/cooperace.yml
    python3 scripts/sv-comp/required-packages.py --fm-tools-dir <fm-tools> --check <path or URL of data/cooperace.yml>
    ```
+   For an archive of a conf variant, whose `tools.txt` adds components of `tools-pool.txt`, pass that
+   lock file with `--tools dist/cooperace/tools.txt`; the default `tools.txt` lacks them.
    `--check` compares the computed list with that of the version the SV-COMP 2027 participation names,
    prints the missing and the extra packages and exits 1 if they differ. `make svcomp` does not run it.
 
