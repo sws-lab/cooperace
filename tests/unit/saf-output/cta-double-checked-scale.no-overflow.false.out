@@ -1,0 +1,5 @@
+saf verify: concurrent no-overflow prover abstained (overflow-in-convert_once@L26)
+saf verify: nondet shim search hit schedule shim:c1:20 nondet seed 20 after 21 runs
+saf verify: FALSE (concurrency bounded-preemption schedule 'shim:c1:20' nondet seed 20 overflowed at 26:5)
+saf verify: wrote violation witness to witness.yml
+false(no-overflow)

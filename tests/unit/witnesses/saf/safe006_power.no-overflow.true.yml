@@ -1,0 +1,17 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: '2.1'
+    uuid: 6af9db53-6090-58a2-ad40-e2993402b7e0
+    creation_time: 2024-01-01T00:00:00Z
+    producer:
+      name: SAF
+      version: 0.1.0
+    task:
+      input_files:
+      - safe006_power.oepc-thin000_power.oepc.i
+      input_file_hashes:
+        safe006_power.oepc-thin000_power.oepc.i: e1a7472923aa95b61749a468b52dfc65e03dead5bf647c94f71a6e156dc586ae
+      specification: CHECK( init(main()), LTL(G ! overflow) )
+      data_model: ILP32
+      language: C
+  content: []

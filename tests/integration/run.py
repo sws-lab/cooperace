@@ -120,6 +120,7 @@ TOOL_DIRS = {
     "ULTIMATE Taipan": "utaipan", "nacpa": "nacpa",
     "CPAchecker": "cpachecker", "sv-sanitizers": "sv-sanitizers",
     "RacerF": "racerf", "iekke": "iekke", "IKOS-ConC": "ikos-conc", "Theta": "theta",
+    "SAF": "saf",
 }
 
 # Witness formats.  A format names the file a verifier writes (collected from

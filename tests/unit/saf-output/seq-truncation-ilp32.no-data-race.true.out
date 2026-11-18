@@ -1,0 +1,2 @@
+saf verify: no-data-race structurally proven race-free -> true
+true

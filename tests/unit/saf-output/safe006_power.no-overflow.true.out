@@ -1,0 +1,3 @@
+saf verify: concurrent no-overflow prover PROVED every operation in range -> true
+saf verify: wrote correctness witness to witness.yml
+true

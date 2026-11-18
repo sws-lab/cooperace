@@ -103,3 +103,13 @@ those under the GPL or LGPL are:
 - Not under the GPL: Z3 (MIT), Bitwuzla 0.9.1 (MIT), cvc5 (BSD-3-Clause, built without GPL
   libraries per its `COPYING`), JavaSMT (Apache-2.0), and MathSAT5 5.6.19, whose licence
   (`tools/theta/solvers/mathsat/5.6.19/LICENSE.txt`) allows research and evaluation use only.
+
+## SAF (`tools/saf/`, Zenodo 10.5281/zenodo.24267653), in the archive of the conf variant saf only
+
+The archive built with `CONF_VARIANT=saf` also holds SAF svcomp27 (version 0.1.0), exactly as its
+Zenodo archive holds it. SAF is under the MIT License (`tools/saf/LICENSE`, "Copyright (c) 2025
+SAF Contributors"; the record's licence is MIT too). Source:
+https://github.com/Static-Analyzer-Factory/static-analyzer-factory. Nothing in it is under the GPL
+or LGPL: `bin/saf` links LLVM 21 (Apache-2.0 WITH LLVM-exception) and Z3 (through the Rust crates
+`z3` 0.19.7 and `z3-sys`, MIT) statically, and Rust crates under MIT or Apache-2.0; the archive
+carries no notice files for them. At run time it calls the image's clang-21 and opt-21.

@@ -1,0 +1,5 @@
+saf verify: finder proposed 0 race candidate(s); attempting TSan confirmation
+saf verify: TSan nondet search: no race in 1480 runs (60 s)
+saf verify: TSan replay observed no data race -> unknown
+saf verify: no-data-race neither proven TRUE nor confirmed FALSE -> unknown
+unknown

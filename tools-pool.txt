@@ -10,7 +10,9 @@
 # and, for a conf variant (CONF_VARIANT), also the components of this file that
 # its conf names. Theta svcomp27 (24128717, pre-run 13 November 2026) is the
 # archive fm-tools main 75f310bc registers; the conf variant theta
-# (conf/svcomp27-theta.json) runs it.
+# (conf/svcomp27-theta.json) runs it. SAF svcomp27 (24267653, pre-run 17 November
+# 2026 on the whole task set) is the archive fm-tools main registers since 40b030b2; the
+# conf variant saf (conf/svcomp27-saf.json) runs it.
 uautomizer: 10.5281/zenodo.24133222
 iekke: 10.5281/zenodo.24187653
 utaipan: 10.5281/zenodo.17735313
@@ -18,3 +20,4 @@ nacpa: 10.5281/zenodo.17734971
 cpachecker: 10.5281/zenodo.24218973
 racerf: 10.5281/zenodo.17589798
 theta: 10.5281/zenodo.24128717
+saf: 10.5281/zenodo.24267653

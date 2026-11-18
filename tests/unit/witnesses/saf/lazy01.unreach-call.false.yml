@@ -1,0 +1,26 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.0'
+    uuid: bb27e265-5006-5220-a73d-b751bd679196
+    creation_time: 2024-01-01T00:00:00Z
+    producer:
+      name: SAF
+      version: 0.1.0
+    task:
+      input_files:
+      - lazy01.i
+      input_file_hashes:
+        lazy01.i: b5d87933b05ad3566f9bc28daac5c0aeceb8a45433a1cac3d51a8d34f7f284f0
+      specification: CHECK( init(main()), LTL(G ! call(reach_error())) )
+      data_model: ILP32
+      language: C
+  content:
+  - segment:
+    - waypoint:
+        action: follow
+        type: target
+        location:
+          file_name: lazy01.i
+          line: 722
+          column: 13
+          function: thread3

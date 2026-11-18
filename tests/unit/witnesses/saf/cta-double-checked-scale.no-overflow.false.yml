@@ -1,0 +1,25 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.0'
+    uuid: a89e1d7d-acd6-5e10-969c-88eb66dd8ffc
+    creation_time: 2024-01-01T00:00:00Z
+    producer:
+      name: SAF
+      version: 0.1.0
+    task:
+      input_files:
+      - cta-double-checked-scale.c
+      input_file_hashes:
+        cta-double-checked-scale.c: 7a89c7ba0cf6fd695af638306ee25573d0b421704b2c0bb5481a73ac0fcd03bb
+      specification: CHECK( init(main()), LTL(G ! overflow) )
+      data_model: ILP32
+      language: C
+  content:
+  - segment:
+    - waypoint:
+        action: follow
+        type: target
+        location:
+          file_name: cta-double-checked-scale.c
+          line: 26
+          column: 5

@@ -53,6 +53,7 @@ DIRECTORIES = {
     "iekke": "iekke",
     "IKOS-ConC": "ikos-conc",
     "Theta": "theta",
+    "SAF": "saf",
 }
 
 
@@ -66,9 +67,9 @@ def test_every_component_has_its_directory():
 
 
 def test_every_component_has_a_task_limit_and_sv_sanitizers_that_of_a_program():
-    # sv-sanitizers runs the task's program, whose threads count as its tasks.
+    # sv-sanitizers and SAF run the task's program, whose threads count as their tasks.
     assert {name: spec.task_limit for name, spec in REGISTRY.items()} == {
-        name: PROGRAM_TASK_LIMIT if name == "sv-sanitizers" else TASK_LIMIT for name in REGISTRY}
+        name: PROGRAM_TASK_LIMIT if name in ("sv-sanitizers", "SAF") else TASK_LIMIT for name in REGISTRY}
     assert (TASK_LIMIT, PROGRAM_TASK_LIMIT) == (1024, 2048)
 
 
@@ -80,7 +81,7 @@ def test_the_options_of_the_svcomp27_components_are_those_of_their_fm_tools_entr
     dartagnan.yml in 5f26160a, of ugemcutter.yml in 6452480b, of ikos-conc.yml in dbda8837 and
     of uautomizer.yml in b7ccdb13, and of version 2.0 of iekke.yml in 554cc768: each the newest
     archive of its component with a pre-run on the current task set. Theta's are checked in
-    test_theta.py."""
+    test_theta.py, SAF's in test_saf.py."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
 
     assert versions["goblint"] == ComponentVersion("10.5281/zenodo.24080342", "svcomp27",

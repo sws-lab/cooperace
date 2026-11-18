@@ -1,0 +1,46 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.2'
+    uuid: 6bb638b0-c7d5-5b32-bebe-3600cd49660a
+    creation_time: 2024-01-01T00:00:00Z
+    producer:
+      name: SAF
+      version: 0.1.0
+    task:
+      input_files:
+      - fib_unsafe-10-racy.i
+      input_file_hashes:
+        fib_unsafe-10-racy.i: 38d4dff022ef4d2ea830e2718ea99215413d1e3f67567ac017eaf8275c303ef0
+      specification: CHECK( init(main()), LTL(G ! data-race) )
+      data_model: ILP32
+      language: C
+  content:
+  - segment:
+    - waypoint:
+        action: follow
+        type: function_enter
+        thread_id: 0
+        location:
+          file_name: fib_unsafe-10-racy.i
+          line: 721
+          column: 52
+          function: main
+  - segment:
+    - waypoint:
+        action: follow
+        type: target
+        thread_id: 0
+        location:
+          file_name: fib_unsafe-10-racy.i
+          line: 725
+          column: 6
+          function: main
+    - waypoint:
+        action: follow
+        type: target
+        thread_id: 1
+        location:
+          file_name: fib_unsafe-10-racy.i
+          line: 690
+          column: 5
+          function: t1

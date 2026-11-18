@@ -85,5 +85,10 @@
       "--loglevel",
       "RESULT"
     ]
+  },
+  "saf": {
+    "doi": "10.5281/zenodo.24267653",
+    "version": "svcomp27",
+    "options": []
   }
 }

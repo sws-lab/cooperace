@@ -217,6 +217,15 @@ REGISTRY = {spec.name: spec for spec in (
     #CPU-time limit of CoOpeRace's ends it early.
     ComponentSpec("Theta", "benchexec.tools.theta", "theta",
                   witness=WitnessSpec("component", (), ("witness.yml",)), gets_memory_limit=True),
+    #SAF svcomp27 (0.1.0, 10.5281/zenodo.24267653): bin/saf verify writes its witness to --witness,
+    #default witness.yml in its working directory, SAF's directory, and nothing for unknown; fm-tools
+    #gives no options, and the tool-info module (toolinfo/saf.py, not in the bundled BenchExec 3.35)
+    #passes the property file and --data-model. SAF reads no memory limit; its own time budget is
+    #850 s (--timeout, not passed), so a CPU-time limit of CoOpeRace's below that ends it by a kill.
+    #To confirm a false it compiles the task with clang-21 and runs the program natively under a
+    #sanitizer, so the program's threads count as its tasks (PROGRAM_TASK_LIMIT).
+    ComponentSpec("SAF", "src.cooperace.toolinfo.saf", "saf",
+                  witness=WitnessSpec("component", (), ("witness.yml",)), task_limit=PROGRAM_TASK_LIMIT),
 )}
 
 # The file in TOOL_DIR that holds the ComponentVersion of every component of
