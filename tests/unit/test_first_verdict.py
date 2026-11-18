@@ -596,12 +596,16 @@ def test_the_readme_example_of_the_mode_loads():
     assert all(loaded.first_verdict for loaded in strategies.values())
 
 
-@pytest.mark.parametrize("linter, delivered", [
-    ('print("witnesslint finished with exit code 1")\nimport sys\nsys.exit(1)\n', True),   # says invalid to all
-    (None, False),                                                                       # the fake: invalid here
-])
+BROKEN_LINTER = 'print("witnesslint finished with exit code 1")\nimport sys\nsys.exit(1)\n'   # invalid to all
+
+
+@pytest.mark.parametrize("linter, witness, delivered", [
+    (BROKEN_LINTER, "passing", True),    # self-test failed: the internal check passes the witness
+    (BROKEN_LINTER, "failing", False),   # self-test failed: the internal check fails the witness
+    (None, "passing", False),            # the fake linter works and calls this witness invalid
+], ids=["broken-passing", "broken-failing", "working-invalid"])
 def test_a_linter_that_fails_its_self_test_leaves_the_decision_to_the_internal_check(
-        linter, delivered, tmp_path, monkeypatch, capsys, fast):
+        linter, witness, delivered, tmp_path, monkeypatch, capsys, fast):
     task = tmp_path / "task.c"
     task.write_text("int main(void) { return 0; }\n")
     monkeypatch.chdir(tmp_path)
@@ -610,8 +614,8 @@ def test_a_linter_that_fails_its_self_test_leaves_the_decision_to_the_internal_c
     (directory / "witnesslinter.py").write_text(linter or FAKE_LINTER)
     monkeypatch.setattr(witnesslint, "LINTER_DIR", str(directory))
     monkeypatch.setattr(witnesslint, "_usable", None)
-    #Goblint's true has a witness that passes the internal check; the fake linter calls it invalid
-    fakes = FakeComponents({"Goblint": (0.01, bresult.RESULT_TRUE_PROP, None, "passing", "invalid")}, None,
+    #Goblint's true has a witness that passes the internal check or not; the fake linter calls it invalid
+    fakes = FakeComponents({"Goblint": (0.01, bresult.RESULT_TRUE_PROP, None, witness, "invalid")}, None,
                            "unreach-call")
     monkeypatch.setattr(execution, "execute_run", fakes.execute_run)
     monkeypatch.setattr(components, "component_status", fakes.component_status)
@@ -629,4 +633,4 @@ def test_a_linter_that_fails_its_self_test_leaves_the_decision_to_the_internal_c
     out = capsys.readouterr().out
     assert result == ("true" if delivered else "unknown")
     assert (tmp_path / "witness.yml").exists() == delivered
-    assert ("CoOpeRace: WARNING: WitnessLint is not used" in out) == delivered
+    assert ("CoOpeRace: WARNING: WitnessLint is not used" in out) == (linter is not None)
