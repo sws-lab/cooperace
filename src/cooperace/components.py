@@ -710,7 +710,7 @@ class ComponentRunner:
         outcome is printed on a line "CoOpeRace: WitnessLint ..."."""
         from . import witnesslint
 
-        problems = witnesslint.self_test_problems()
+        problems = witnesslint.self_test_problems(step.run_cpu_time_budget)
         found = None
         for path in [path for path in witness_files if not path.lower().endswith(".graphml")]:
             internal = passing_witness([path], self.property_name, verdict, subproperty,

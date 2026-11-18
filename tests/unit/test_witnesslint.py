@@ -169,6 +169,29 @@ def test_the_self_test_fails_with_a_linter_that_says_invalid_to_everything(fake_
     assert witnesslint.self_test_problems() is problems     # run once per process
 
 
+def test_the_self_test_without_time_left_in_the_run_s_budget_fails(fake_linter, monkeypatch):
+    monkeypatch.setattr(witnesslint, "run_cpu_seconds", lambda: 869.0)
+
+    problems = witnesslint.self_test_problems(870)
+
+    assert len(problems) == 2 and all("leaves it no time" in problem for problem in problems)
+
+
+def test_the_self_test_s_lints_get_what_the_run_s_budget_leaves(fake_linter, monkeypatch):
+    monkeypatch.setattr(witnesslint, "run_cpu_seconds", lambda: 850.0)
+    seen = []
+    real_run = witnesslint.subprocess.run
+
+    def spy(command, **kwargs):
+        seen.append(kwargs["timeout"])
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(witnesslint.subprocess, "run", spy)
+
+    assert witnesslint.self_test(870) == []
+    assert seen == [870 - 850 - witnesslint.CHECK_MARGIN_SECONDS + 1] * 2
+
+
 def test_the_self_test_s_files_are_shipped():
     dist = (ROOT / "scripts" / "svcomp-dist.sh").read_text()
     for name, _verdict, _outcome in witnesslint.SELF_TEST:
@@ -258,7 +281,7 @@ def test_the_runner_delivers_the_bytes_it_linted_with_the_task_s_path_as_given(t
         linted.append(Path(path).read_text())
         return witnesslint.Lint(witnesslint.VALID, witnesslint.DONE)
 
-    monkeypatch.setattr(witnesslint, "self_test_problems", lambda: [])
+    monkeypatch.setattr(witnesslint, "self_test_problems", lambda cpu_time_budget=None: [])
     monkeypatch.setattr(witnesslint, "lint", fake_lint)
 
     found = runner.linted_witness(Step("Goblint", "all", first_verdict=True, witness_lint=True), [str(source)],

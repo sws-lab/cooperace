@@ -29,7 +29,8 @@ failure, which the caller answers with witnesses.file_passes instead, so that
 a broken linter cannot turn every verdict into unknown).
 
 self_test lints the two witnesses of tests/witnesslint (one valid, one
-invalid) and says whether the linter gives VALID and INVALID for them."""
+invalid), within the run's CPU-time budget like any lint, and says whether
+the linter gives VALID and INVALID for them."""
 from __future__ import annotations
 
 import os
@@ -200,14 +201,18 @@ SELF_TEST = (("valid.witness.yml", "false", VALID), ("invalid.witness.yml", "fal
 SELF_TEST_PROGRAM = "program.c"
 
 
-def self_test() -> list[str]:
+def self_test(cpu_time_budget: int | float | None = None) -> list[str]:
     """Lints the witnesses of SELF_TEST through lint_delivered, the path a
-    component's witness takes, and returns one problem for each that does
-    not get its expected outcome; [] if the linter works."""
+    component's witness takes, within the run's CPU-time budget
+    `cpu_time_budget` (None: each lint within LINT_SECONDS), and returns one
+    problem for each that does not get its expected outcome; [] if the
+    linter works. A lint the budget leaves no time is FAILED, so a self-test
+    without time left fails."""
     directory = os.path.join(TOOL_DIR, SELF_TEST_DIR)
     problems = []
     for name, verdict, expected in SELF_TEST:
-        got = lint_delivered(os.path.join(directory, name), os.path.join(directory, SELF_TEST_PROGRAM), verdict)
+        got = lint_delivered(os.path.join(directory, name), os.path.join(directory, SELF_TEST_PROGRAM), verdict,
+                             cpu_time_budget)
         if got.outcome != expected:
             problems.append(f"WitnessLint gives {got.outcome} ({got.status}) for {SELF_TEST_DIR}/{name}, "
                             f"expected {expected}")
@@ -218,9 +223,10 @@ _USABLE_LOCK = threading.Lock()
 _usable: list[str] | None = None
 
 
-def self_test_problems() -> list[str]:
-    """self_test, run once per process (the first call; later calls return
-    its result): [] if the linter gives the expected outcomes. A caller lints
+def self_test_problems(cpu_time_budget: int | float | None = None) -> list[str]:
+    """self_test within the run's CPU-time budget `cpu_time_budget`, run once
+    per process (the first call; later calls return its result, whatever
+    their budget): [] if the linter gives the expected outcomes. A caller lints
     only where this is []; otherwise every witness is judged by
     witnesses.file_passes, so that a linter that says invalid to everything
     in the competition's environment cannot reject every witness."""
@@ -228,7 +234,7 @@ def self_test_problems() -> list[str]:
     with _USABLE_LOCK:
         if _usable is None:
             try:
-                _usable = self_test()
+                _usable = self_test(cpu_time_budget)
             except Exception as error:  # noqa: BLE001 - a technical failure of the linter
                 _usable = [f"the WitnessLint self-test failed ({type(error).__name__}: {error})"]
         return _usable
