@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 from src.cooperace import config, witnesslint
-from src.cooperace.components import REGISTRY
-from src.cooperace.config import ConfError
+from src.cooperace.components import REGISTRY, ComponentRunner
+from src.cooperace.config import ConfError, Step
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -233,3 +233,38 @@ def test_a_copy_is_linted_under_the_delivered_name_and_the_original_is_kept(tmp_
 
     assert got == (witnesslint.VALID, "done")
     assert source.read_text().startswith("# /abs/task.c") and list(work.iterdir()) == []
+
+
+def test_the_runner_delivers_the_bytes_it_linted_with_the_task_s_path_as_given(tmp_path, monkeypatch):
+    """ComponentRunner.linted_witness lints a copy with the task's absolute
+    path replaced by the path CoOpeRace was given, and ComponentRunner.deliver
+    must deliver exactly that text."""
+    task = tmp_path / "tasks" / "task.c"
+    task.parent.mkdir()
+    task.write_text("int main(void) { return 0; }\n")
+    source = tmp_path / "out" / "witness.yml"
+    source.parent.mkdir()
+    source.write_text(f"- entry_type: violation_sequence\n  input_files: [{task}]\n  file_name: {task}\n")
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    runner = ComponentRunner(str(task), "/dev/null", "ILP32", versions={}, property_name="unreach-call",
+                             task_path="../tasks/task.c")
+    runner.work_dir = str(tmp_path / "work")
+    os.mkdir(runner.work_dir)
+    linted = []
+
+    def fake_lint(path, program, verdict, cpu_time_budget=None):
+        linted.append(Path(path).read_text())
+        return witnesslint.Lint(witnesslint.VALID, witnesslint.DONE)
+
+    monkeypatch.setattr(witnesslint, "self_test_problems", lambda: [])
+    monkeypatch.setattr(witnesslint, "lint", fake_lint)
+
+    found = runner.linted_witness(Step("Goblint", "all", first_verdict=True, witness_lint=True), [str(source)],
+                                  "false", None)
+    runner.deliver([found])
+
+    delivered = (cwd / "witness.yml").read_text()
+    assert linted == [delivered]
+    assert str(task) not in delivered and "file_name: ../tasks/task.c" in delivered
