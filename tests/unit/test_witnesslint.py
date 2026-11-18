@@ -208,6 +208,17 @@ def test_the_real_linter_passes_the_self_test(monkeypatch):
     assert witnesslint.self_test() == []
 
 
+def test_the_competition_image_check_fails_on_the_warnings_of_a_linter_that_is_not_used():
+    """scripts/sv-comp/Dockerfile's check greps the run's output for the
+    prefix of the two warnings with which the internal check takes over."""
+    check = (ROOT / "scripts" / "sv-comp" / "Dockerfile").read_text()
+    code = (ROOT / "src" / "cooperace" / "components.py").read_text()
+
+    assert "grep '^CoOpeRace: WARNING: WitnessLint' /tmp/runexec-output.log" in check
+    assert 'say_line(f"CoOpeRace: WARNING: WitnessLint is not used' in code
+    assert 'say_line(f"CoOpeRace: WARNING: WitnessLint failed technically' in code
+
+
 # --- the loader --------------------------------------------------------------------
 
 FV = {"firstVerdict": True, "witnessLint": True, "phases": [["Goblint"]], "answers": [["Goblint"]]}

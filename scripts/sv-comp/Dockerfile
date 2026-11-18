@@ -137,6 +137,11 @@ if [ "${LAST_LINE}" != "${EXPECTED}" ]; then
   echo "Check failed: under runexec, the last line of the output is '${LAST_LINE}', expected '${EXPECTED}'." >&2
   exit 1
 fi
+# A linter that fails its self-test or a lint leaves the decision to the internal check with a warning
+if grep '^CoOpeRace: WARNING: WitnessLint' /tmp/runexec-output.log; then
+  echo "Check failed: under runexec, WitnessLint was not used or failed (above)." >&2
+  exit 1
+fi
 if [ -s /tmp/runexec-results/witness.yml ]; then
   python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' /tmp/runexec-results/witness.yml
 elif [ -s /tmp/runexec-results/witness.graphml ]; then
