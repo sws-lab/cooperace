@@ -79,7 +79,7 @@ def test_only_theta_is_given_its_memory_limit():
 
 
 def test_theta_s_options_are_those_of_version_svcomp27_of_its_fm_tools_entry():
-    """theta.yml at the head 4374fb51 of fm-tools !1499 (18 November 2026): version
+    """theta.yml of fm-tools main 626c0fb2 (19 November 2026, from !1499): version
     svcomp27, 10.5281/zenodo.24339979 (Theta 8.12.1). The version svcomp27-validator
     shares the DOI and adds --witness."""
     versions = read_component_versions(str(ROOT / OPTIONS_FILE))
