@@ -2,20 +2,16 @@
 # list, one "<name>: <doi> <fm-tools commit>" line each (scripts/download-tools.py):
 # the version and options are read from the entry at that commit, which must be
 # in the history of the fm-tools checkout given (or is read from gitlab.com).
-# Checked on 18 November 2026 against fm-tools main 8b1578ae.
+# Checked on 19 November 2026 against fm-tools main 626c0fb2.
 #
-# Three archives are proposed in open merge requests of fm-tools; the commit is
+# One archive is proposed in an open merge request of fm-tools; the commit is
 # the head of the merge request. Once the merge request is merged, fm-tools main
 # lists the DOI and the line is to be removed.
-# Deagle 24328339 (svcomp27): fm-tools !1479; main registers 24303894
-deagle: 10.5281/zenodo.24328339 ee2243ea
-# ULTIMATE GemCutter 24339861 (svcomp27, 0.3.2-dev-c425bfe605): fm-tools !1490; main registers 24202456
-ugemcutter: 10.5281/zenodo.24339861 eb7f59d2
-# Theta 24339979 (svcomp27, 8.12.1): fm-tools !1499; main registers 24322775
-theta: 10.5281/zenodo.24339979 4374fb51
+# Deagle 24356707 (svcomp27): fm-tools !1503; main registers 24328339
+deagle: 10.5281/zenodo.24356707 49fd819f
 #
 # Pool components that no conf variant runs, in archives fm-tools main has replaced:
-# ULTIMATE Automizer 24133222 (0.3.2-dev-f60e54cd9f); fm-tools 4a8ff986 registers 24202446
+# ULTIMATE Automizer 24133222 (0.3.2-dev-f60e54cd9f); fm-tools main registers 24339828
 uautomizer: 10.5281/zenodo.24133222 b7ccdb13
 # CPAchecker 24218973 (4.2.2-5072-g4453227651); fm-tools 7c536b9e registers 24339049 (4.3)
 cpachecker: 10.5281/zenodo.24218973 05bf3109
