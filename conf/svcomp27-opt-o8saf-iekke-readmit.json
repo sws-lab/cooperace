@@ -1,0 +1,365 @@
+{
+    "properties": {
+        "no-data-race": {
+            "firstVerdict": true,
+            "witnessLint": true,
+            "phases": [
+                {
+                    "tools": [
+                        "IKOS-ConC"
+                    ],
+                    "wallTimeLimit": 51
+                },
+                {
+                    "tools": [
+                        "Deagle"
+                    ],
+                    "wallTimeLimit": 172
+                },
+                {
+                    "tools": [
+                        "Goblint"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "ULTIMATE GemCutter"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "Dartagnan"
+                    ],
+                    "wallTimeLimit": 979
+                },
+                {
+                    "tools": [
+                        "Theta"
+                    ],
+                    "wallTimeLimit": 100
+                },
+                {
+                    "tools": [
+                        "iekke"
+                    ],
+                    "wallTimeLimit": 742
+                }
+            ],
+            "cpuTimeLimits": {
+                "IKOS-ConC": 24,
+                "Deagle": 105,
+                "Goblint": 15,
+                "ULTIMATE GemCutter": 15,
+                "Dartagnan": 643,
+                "Theta": 57,
+                "iekke": 485
+            },
+            "memoryLimits": {
+                "IKOS-ConC": "90%",
+                "Deagle": "90%",
+                "Goblint": "90%",
+                "ULTIMATE GemCutter": "90%",
+                "Dartagnan": "90%",
+                "Theta": "90%",
+                "iekke": "90%"
+            },
+            "runCpuTimeBudget": 870,
+            "answers": [
+                [
+                    "IKOS-ConC",
+                    "Deagle",
+                    "Goblint:true",
+                    "ULTIMATE GemCutter",
+                    "Dartagnan",
+                    "Theta",
+                    "iekke"
+                ]
+            ],
+            "ignoreIfCalls": {
+                "Dartagnan": [
+                    "pthread_barrier_init",
+                    "pthread_barrier_wait",
+                    "pthread_barrier_destroy"
+                ],
+                "Dartagnan:true": [
+                    "pthread_mutexattr_settype"
+                ],
+                "Deagle": [
+                    "pthread_barrier_init",
+                    "pthread_barrier_wait",
+                    "pthread_barrier_destroy",
+                    "pthread_once",
+                    "pthread_mutexattr_settype"
+                ]
+            }
+        },
+        "unreach-call": {
+            "firstVerdict": true,
+            "witnessLint": true,
+            "phases": [
+                {
+                    "tools": [
+                        "iekke"
+                    ],
+                    "wallTimeLimit": 171
+                },
+                {
+                    "tools": [
+                        "Deagle"
+                    ],
+                    "wallTimeLimit": 408
+                },
+                {
+                    "tools": [
+                        "SAF"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "Theta"
+                    ],
+                    "wallTimeLimit": 135
+                },
+                {
+                    "tools": [
+                        "ULTIMATE GemCutter"
+                    ],
+                    "wallTimeLimit": 486
+                },
+                {
+                    "tools": [
+                        "Goblint"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "Dartagnan"
+                    ],
+                    "wallTimeLimit": 324
+                }
+            ],
+            "cpuTimeLimits": {
+                "iekke": 104,
+                "Deagle": 262,
+                "SAF": 15,
+                "Theta": 80,
+                "ULTIMATE GemCutter": 314,
+                "Goblint": 15,
+                "Dartagnan": 206
+            },
+            "memoryLimits": {
+                "iekke": "90%",
+                "Deagle": "90%",
+                "SAF": "90%",
+                "Theta": "90%",
+                "ULTIMATE GemCutter": "90%",
+                "Goblint": "90%",
+                "Dartagnan": "90%"
+            },
+            "runCpuTimeBudget": 870,
+            "answers": [
+                [
+                    "iekke",
+                    "Deagle",
+                    "SAF:false",
+                    "Theta",
+                    "ULTIMATE GemCutter",
+                    "Goblint:true",
+                    "Dartagnan"
+                ]
+            ],
+            "ignoreIfCalls": {
+                "Dartagnan": [
+                    "pthread_barrier_init",
+                    "pthread_barrier_wait",
+                    "pthread_barrier_destroy"
+                ],
+                "Deagle": [
+                    "pthread_barrier_init",
+                    "pthread_barrier_wait",
+                    "pthread_barrier_destroy",
+                    "pthread_once",
+                    "pthread_mutexattr_settype"
+                ]
+            }
+        },
+        "no-overflow": {
+            "firstVerdict": true,
+            "witnessLint": true,
+            "phases": [
+                {
+                    "tools": [
+                        "Theta"
+                    ],
+                    "wallTimeLimit": 51
+                },
+                {
+                    "tools": [
+                        "iekke"
+                    ],
+                    "wallTimeLimit": 441
+                },
+                {
+                    "tools": [
+                        "SAF"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "ULTIMATE GemCutter"
+                    ],
+                    "wallTimeLimit": 510
+                },
+                {
+                    "tools": [
+                        "Dartagnan"
+                    ],
+                    "wallTimeLimit": 322
+                },
+                {
+                    "tools": [
+                        "Goblint"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "Deagle"
+                    ],
+                    "wallTimeLimit": 40
+                }
+            ],
+            "cpuTimeLimits": {
+                "Theta": 24,
+                "iekke": 284,
+                "SAF": 15,
+                "ULTIMATE GemCutter": 330,
+                "Dartagnan": 205,
+                "Goblint": 15,
+                "Deagle": 17
+            },
+            "memoryLimits": {
+                "Theta": "90%",
+                "iekke": "90%",
+                "SAF": "90%",
+                "ULTIMATE GemCutter": "90%",
+                "Dartagnan": "90%",
+                "Goblint": "90%",
+                "Deagle": "90%"
+            },
+            "runCpuTimeBudget": 870,
+            "answers": [
+                [
+                    "Theta",
+                    "iekke",
+                    "SAF",
+                    "ULTIMATE GemCutter",
+                    "Dartagnan",
+                    "Goblint:true",
+                    "Deagle"
+                ]
+            ],
+            "ignoreIfCalls": {
+                "Deagle": [
+                    "pthread_barrier_init",
+                    "pthread_barrier_wait",
+                    "pthread_barrier_destroy",
+                    "pthread_once",
+                    "pthread_mutexattr_settype"
+                ]
+            }
+        },
+        "valid-memsafety": {
+            "firstVerdict": true,
+            "witnessLint": true,
+            "phases": [
+                {
+                    "tools": [
+                        "Goblint"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "SAF"
+                    ],
+                    "wallTimeLimit": 37
+                },
+                {
+                    "tools": [
+                        "Theta"
+                    ],
+                    "wallTimeLimit": 570
+                },
+                {
+                    "tools": [
+                        "Deagle"
+                    ],
+                    "wallTimeLimit": 58
+                },
+                {
+                    "tools": [
+                        "ULTIMATE GemCutter"
+                    ],
+                    "wallTimeLimit": 634
+                },
+                {
+                    "tools": [
+                        "Dartagnan"
+                    ],
+                    "wallTimeLimit": 168
+                },
+                {
+                    "tools": [
+                        "iekke"
+                    ],
+                    "wallTimeLimit": 744
+                }
+            ],
+            "cpuTimeLimits": {
+                "Goblint": 15,
+                "SAF": 15,
+                "Theta": 370,
+                "Deagle": 29,
+                "ULTIMATE GemCutter": 413,
+                "Dartagnan": 102,
+                "iekke": 486
+            },
+            "memoryLimits": {
+                "Goblint": "90%",
+                "SAF": "90%",
+                "Theta": "90%",
+                "Deagle": "90%",
+                "ULTIMATE GemCutter": "90%",
+                "Dartagnan": "90%",
+                "iekke": "90%"
+            },
+            "runCpuTimeBudget": 870,
+            "answers": [
+                [
+                    "Goblint:true",
+                    "SAF:true",
+                    "Theta",
+                    "Deagle",
+                    "ULTIMATE GemCutter",
+                    "Dartagnan",
+                    "iekke"
+                ]
+            ],
+            "ignoreIfCalls": {
+                "Deagle": [
+                    "pthread_barrier_init",
+                    "pthread_barrier_wait",
+                    "pthread_barrier_destroy",
+                    "pthread_once",
+                    "pthread_mutexattr_settype"
+                ]
+            }
+        }
+    }
+}
